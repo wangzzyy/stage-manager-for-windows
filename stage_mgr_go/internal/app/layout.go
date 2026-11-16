@@ -41,6 +41,17 @@ func cardTilts(level int) (rest, hover float32) {
 	return rest, rest / 4
 }
 
+// cardPitch turns a card toward the display's vertical middle: the top
+// cards recede at their lower edge, and the bottom cards at their upper
+// edge. The vanishing point is the middle of the strip, at cardPerspective.
+func cardPitch(centerY, height float32) float32 {
+	if height <= 0 {
+		return 0
+	}
+	delta := centerY - height/2
+	return float32(math.Atan2(float64(delta), float64(cardPerspective)) * 180 / math.Pi)
+}
+
 // mirror reflects r across the middle of within, as a strip on the right
 // is the one on the left reflected.
 func mirror(r, within ui.Rect) ui.Rect {

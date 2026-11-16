@@ -880,6 +880,11 @@ func (sw *settingsWindow) stagePane(c *ui.Context, f form, tr *i18n.Strings) {
 				sw.apply()
 			}
 		})
+		f.row(c, tr.SeparateWindows, tr.SeparateWindowsDesc, func() {
+			if ui.Switch(c, &sw.s.SeparateWindows).Changed() {
+				sw.apply()
+			}
+		})
 		desc := tr.ClickDesktopDesc
 		if !sw.s.HideInactive {
 			desc = tr.ClickDesktopNeedsHide

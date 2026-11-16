@@ -61,7 +61,7 @@ jobs:
             throw "mygo.json version '$version' must use MAJOR.MINOR.PATCH."
           }
           if ($file -ne $version) {
-            throw ".version says $file but mygo.json says $version: change them together."
+            throw ".version says $file but mygo.json says ${version}: change them together."
           }
           if ($env:REF_TYPE -eq "tag") {
             $tag = $env:REF_NAME -replace '^v', ''

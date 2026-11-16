@@ -1013,11 +1013,11 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	w, h := float32(at.w/l.scale), float32(at.h/l.scale)
 	radius := max(min(h*0.045, 8), 3)
 	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
-	// Cards turn about their outer edge: a negative tilt is a card of a
-	// strip on the right, turned about its right edge.
-	originX := float32(0)
+	// The inner vertical edge is the pivot: on a left strip it is the
+	// right edge, and on a right strip it is the left edge.
+	originX := float32(1)
 	if at.tilt < 0 {
-		originX = 1
+		originX = 0
 	}
 	img.TransformOrigin(originX, 0.5).Scale(1, cardPitchScale(at.pitch)).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
 }

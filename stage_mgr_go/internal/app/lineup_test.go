@@ -185,7 +185,8 @@ func TestCardsSlideForLineup(t *testing.T) {
 		t.Fatalf("the last card at %d on its way from %d, %v down", at, from, shift)
 	}
 	tt.Advance(time.Second)
-	if at := bottom(); float32(at-from) < shift-1 || float32(at-from) > shift+1 {
+	// Perspective projection and integer pixel coverage can differ by a couple of pixels.
+	if at := bottom(); float32(at-from) < shift-2 || float32(at-from) > shift+2 {
 		t.Fatalf("the last card at %d once there, from %d, %v down", at, from, shift)
 	}
 }

@@ -542,7 +542,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		ox, oy = el.AnimateTo("dx", 0, ui.Smooth), el.AnimateTo("dy", 0, ui.Smooth)
 	}
 	st.ox = ox
-	pitch := cardPitch(box.Y+box.H/2+oy, d.viewH)
+	pitch := el.AnimateTo("pitch", cardPitch(box.Y+box.H/2+oy, d.viewH), ui.Smooth)
 	// The flight covers the card as it lands, so the card shows at once
 	// underneath; fading it in once the flight is gone would blink. The
 	// icons come in on the flight layer, above the flights.
@@ -670,7 +670,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
-			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign, 1/cardPitchScale(pitch))
+			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign, 1.05/cardPitchScale(pitch))
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

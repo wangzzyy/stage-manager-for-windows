@@ -136,9 +136,9 @@ var checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" 
 // edge and a faint dark one inside its bottom, the gloss of a pill of white
 // fading downward across its top half, and the check, white, over a copy of
 // itself in green a little below, which makes it stand off the disc.
-func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
+func stageBadge(c *ui.Context, r ui.Rect, pop, turn, verticalCompensation float32) {
 	d := r.W
-	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop, pop).RotateY(turn).Perspective(badgePerspective).
+	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop, pop*verticalCompensation).RotateY(turn).Perspective(badgePerspective).
 		LinearGradient(ui.LinearGradient{Angle: 155, Stops: []ui.GradientStop{{Color: badgeLight, At: 0}, {Color: badgeMid, At: 0.45}, {Color: badgeDeep, At: 1}}}).
 		Border(max(d*0.03, 0.5), badgeEdge).
 		Shadow(0, d*0.08, d*0.22, 0, badgeCast).
@@ -670,7 +670,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
-			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign, 1/cardPitchScale(pitch))
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

@@ -373,7 +373,7 @@ func (a *App) moveSet(to *display, s *set, at int, drop winapi.Rect) {
 	there := a.heading(to)
 	var show []winapi.HWND
 	for _, w := range a.windows {
-		if !slices.Contains(apps, w.App) || a.displayOf(w) != from {
+		if !slices.Contains(apps, a.groupKey(w)) || a.displayOf(w) != from {
 			continue
 		}
 		frame := a.home(w)
@@ -381,7 +381,7 @@ func (a *App) moveSet(to *display, s *set, at int, drop winapi.Rect) {
 		dx, dy := f.Left-frame.Left, f.Top-frame.Top
 		if r, ok := a.park.Home(w.HWND); ok {
 			a.park.Rehome(w.HWND, r.Offset(dx, dy))
-			if slices.Contains(there, w.App) {
+			if slices.Contains(there, a.groupKey(w)) {
 				show = append(show, w.HWND)
 			}
 			continue

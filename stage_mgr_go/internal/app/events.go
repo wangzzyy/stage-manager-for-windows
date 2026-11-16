@@ -228,7 +228,7 @@ func (a *App) settleForeground() {
 	if d == nil || !a.managed(d) {
 		return
 	}
-	if d.model.OnStage(w.App) {
+	if d.model.OnStage(a.groupKey(w)) {
 		// The foreground stayed on the stage: whatever closed is over.
 		a.closed.d = nil
 		if a.park.IsParked(w.HWND) {
@@ -244,7 +244,7 @@ func (a *App) settleForeground() {
 	// already brought its window up: the stage it leaves fades under it.
 	// A companion, as a TortoiseSVN dialog opened from the file manager,
 	// comes beside the stage instead and leaves it with its windows.
-	a.switchStage(d, d.model.Coming(w.App, a.settings.Companion(w.Exe)), w.HWND, false, true)
+	a.switchStage(d, d.model.Coming(a.groupKey(w), a.settings.Companion(w.Exe)), w.HWND, false, true)
 }
 
 // noteClosed remembers a window that closed or hid while on a stage, for
@@ -255,7 +255,7 @@ func (a *App) noteClosed(h winapi.HWND) {
 		return
 	}
 	w := a.windows[i]
-	if d := a.displayOf(w); d != nil && d.model.OnStage(w.App) {
+	if d := a.displayOf(w); d != nil && d.model.OnStage(a.groupKey(w)) {
 		a.closed.h, a.closed.d, a.closed.at = h, d, time.Now()
 	}
 }
@@ -274,7 +274,7 @@ func (a *App) keepStage() bool {
 	}
 	// The windows are listed front first.
 	for _, w := range a.windows {
-		if w.HWND == c.h || a.hidden(w) || !c.d.model.OnStage(w.App) || a.displayOf(w) != c.d {
+		if w.HWND == c.h || a.hidden(w) || !c.d.model.OnStage(a.groupKey(w)) || a.displayOf(w) != c.d {
 			continue
 		}
 		a.closed.d = nil

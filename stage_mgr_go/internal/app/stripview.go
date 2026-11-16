@@ -501,7 +501,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		a.media.preview(g.windows)
 	}
 	tilt, hoverTilt := cardTilts(a.settings.Tilt)
-	pitch := cardPitch(box.Y+box.H/2+oy, d.viewH)
 	if live {
 		tilt = hoverTilt
 	}
@@ -543,6 +542,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		ox, oy = el.AnimateTo("dx", 0, ui.Smooth), el.AnimateTo("dy", 0, ui.Smooth)
 	}
 	st.ox = ox
+	pitch := cardPitch(box.Y+box.H/2+oy, d.viewH)
 	// The flight covers the card as it lands, so the card shows at once
 	// underneath; fading it in once the flight is gone would blink. The
 	// icons come in on the flight layer, above the flights.

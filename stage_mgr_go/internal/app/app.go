@@ -332,7 +332,7 @@ func (a *App) groupKey(w catalog.Window) string {
 	if !a.settings.SeparateWindows {
 		return w.App
 	}
-	return fmt.Sprintf("window:%s:%x", w.App, w.HWND)
+	return fmt.Sprintf("window:%x", w.HWND)
 }
 
 // groupsOf groups a display's windows by app, or by top-level window when

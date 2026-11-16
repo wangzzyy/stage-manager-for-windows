@@ -41,6 +41,25 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSeparateWindowsPreference(t *testing.T) {
+	st := NewStore(t.TempDir())
+	// Existing settings files do not opt into independent window stages.
+	if err := os.WriteFile(st.Path, []byte(`{"width": 240}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Load(); got.SeparateWindows {
+		t.Fatal("older settings unexpectedly enabled separate windows")
+	}
+	s := Default()
+	s.SeparateWindows = true
+	if err := st.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Load(); !got.SeparateWindows {
+		t.Fatal("separateWindows did not survive a settings round trip")
+	}
+}
+
 func TestSides(t *testing.T) {
 	const second = `\\.\DISPLAY2`
 	s := Default()

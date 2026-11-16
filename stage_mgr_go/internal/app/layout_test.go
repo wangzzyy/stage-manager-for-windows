@@ -59,6 +59,21 @@ func TestStackStaysInCard(t *testing.T) {
 	}
 }
 
+func TestCardPitchConvergesAtVerticalMiddle(t *testing.T) {
+	const height = 900
+	if got := cardPitch(height/2, height); got != 0 {
+		t.Fatalf("middle card pitches %v, want 0", got)
+	}
+	top, upper := cardPitch(100, height), cardPitch(300, height)
+	lower, bottom := cardPitch(600, height), cardPitch(800, height)
+	if !(top < upper && upper < 0 && lower > 0 && bottom > lower) {
+		t.Fatalf("pitch does not converge toward the middle: top %v upper %v lower %v bottom %v", top, upper, lower, bottom)
+	}
+	if top != -bottom {
+		t.Fatalf("symmetric cards pitch differently: top %v bottom %v", top, bottom)
+	}
+}
+
 func TestTurnedCard(t *testing.T) {
 	if rx, rh := turnedCard(40, 30, 0, 120); rx != 40 || rh != 15 {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)

@@ -318,9 +318,6 @@ func stillRed(s *strip) {
 // place and leaves it there.
 func TestStagedCardShakesWhenClicked(t *testing.T) {
 	s, got, tt := testStrip(t)
-	// Keep ordinary-card hover tilt out of this test: it measures whether
-	// the pointer incorrectly starts the staged-card shake on a waiting card.
-	s.a.settings.Tilt = 0
 	s.d.sets[0].staged = true
 	stillRed(s)
 	s.a.settings.StagedOpacity, s.a.settings.StagedGray = 1, 0
@@ -496,6 +493,9 @@ func redEdge(s *strip, tt *ui.Tester, i int) func() int {
 // shake itself moves from under the pointer.
 func TestStagedCardShakesWhenThePointerComesOnIt(t *testing.T) {
 	s, got, tt := testStrip(t)
+	// Keep ordinary-card hover tilt out of this test: it measures whether
+	// the pointer incorrectly starts the staged-card shake on a waiting card.
+	s.a.settings.Tilt = 0
 	s.d.sets[0].staged = true
 	stillRed(s)
 	s.a.settings.StagedOpacity, s.a.settings.StagedGray = 1, 0

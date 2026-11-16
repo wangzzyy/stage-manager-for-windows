@@ -95,6 +95,16 @@ func castsShadow(h winapi.HWND) bool {
 	return !maximized && winapi.CastsFrameShadow(h)
 }
 
+// arrivalShade carries a card's shadow into the flight only when the
+// real window will cast a DWM frame shadow on the stage. Windows without
+// one either have their own shadow drawn separately or have no shadow.
+func arrivalShade(card shade, casts bool) shade {
+	if !casts {
+		return shade{}
+	}
+	return card
+}
+
 // ownShade is the shadow a window casts on the stage, if it casts one.
 func ownShade(casts, active bool) shade {
 	if !casts {
@@ -523,7 +533,8 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		}
 		home := poseOf(f.a.home(w))
 		start, ok := from[w.HWND]
-		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: cardShadeAt(start), lands: true, casts: castsShadow(w.HWND), fromOp: 1, toOp: 1}
+		casts := castsShadow(w.HWND)
+		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: arrivalShade(cardShadeAt(start), casts), lands: true, casts: casts, fromOp: 1, toOp: 1}
 		if a, aloft := air[w.HWND]; aloft {
 			// Turned back on its way into its card.
 			fl.from, fl.shade, fl.fromOp = a.at, a.shade, a.op

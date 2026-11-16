@@ -307,13 +307,34 @@ func (a *App) displayByHandle(h winapi.HMONITOR) *display {
 	return nil
 }
 
+// stageHome returns the visible frame where a window shows on the stage.
+// A maximized window fills the monitor's work area, not the rectangle it
+// happened to have when it was parked. Other windows retain their frame
+// offset from the window rectangle, including the invisible resize borders.
+func stageHome(frame, window, parkedHome, work winapi.Rect, parked, maximized bool) winapi.Rect {
+	if maximized && !work.Empty() {
+		return work
+	}
+	if !parked {
+		return frame
+	}
+	x, y := parkedHome.Left+frame.Left-window.Left, parkedHome.Top+frame.Top-window.Top
+	return winapi.Rect{Left: x, Top: y, Right: x + frame.W(), Bottom: y + frame.H()}
+}
+
 // home returns where a window shows when it is on the stage.
 func (a *App) home(w catalog.Window) winapi.Rect {
-	if r, ok := a.park.Home(w.HWND); ok {
-		x, y := r.Left+w.Frame.Left-w.Rect.Left, r.Top+w.Frame.Top-w.Rect.Top
-		return winapi.Rect{Left: x, Top: y, Right: x + w.Frame.W(), Bottom: y + w.Frame.H()}
+	parkedHome, parked := a.park.Home(w.HWND)
+	maximized := winapi.IsZoomed(w.HWND)
+	var work winapi.Rect
+	if maximized {
+		reference := w.Rect
+		if parked {
+			reference = parkedHome
+		}
+		work = winapi.MonitorInfo(winapi.MonitorFromRect(reference)).Work
 	}
-	return w.Frame
+	return stageHome(w.Frame, w.Rect, parkedHome, work, parked, maximized)
 }
 
 // displayOf returns the display a window belongs to.

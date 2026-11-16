@@ -155,19 +155,28 @@ func TestCardsAt(t *testing.T) {
 // jump.
 func TestCardsSlideForLineup(t *testing.T) {
 	s, _, tt := testStrip(t)
-	// The lowest row the last card covers, down its middle.
-	bottom := func() int {
+	// The vertical midpoint of the last card's visible content. Its lower
+	// edge recedes as pitch changes, so measuring that edge would count
+	// foreshortening as lost layout movement.
+	middle := func() int {
 		img := tt.Image()
 		last := s.d.layout.cards[len(s.d.layout.cards)-1]
 		x := int(last.X + last.W/2)
-		for y := img.Bounds().Max.Y - 1; y >= 0; y-- {
+		top, bottom := -1, -1
+		for y := 0; y < img.Bounds().Max.Y; y++ {
 			if img.RGBAAt(x, y).A > 60 {
-				return y
+				if top < 0 {
+					top = y
+				}
+				bottom = y
 			}
 		}
-		return -1
+		if top < 0 {
+			return -1
+		}
+		return (top + bottom) / 2
 	}
-	from, was := bottom(), s.d.layout.cards[1].Y
+	from, was := middle(), s.d.layout.cards[1].Y
 	for i, app := range []string{"code", "chrome", "term", "paint"} {
 		w := catalog.Window{HWND: winapi.HWND(10 + i), App: app, Frame: winapi.Rect{Right: 1600, Bottom: 1000}}
 		s.d.onStage = append(s.d.onStage, &group{app: app, name: app, windows: []catalog.Window{w}})
@@ -177,16 +186,16 @@ func TestCardsSlideForLineup(t *testing.T) {
 	if shift < 20 {
 		t.Fatalf("the cards moved %v for the list", shift)
 	}
-	if at := bottom(); abs(at-from) > 4 {
+	if at := middle(); abs(at-from) > 4 {
 		t.Fatalf("the last card jumped from %d to %d beyond the 4px perspective tolerance", from, at)
 	}
 	tt.Advance(30 * time.Millisecond)
-	if at := bottom(); at <= from || float32(at-from) >= shift-1 {
+	if at := middle(); at <= from || float32(at-from) >= shift-1 {
 		t.Fatalf("the last card at %d on its way from %d, %v down", at, from, shift)
 	}
 	tt.Advance(time.Second)
 	// Perspective projection and integer pixel coverage can differ by a couple of pixels.
-	if at := bottom(); float32(at-from) < shift-2 || float32(at-from) > shift+2 {
+	if at := middle(); float32(at-from) < shift-2 || float32(at-from) > shift+2 {
 		t.Fatalf("the last card at %d once there, from %d, %v down", at, from, shift)
 	}
 }

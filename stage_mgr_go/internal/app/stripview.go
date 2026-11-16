@@ -605,7 +605,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
-	originX := (1 - sign) / 2
+	// The edge toward the screen's center is the hinge: it stays vertical
+	// while perspective scales it, and the outer edge recedes toward it.
+	originX := (1 + sign) / 2
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.

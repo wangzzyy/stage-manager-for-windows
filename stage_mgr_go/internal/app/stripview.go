@@ -602,11 +602,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		}
 	})
 
-	// The card scales and turns about its outer edge, the one by the
-	// display's edge.
+	// The inner vertical edge stays upright: it is the pivot of the
+	// side turn, while the far edge recedes toward the display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
-	originX := (1 - sign) / 2
+	originX := (1 + sign) / 2
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.

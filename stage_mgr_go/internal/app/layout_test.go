@@ -388,8 +388,8 @@ func TestBadgeRect(t *testing.T) {
 	}
 }
 
-// A point of a card shows where the card turned has it: those at its outer
-// edge stay, and the card's far edge goes where turnedCard puts it.
+// A point of a card shows where the card turned has it: its inner edge
+// stays put, and the outer edge recedes toward the strip.
 func TestTurnedPoint(t *testing.T) {
 	const w, h, dist float32 = 160, 105, 640
 	for _, right := range []bool{false, true} {
@@ -398,20 +398,21 @@ func TestTurnedPoint(t *testing.T) {
 		}
 	}
 	rx, rh := turnedCard(w, h, 24, dist)
-	x, y := turnedPoint(w, 0, w, h, 24, dist, false)
-	if d := x - rx; d > 0.01 || d < -0.01 || y-(h/2-rh) > 0.01 || y-(h/2-rh) < -0.01 {
-		t.Fatalf("the far top corner at %v, %v, not %v, %v", x, y, rx, h/2-rh)
+	// On the left strip the inner edge is the right edge; the outer top
+	// corner recedes to the left.
+	x, y := turnedPoint(0, 0, w, h, 24, dist, false)
+	if d := x - (w-rx); d > 0.01 || d < -0.01 || y-(h/2-rh) > 0.01 || y-(h/2-rh) < -0.01 {
+		t.Fatalf("the outer top corner at %v, %v, not %v, %v", x, y, w-rx, h/2-rh)
 	}
-	// On the right, the same card is the mirror image, and a turn the other
-	// way, as the strip makes it, changes nothing.
-	mx, my := turnedPoint(0, 0, w, h, -24, dist, true)
-	if d := mx - (w - rx); d > 0.01 || d < -0.01 || my != y {
-		t.Fatalf("the mirrored corner at %v, %v, not %v, %v", mx, my, w-rx, y)
+	// On the right, the same card is the mirror image.
+	mx, my := turnedPoint(w, 0, w, h, -24, dist, true)
+	if d := mx - rx; d > 0.01 || d < -0.01 || my != y {
+		t.Fatalf("the mirrored corner at %v, %v, not %v, %v", mx, my, rx, y)
 	}
-	// Points on the edge it turns about stay, and the middle of the card's
-	// height is where the card turns about.
-	if x, y := turnedPoint(0, 30, w, h, 24, dist, false); x != 0 || y != 30 {
-		t.Fatalf("a point on the axis moved to %v, %v", x, y)
+	// Points on the inner edge stay on its vertical axis, while the
+	// vertical edge is foreshortened about its middle.
+	if x, y := turnedPoint(w, 30, w, h, 24, dist, false); x != w || y != 30 {
+		t.Fatalf("a point on the inner edge moved to %v, %v", x, y)
 	}
 	if _, y := turnedPoint(100, h/2, w, h, 24, dist, false); y != h/2 {
 		t.Fatalf("the middle of the card moved to %v", y)

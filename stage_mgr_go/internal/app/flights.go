@@ -52,7 +52,7 @@ func flightEase(p float64) float64 {
 // pose is where a window shows, in screen pixels, and how far it is turned.
 type pose struct {
 	x, y, w, h float64
-	tilt       float32
+	pitch, tilt float32
 }
 
 func poseOf(r winapi.Rect) pose {
@@ -237,6 +237,7 @@ func lerpPose(a, b pose, e float64) pose {
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
+		pitch: a.pitch + (b.pitch-a.pitch)*float32(e),
 	}
 }
 
@@ -1018,5 +1019,5 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	img.TransformOrigin(originX, 0.5).RotateX(at.pitch).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
 }

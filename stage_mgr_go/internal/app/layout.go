@@ -52,6 +52,13 @@ func cardPitch(centerY, height float32) float32 {
 	return float32(math.Atan2(float64(delta), float64(cardPerspective)) * 180 / math.Pi)
 }
 
+// cardPitchScale foreshortens a card toward the display's vertical middle
+// without rotating its near vertical edge. The pitch is kept as an angle so
+// drag and flight poses can interpolate it; only its projected height is used.
+func cardPitchScale(pitch float32) float32 {
+	return float32(math.Cos(float64(pitch) * math.Pi / 180))
+}
+
 // mirror reflects r across the middle of within, as a strip on the right
 // is the one on the left reflected.
 func mirror(r, within ui.Rect) ui.Rect {

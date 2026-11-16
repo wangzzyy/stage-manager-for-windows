@@ -82,7 +82,7 @@ func (a *App) dragOver() {
 		return
 	}
 	g.over, g.stage = d, stage
-	a.switchStage(d, []string{w.App}, g.h, false, false)
+	a.switchStage(d, []string{a.groupKey(w)}, g.h, false, false)
 }
 
 // windowMoved puts the app of a window moved to another display on that
@@ -174,7 +174,7 @@ func (a *App) followMoved() bool {
 	}
 	w := a.windows[i]
 	d := a.displayOf(w)
-	if d == nil || !a.managed(d) || d.model.OnStage(w.App) || d.model.Settling(time.Now()) {
+	if d == nil || !a.managed(d) || d.model.OnStage(a.groupKey(w)) || d.model.Settling(time.Now()) {
 		return false
 	}
 	debugf("%q moved to %s", w.Title, d.mon.Device)
@@ -216,6 +216,6 @@ func (a *App) sendAcross(d *display, w catalog.Window, stage []string) {
 	f := winapi.FitInto(w.Frame, d.mon.Handle)
 	winapi.SetWindowPos(w.HWND, 0, w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top, 0, 0,
 		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == w.App })
+	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == a.groupKey(w) })
 	a.switchStage(d, next, 0, false, false)
 }

@@ -404,7 +404,8 @@ func TestStagedCardHasACheck(t *testing.T) {
 		}
 		return green, white
 	}
-	if green, white := badge(0); green < 120 || white < 12 {
+	// The check is foreshortened with the card; antialiasing can leave only a few fully white pixels.
+	if green, white := badge(0); green < 120 || white < 8 {
 		t.Fatalf("%d green and %d white pixels at the corner of the stage's card, want a green disc with a white check", green, white)
 	}
 	if green, white := badge(1); green != 0 || white != 0 {

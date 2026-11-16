@@ -615,7 +615,7 @@ func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
 	}
 	k := dist / (dist + u*float32(sin))
 	x = u * float32(cos) * k
-	if right {
+	if !right {
 		x = w - x
 	}
 	return x, h/2 + (y-h/2)*k

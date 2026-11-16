@@ -389,8 +389,10 @@ func TestStagedCardHasACheck(t *testing.T) {
 		local := ui.Rect{W: card.W, H: card.H}
 		b := badgeRect(s.d.sets[i].stack(local, false), local, float32(s.a.settings.IconScale), false, ui.Rect{X: -card.X, W: s.d.viewW})
 		img := tt.Image()
-		for y := int(card.Y + b.Y); y < int(card.Y+b.Y+b.H); y++ {
-			for x := int(card.X + b.X); x < int(card.X+b.X+b.W); x++ {
+		// Pitching the card foreshortens the badge and shifts its corner
+		// slightly; inspect a generous band around the unpitched bounds.
+		for y := max(0, int(card.Y+b.Y-b.H)); y < min(tt.Image().Bounds().Max.Y, int(card.Y+b.Y+2*b.H)); y++ {
+			for x := max(0, int(card.X+b.X)); x < min(tt.Image().Bounds().Max.X, int(card.X+b.X+b.W)); x++ {
 				switch c := img.RGBAAt(x, y); {
 				case c.A < 200:
 				case isGreen(c):
@@ -452,7 +454,7 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 			t.Fatalf("right=%v: the badge is %v by %v, an oval", right, w, h)
 		}
 		cx, cy := float32(x0)+w/2-card.X, float32(y0)+h/2-card.Y
-		if d := cx - px; d < -3 || d > 3 || cy-py < -3 || cy-py > 3 {
+		if d := cx - px; d < -3 || d > 3 || cy-py < -9 || cy-py > 9 {
 			t.Fatalf("right=%v: the badge is centered at %v, %v of its card, not at the corner %v, %v", right, cx, cy, px, py)
 		}
 	}

@@ -6,6 +6,7 @@ package app
 import (
 	"log"
 	"maps"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -324,7 +325,19 @@ func (a *App) displayOf(w catalog.Window) *display {
 // windows are not listed at all, so they never reach here.
 func (a *App) hidden(w catalog.Window) bool { return a.park.IsParked(w.HWND) }
 
-// groupsOf groups the windows of a display by app, in z-order.
+// groupKey is the stage identity of a window. App remains the executable
+// identity for icons and companion matching; only the model's opaque key
+// changes when independent-window mode is enabled.
+func (a *App) groupKey(w catalog.Window) string {
+	if !a.settings.SeparateWindows {
+		return w.App
+	}
+	return fmt.Sprintf("window:%s:%x", w.App, w.HWND)
+}
+
+// groupsOf groups a display's windows by app, or by top-level window when
+// SeparateWindows is enabled. Owned dialogs are already removed by Catalog
+// and therefore continue to follow their owner.
 func (a *App) groupsOf(d *display) []*group {
 	var out []*group
 	by := map[string]*group{}
@@ -332,10 +345,15 @@ func (a *App) groupsOf(d *display) []*group {
 		if a.displayOf(w) != d {
 			continue
 		}
-		g := by[w.App]
+		key := a.groupKey(w)
+		g := by[key]
 		if g == nil {
-			g = &group{app: w.App, name: a.cat.Name(w), z: len(out)}
-			by[w.App] = g
+			name := a.cat.Name(w)
+			if a.settings.SeparateWindows {
+				name = w.Title
+			}
+			g = &group{app: key, name: name, z: len(out)}
+			by[key] = g
 			out = append(out, g)
 		}
 		g.windows = append(g.windows, w)
@@ -756,7 +774,7 @@ func (a *App) reparkEscaped() {
 			continue
 		}
 		w := a.windows[i]
-		if d := a.displayOf(w); d != nil && a.managed(d) && !d.model.OnStage(w.App) {
+		if d := a.displayOf(w); d != nil && a.managed(d) && !d.model.OnStage(a.groupKey(w)) {
 			a.park.Park(h)
 		}
 	}
@@ -826,6 +844,13 @@ func (a *App) applySettings(s settings.Settings) {
 	if old.HideInactive && !s.HideInactive {
 		a.park.RestoreAll()
 	}
+	// The model stores group keys, which change with this setting. Restore
+	// every window, then initialize stages afresh under the new identities.
+	if old.SeparateWindows != s.SeparateWindows {
+		a.park.RestoreAll()
+		a.ready = false
+		after(300*time.Millisecond, a.initStage)
+	}
 	if old.Quality != s.Quality || old.LightFlights != s.LightFlights {
 		a.media.apply(s)
 	}
@@ -880,7 +905,7 @@ func (a *App) applySettings(s settings.Settings) {
 	}
 	a.syncDisplays()
 	// Hiding again starts the stages with what shows on the displays.
-	if !old.HideInactive && s.HideInactive {
+	if !old.HideInactive && s.HideInactive && old.SeparateWindows == s.SeparateWindows {
 		a.ready = false
 		after(300*time.Millisecond, a.initStage)
 	}

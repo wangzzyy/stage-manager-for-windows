@@ -794,7 +794,7 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 			continue
 		}
 		x, y, pw, ph := s.toScreen(lifted(card, stack[i], lift, right))
-		p := pose{x: x, y: y, w: pw, h: ph, pitch: cardPitch(card.Y+card.H/2, s.d.viewH), tilt: tilt * turnSign(right)}
+		p := pose{x: x, y: y, w: pw, h: ph, pitch: cardPitch(card.Y+card.H/2+oy, s.d.viewH), tilt: tilt * turnSign(right)}
 		poses[w.HWND] = p
 		list = append(list, flight{still: st.fly, from: p})
 	}

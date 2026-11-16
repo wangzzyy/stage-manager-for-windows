@@ -1019,5 +1019,5 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	img.TransformOrigin(originX, 0.5).RotateX(at.pitch).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	img.TransformOrigin(originX, 0.5).Scale(1, cardPitchScale(at.pitch)).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
 }

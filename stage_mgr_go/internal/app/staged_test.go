@@ -468,12 +468,23 @@ func redEdge(s *strip, tt *ui.Tester, i int) func() int {
 	y := int(front.Y + front.H/2)
 	return func() int {
 		img := tt.Image()
-		for x := 0; x < img.Bounds().Dx(); x++ {
-			if c := img.RGBAAt(x, y); c.R > 150 && c.G < 60 && c.A > 200 {
-				return x
+		var edges []int
+		// Pitching the card shifts its projected center by a pixel or two.
+		// Sample a narrow band and take the median edge, rather than treating
+		// raster coverage on one unprojected row as card movement.
+		for row := max(0, y-2); row <= min(img.Bounds().Dy()-1, y+2); row++ {
+			for x := 0; x < img.Bounds().Dx(); x++ {
+				if c := img.RGBAAt(x, row); c.R > 150 && c.G < 60 && c.A > 200 {
+					edges = append(edges, x)
+					break
+				}
 			}
 		}
-		return -1
+		if len(edges) == 0 {
+			return -1
+		}
+		slices.Sort(edges)
+		return edges[len(edges)/2]
 	}
 }
 

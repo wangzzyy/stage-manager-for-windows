@@ -78,7 +78,7 @@ func (a *App) dragOver() {
 	}
 	w := a.windows[i]
 	stage := a.heading(d)
-	if slices.Contains(stage, w.App) {
+	if slices.Contains(stage, a.groupKey(w)) {
 		return
 	}
 	g.over, g.stage = d, stage
@@ -123,7 +123,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 			a.leave(g.home, w)
 			a.sendAcross(d, w, stage)
 			return
-		case d == g.home && slices.Contains(a.heading(d), w.App):
+		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
 			// A resize that ends over the strip is no drag into it.
 			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
 				a.sendToStrip(d, w, g.from)
@@ -137,8 +137,8 @@ func (a *App) windowMoved(h winapi.HWND) {
 	}
 	// A stage that did not make way during the drag, as one whose windows
 	// are never hidden or one let go of at once, takes the window now.
-	if d != nil && a.managed(d) && !slices.Contains(a.heading(d), w.App) {
-		a.switchStage(d, []string{w.App}, w.HWND, false, false)
+	if d != nil && a.managed(d) && !slices.Contains(a.heading(d), a.groupKey(w)) {
+		a.switchStage(d, []string{a.groupKey(w)}, w.HWND, false, false)
 	}
 }
 
@@ -146,12 +146,13 @@ func (a *App) windowMoved(h winapi.HWND) {
 // once rather than once its stage settles, unless a window of the app
 // stays there: should the stage be left empty, the one before comes back.
 func (a *App) leave(d *display, w catalog.Window) {
-	if d == nil || !d.model.OnStage(w.App) || slices.ContainsFunc(a.windows, func(o catalog.Window) bool {
-		return o.App == w.App && o.HWND != w.HWND && a.displayOf(o) == d
+	key := a.groupKey(w)
+	if d == nil || !d.model.OnStage(key) || slices.ContainsFunc(a.windows, func(o catalog.Window) bool {
+		return a.groupKey(o) == key && o.HWND != w.HWND && a.displayOf(o) == d
 	}) {
 		return
 	}
-	d.model.Leave(w.App)
+	d.model.Leave(key)
 	if d.model.Empty() {
 		d.refill = true
 	}
@@ -177,7 +178,7 @@ func (a *App) followMoved() bool {
 		return false
 	}
 	debugf("%q moved to %s", w.Title, d.mon.Device)
-	a.switchStage(d, []string{w.App}, w.HWND, false, false)
+	a.switchStage(d, []string{a.groupKey(w)}, w.HWND, false, false)
 	return true
 }
 
@@ -195,7 +196,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // to where the drag began, for when its app returns.
 func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 	debugf("%q dragged into the strip", w.Title)
-	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == w.App })
+	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) })
 	if a.settings.HideInactive {
 		a.dropHomes[w.HWND] = from
 	} else {

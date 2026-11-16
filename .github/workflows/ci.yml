@@ -3,24 +3,20 @@ name: ci
 # Every push to main and every PR checks the code the way AGENTS.md asks, then
 # packages the app with `go tool mygo build` and keeps the exe and the installer
 # as artifacts of the run. Pushing a version tag (0.2.15, or v0.2.15) goes one
-# step further and publishes both as a release, named the way earlier releases
-# are: StageManagerForWindows.<version>.amd64.exe and
-# StageManagerForWindows.Setup.<version>.amd64.exe. Started by hand with
-# publish_tag set to a release that already exists, it builds the branch as it
-# is now and replaces that release's files, under the same version: no tag, and
-# no new release.
+# step further and publishes both as a release.
+#
+# A manual run with publish_tag set rebuilds the current branch and replaces
+# the files of that existing release. It does not create a new release.
 
 on:
   push:
     branches: [main]
-    # Releases so far carry bare versions (0.2.14); v0.0.1 was the exception,
-    # and the old C# workflow watched for v*.
     tags: ["*.*.*", "v*"]
   pull_request:
   workflow_dispatch:
     inputs:
       publish_tag:
-        description: Existing release whose files this build replaces (e.g. 0.2.18); empty to only package
+        description: Existing release whose files this build replaces (e.g. 0.2.19); empty to only package
         required: false
         default: ""
 
@@ -34,14 +30,13 @@ concurrency:
 
 defaults:
   run:
-    # The Go module and mygo.json live here, not at the root.
     working-directory: stage_mgr_go
 
 jobs:
   build:
     name: Check and package
-    # A Windows app built with Win32 syscalls: build and test on Windows.
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -50,51 +45,56 @@ jobs:
           go-version-file: stage_mgr_go/go.mod
           cache-dependency-path: stage_mgr_go/go.sum
 
-      # mygo.json names the version the exe reports, and its setup file;
-      # .version at the root is what running copies read to learn the latest
-      # version (internal/update). They must not drift, nor the tag from them.
-      - name: Check .version and the tag against mygo.json
+      # Keep the app's embedded version, updater version, and release tag aligned.
+      - name: Check versions and manual release target
         shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           $version = (Get-Content mygo.json -Raw | ConvertFrom-Json).version
-          # PowerShell 5 writes files with a byte order mark; the app skips it, so do we.
           $file = (Get-Content ../.version -Raw).Trim([char]0xFEFF).Trim()
-          if ($file -ne $version) {
-            throw ".version says $file but mygo.json says ${version}: change them together."
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "mygo.json version '$version' must use MAJOR.MINOR.PATCH."
           }
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($file -ne $version) {
+            throw ".version says $file but mygo.json says $version: change them together."
+          }
+          if ($env:REF_TYPE -eq "tag") {
+            $tag = $env:REF_NAME -replace '^v', ''
             if ($tag -ne $version) {
-              throw "Tag $tag does not match version $version in mygo.json: bump it, commit, and tag again."
+              throw "Tag $tag does not match version $version in mygo.json."
             }
           }
-          # A release whose files a manual run replaces keeps its version, so
-          # the build's version has to be that release's, or the files would
-          # not say what the release says.
-          $publish = "${{ inputs.publish_tag }}"
-          if ($publish) {
-            $tag = $publish.TrimStart('v')
+          if ($env:PUBLISH_TAG) {
+            if ($env:PUBLISH_TAG -notmatch '^v?\d+\.\d+\.\d+$') {
+              throw "publish_tag '$($env:PUBLISH_TAG)' must use MAJOR.MINOR.PATCH, optionally prefixed with v."
+            }
+            $tag = $env:PUBLISH_TAG -replace '^v', ''
             if ($tag -ne $version) {
-              throw "publish_tag $publish does not match version $version in mygo.json: the release's files would not be this build's."
+              throw "publish_tag $($env:PUBLISH_TAG) does not match mygo.json version $version."
+            }
+            gh release view $env:PUBLISH_TAG | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release '$($env:PUBLISH_TAG)' does not exist; manual rebuilds only replace existing releases."
             }
           }
 
-      # What AGENTS.md requires before a commit, in the same order.
       - name: Build
         run: go build ./...
 
       - name: Vet
         run: go vet ./...
 
-      # MyGo's check of the UI lifetime; it has to run whenever UI code moves.
       - name: Vet the UI
         run: go tool mygo vet .
 
       - name: Test
         run: go test ./...
 
-      # Writes build/windows-amd64/StageManagerForWindows.exe and, with NSIS
-      # downloaded by mygo, stagemanagerforwindows-setup-<version>-amd64.exe.
       - name: Package
         run: go tool mygo build
 
@@ -111,34 +111,34 @@ jobs:
             stage_mgr_go/build/windows-amd64/StageManagerForWindows.exe
             stage_mgr_go/build/windows-amd64/*-setup-*.exe
           if-no-files-found: error
+          retention-days: 14
 
   release:
     name: Release
     needs: build
-    # A tag publishes a release; a manual run with publish_tag set replaces
-    # the files of one that is already there.
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     defaults:
       run:
-        working-directory: . # assets/, not the module
+        working-directory: .
     steps:
-      # For release-notes/<version>.md: the notes are not in the artifact.
       - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v7
         with:
           path: assets
 
-      # mygo names its output after the app; releases name it after the version.
-      # A tag names its own release; a manual run names the one it replaces.
       - name: Name the assets as earlier releases do
         shell: bash
+        env:
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          tag="${{ inputs.publish_tag }}"
-          [ -n "$tag" ] || tag="$GITHUB_REF_NAME"
+          tag="$PUBLISH_TAG"
+          [ -n "$tag" ] || tag="$REF_NAME"
           version="${tag#v}"
           mv assets/StageManagerForWindows.exe "assets/StageManagerForWindows.${version}.amd64.exe"
           mv "assets/stagemanagerforwindows-setup-${version}-amd64.exe" \
@@ -148,9 +148,6 @@ jobs:
             echo "RELEASE_VERSION=$version"
           } >> "$GITHUB_ENV"
 
-      # A hand-written release-notes/<version>.md wins, which is how the notes
-      # stay Chinese and English; without one, GitHub lists what changed. A
-      # release that is already there keeps its notes: only its files change.
       - name: Publish the release
         shell: bash
         env:
@@ -159,9 +156,9 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" assets/*.exe --clobber
-          elif [ -f "release-notes/${RELEASE_VERSION}.md" ]; then
+          elif [ -f "release-notes/$RELEASE_VERSION.md" ]; then
             gh release create "$RELEASE_TAG" assets/*.exe \
-              --title "$RELEASE_VERSION" --notes-file "release-notes/${RELEASE_VERSION}.md"
+              --title "$RELEASE_VERSION" --notes-file "release-notes/$RELEASE_VERSION.md"
           else
             gh release create "$RELEASE_TAG" assets/*.exe \
               --title "$RELEASE_VERSION" --generate-notes

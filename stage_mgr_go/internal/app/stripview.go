@@ -501,6 +501,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		a.media.preview(g.windows)
 	}
 	tilt, hoverTilt := cardTilts(a.settings.Tilt)
+	pitch := cardPitch(box.Y+box.H/2+oy, d.viewH)
 	if live {
 		tilt = hoverTilt
 	}
@@ -621,7 +622,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).Opacity(shown * fade)
 		shell.Children(func() {
 			windows := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-				TransformOrigin(originX, 0.5).Scale(lift, lift).RotateY(tilt * sign).Perspective(cardPerspective)
+				TransformOrigin(originX, 0.5).Scale(lift, lift).RotateX(pitch).RotateY(tilt * sign).Perspective(cardPerspective)
 			if ghost > 0 {
 				windows.Cache()
 			}
@@ -665,7 +666,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-			TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, 0.5).Scale(lift, lift).RotateX(pitch).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
@@ -793,7 +794,7 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 			continue
 		}
 		x, y, pw, ph := s.toScreen(lifted(card, stack[i], lift, right))
-		p := pose{x: x, y: y, w: pw, h: ph, tilt: tilt * turnSign(right)}
+		p := pose{x: x, y: y, w: pw, h: ph, pitch: cardPitch(card.Y+card.H/2, s.d.viewH), tilt: tilt * turnSign(right)}
 		poses[w.HWND] = p
 		list = append(list, flight{still: st.fly, from: p})
 	}

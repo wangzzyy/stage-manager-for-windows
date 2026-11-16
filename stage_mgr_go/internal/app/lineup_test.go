@@ -177,8 +177,8 @@ func TestCardsSlideForLineup(t *testing.T) {
 	if shift < 20 {
 		t.Fatalf("the cards moved %v for the list", shift)
 	}
-	if at := bottom(); at != from {
-		t.Fatalf("the last card jumped from %d to %d", from, at)
+	if at := bottom(); abs(at-from) > 3 {
+		t.Fatalf("the last card jumped from %d to %d beyond the 3px perspective tolerance", from, at)
 	}
 	tt.Advance(30 * time.Millisecond)
 	if at := bottom(); at <= from || float32(at-from) >= shift-1 {

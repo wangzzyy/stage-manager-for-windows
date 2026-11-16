@@ -105,6 +105,8 @@ type Settings struct {
 	// HideInactive moves the windows of apps that are not on the stage
 	// off the desktop; otherwise the strip only lists them.
 	HideInactive bool `json:"hideInactive"`
+	// SeparateWindows gives each top-level window its own stage identity.
+	SeparateWindows bool `json:"separateWindows"`
 	// ClickDesktopClears sends the stage to the strip when the wallpaper
 	// is clicked.
 	ClickDesktopClears bool `json:"clickDesktopClears"`

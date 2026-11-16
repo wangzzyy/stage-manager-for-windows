@@ -82,6 +82,8 @@ var en = Strings{
 
 	HideInactive:     "Hide windows off the stage",
 	HideInactiveDesc: "Only the current app stays on the desktop; other apps go to the sidebar. When off, the sidebar just lists them.",
+	SeparateWindows: "Keep windows of the same app separate",
+	SeparateWindowsDesc: "Give each top-level window its own card and stage identity. You can combine windows with other cards; owned dialogs still follow their owner.",
 	ClickDesktop:     "Click the desktop to clear the stage",
 	ClickDesktopDesc: "Clicking the wallpaper sends the apps on the stage to the sidebar.",
 	Animation:        "Animation",

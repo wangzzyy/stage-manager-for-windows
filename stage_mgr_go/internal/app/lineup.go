@@ -231,7 +231,7 @@ func (s *strip) lineTile(c *ui.Context, w catalog.Window, name string, i, n int,
 	// The menu and the close button act on this window, which a card's
 	// request takes as a set of its own.
 	one := func() *set {
-		return newSet([]*group{{app: w.App, windows: []catalog.Window{w}}})
+		return newSet([]*group{{app: a.groupKey(w), windows: []catalog.Window{w}}})
 	}
 	if el.Clicked() {
 		debugf("lineup: %x %q clicked", w.HWND, title)

@@ -145,6 +145,7 @@ type Strings struct {
 	HighlightOrange, HighlightGreen               string
 
 	HideInactive, HideInactiveDesc                        string
+	SeparateWindows, SeparateWindowsDesc                 string
 	ClickDesktop, ClickDesktopDesc, ClickDesktopNeedsHide string
 	Animation, Quality, QualityDesc                       string
 	Low, LowDesc, Medium, MediumDesc, High, HighDesc      string

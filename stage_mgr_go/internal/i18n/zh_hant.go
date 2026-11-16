@@ -83,6 +83,8 @@ var zhHant = Strings{
 
 	HideInactive:     "隱藏舞台以外的視窗",
 	HideInactiveDesc: "只有目前的應用程式留在桌面上，其他應用程式收進側邊欄。關閉後側邊欄只列出它們。",
+	SeparateWindows: "分別管理同一個應用程式的視窗",
+	SeparateWindowsDesc: "每個頂層視窗各自成為一張卡片和一個舞台，可與其他卡片組合；屬於主視窗的對話框仍會跟隨主視窗。",
 	ClickDesktop:     "按一下桌面清空舞台",
 	ClickDesktopDesc: "按一下桌布時，把舞台上的應用程式都收進側邊欄。",
 	Animation:        "動畫",

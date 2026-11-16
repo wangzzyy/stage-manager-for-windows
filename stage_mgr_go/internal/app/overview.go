@@ -381,7 +381,7 @@ func (o *overview) begin(ws []catalog.Window) {
 		} else {
 			// Behind the three a card shows, it comes out of the card's
 			// front window, fading in.
-			if p, ok := cards[front[w.App]]; ok {
+			if p, ok := cards[front[a.groupKey(w)]]; ok {
 				t.origin = p
 			} else {
 				t.origin = a.flights.collapse(d, poseOf(a.home(w)))
@@ -490,9 +490,9 @@ func (o *overview) close(pick *ovTile) {
 	var left []string
 	if pick != nil {
 		o.focus = pick.w.HWND
-		if !d.model.OnStage(pick.w.App) {
+		if !d.model.OnStage(a.groupKey(pick.w)) {
 			left = d.model.Stage()
-			d.model.Switch(d.model.SetOf(pick.w.App), now)
+			d.model.Switch(d.model.SetOf(a.groupKey(pick.w)), now)
 			a.arrange(d, o.groups, now)
 			// The cards take their new places now, blank, so that those
 			// the windows fly into are there as they land, rather than
@@ -516,7 +516,7 @@ func (o *overview) close(pick *ovTile) {
 			t.home = false
 			continue
 		}
-		t.home = !a.settings.HideInactive || d.model.OnStage(t.w.App)
+		t.home = !a.settings.HideInactive || d.model.OnStage(a.groupKey(t.w))
 		if !t.home {
 			into = append(into, t.w)
 		}
@@ -551,7 +551,7 @@ func (o *overview) close(pick *ovTile) {
 		if !ok {
 			// No slot of its own in its card: it shrinks into the card's
 			// front window, fading.
-			p, ok = cards[front[t.w.App]]
+			p, ok = cards[front[a.groupKey(t.w)]]
 			t.toOp = 0
 		}
 		if !ok {

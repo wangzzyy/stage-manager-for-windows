@@ -674,7 +674,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
-				if icon := a.media.icons[g.apps[i].app]; icon != nil {
+				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {
 					r := row[i]
 					ui.Image(c.Key(g.apps[i].app), icon).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H)
 				}

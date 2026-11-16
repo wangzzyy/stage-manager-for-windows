@@ -82,6 +82,8 @@ var zhHans = Strings{
 
 	HideInactive:     "隐藏舞台之外的窗口",
 	HideInactiveDesc: "只有当前应用留在桌面上，其他应用收进侧边栏。关闭后侧边栏只列出它们。",
+	SeparateWindows: "同一应用的窗口分别管理",
+	SeparateWindowsDesc: "每个顶层窗口单独成为一张卡片和一个舞台，可与其他卡片组合；归属窗口的弹窗仍跟随其主窗口。",
 	ClickDesktop:     "点击桌面清空舞台",
 	ClickDesktopDesc: "点击壁纸时，把舞台上的应用都收进侧边栏。",
 	Animation:        "动画",

@@ -412,6 +412,6 @@ func TestCardPerspectiveMatchesReferenceStyle(t *testing.T) {
 		t.Fatalf("hovered card turn = %.2f°, want a flat, front-facing card", hover)
 	}
 	if cardPerspective != 1346 {
-		t.Fatalf("card perspective = %.0f DIPs, want the reference's 1800-DIP display value", cardPerspective)
+		t.Fatalf("card perspective = %d DIPs, want the reference's 1800-DIP display value", cardPerspective)
 	}
 }

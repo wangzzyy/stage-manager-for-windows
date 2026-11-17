@@ -114,19 +114,31 @@ func (a *App) windowMoved(h winapi.HWND) {
 	}
 	w := a.windows[i]
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
-		switch {
-		case d != g.home && a.settings.HideInactive:
-			stage := g.stage
-			if d != g.over {
-				stage = a.heading(d)
-			}
-			a.leave(g.home, w)
-			a.sendAcross(d, w, stage)
-			return
-		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
-			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
-				a.sendToStrip(d, w, g.from)
+		// A resize that ends over the strip is no drag into it.
+		if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+			key := a.groupKey(w)
+			target := a.cardUnder(d, winapi.Cursor())
+			switch {
+			case d != g.home && a.settings.HideInactive:
+				stage := g.stage
+				if d != g.over {
+					stage = a.heading(d)
+				}
+				a.leave(g.home, w)
+				if target != nil {
+					a.sendAcrossToStage(d, w, target.names())
+				} else {
+					a.sendAcross(d, w, stage)
+				}
+				return
+			case d == g.home:
+				if target != nil {
+					a.sendToCard(d, w, target)
+				} else if slices.Contains(a.heading(d), key) {
+					a.sendToStrip(d, w, g.from)
+				} else {
+					a.sendToNewCard(d, w, g.from, winapi.Cursor())
+				}
 				return
 			}
 		}
@@ -182,6 +194,23 @@ func (a *App) followMoved() bool {
 	return true
 }
 
+// cardUnder returns the card under a screen point, if any. The strip's
+// layout is in DIPs; the pointer and strip bounds are in physical pixels.
+func (a *App) cardUnder(d *display, p winapi.Point) *set {
+	if d == nil || d.strip == nil || d.strip.scale <= 0 {
+		return nil
+	}
+	s := d.strip
+	x := float32(float64(p.X-s.rect.Left) / s.scale)
+	y := float32(float64(p.Y-s.rect.Top) / s.scale)
+	for i, r := range d.layout.cards {
+		if i < len(d.sets) && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			return d.sets[i]
+		}
+	}
+	return nil
+}
+
 // stripUnder returns the display whose strip shows under a point.
 func (a *App) stripUnder(p winapi.Point) *display {
 	d := a.displayByHandle(winapi.MonitorFromPoint(p))
@@ -189,6 +218,50 @@ func (a *App) stripUnder(p winapi.Point) *display {
 		return nil
 	}
 	return d
+}
+
+// sendToCard puts a dragged window on the stage represented by the card
+// it was dropped over. The card's apps and the dragged app become one stage.
+func (a *App) sendToCard(d *display, w catalog.Window, target *set) {
+	key := a.groupKey(w)
+	next := target.names()
+	if !slices.Contains(next, key) {
+		next = append(next, key)
+	}
+	debugf("%q dragged onto card %q on %s", w.Title, target.title(), d.mon.Device)
+	a.switchStage(d, next, w.HWND, false, false)
+}
+
+// sendToNewCard puts a window not already on the stage into its own card.
+func (a *App) sendToNewCard(d *display, w catalog.Window, from winapi.Rect, p winapi.Point) {
+	key := a.groupKey(w)
+	y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
+	at := d.layout.slotAt(y)
+	debugf("%q dragged into empty strip area on %s at slot %d", w.Title, d.mon.Device, at)
+	if a.settings.HideInactive {
+		a.dropHomes[w.HWND] = from
+	} else {
+		winapi.SetWindowPos(w.HWND, 0, from.Left, from.Top, 0, 0,
+			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	}
+	// The app is already off the stage; switching to the unchanged stage
+	// makes its visible window fly into the newly inserted card.
+	a.start(&switchRequest{d: d, next: a.heading(d), insert: []string{key}, insertAt: at})
+}
+
+// sendAcrossToStage moves a dragged window to another display and adds it
+// to the stage represented by the card it was dropped over.
+func (a *App) sendAcrossToStage(d *display, w catalog.Window, target []string) {
+	debugf("%q dragged onto a card on %s", w.Title, d.mon.Device)
+	f := winapi.FitInto(w.Frame, d.mon.Handle)
+	winapi.SetWindowPos(w.HWND, 0, w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top, 0, 0,
+		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	next := slices.Clone(target)
+	key := a.groupKey(w)
+	if !slices.Contains(next, key) {
+		next = append(next, key)
+	}
+	a.switchStage(d, next, w.HWND, false, false)
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off
@@ -216,6 +289,13 @@ func (a *App) sendAcross(d *display, w catalog.Window, stage []string) {
 	f := winapi.FitInto(w.Frame, d.mon.Handle)
 	winapi.SetWindowPos(w.HWND, 0, w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top, 0, 0,
 		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == a.groupKey(w) })
-	a.switchStage(d, next, 0, false, false)
+	key := a.groupKey(w)
+	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key })
+	if d.model.OnStage(key) {
+		a.switchStage(d, next, 0, false, false)
+		return
+	}
+	p := winapi.Cursor()
+	y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
+	a.start(&switchRequest{d: d, next: next, insert: []string{key}, insertAt: d.layout.slotAt(y)})
 }

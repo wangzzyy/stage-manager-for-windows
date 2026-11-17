@@ -287,6 +287,10 @@ type switchRequest struct {
 	// split is the app whose set breaks into sets of one app each as the
 	// stage changes (App.split), or "".
 	split string
+	// insert is a new standalone card to create when this request commits.
+	// Deferring it keeps queued switches from mutating the model early.
+	insert   []string
+	insertAt int
 }
 
 // commit makes the model of the request's display what the switch asks for.
@@ -294,6 +298,9 @@ type switchRequest struct {
 // some of its apps off, so that no switch dropped or taken over leaves the
 // stage in pieces, each a card of the stage.
 func (r *switchRequest) commit(now time.Time) {
+	if len(r.insert) > 0 {
+		r.d.model.Insert(r.insert, r.insertAt)
+	}
 	if r.split != "" {
 		r.d.model.Split(r.split)
 	}

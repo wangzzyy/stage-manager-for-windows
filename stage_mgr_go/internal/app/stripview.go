@@ -505,10 +505,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		tilt = hoverTilt
 	}
 	tilt = el.AnimateTo("tilt", tilt, ui.Snappy)
-	// Keep the card edges parallel: each card turns about its outer edge
-	// with an orthographic projection. A per-card perspective camera makes
-	// neighboring cards' horizontal edges converge differently.
-	el.TransformOrigin((1-sign)/2, 0.5).RotateY(tilt * sign)
+	// Turn the whole card, including its window pictures and app icons,
+	// in perspective. Without Perspective, RotateY is orthographic: it only
+	// narrows the card and leaves every graphic rectangular.
+	el.TransformOrigin((1-sign)/2, 0.5).RotateY(tilt * sign).Perspective(cardPerspective)
 	lift := float32(1)
 	switch {
 	case held && !st.moved && !g.staged:

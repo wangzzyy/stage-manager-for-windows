@@ -610,7 +610,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// The next card uses the same offset from its top edge, so the two
 	// adjoining edges project with the same slope and keep their gap even.
 	gap := max(d.layout.extent-box.H, 0)
-	pivotY := box.H + gap/2
+	pivotY := box.H - gap/2
 	originY := pivotY / box.H
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more

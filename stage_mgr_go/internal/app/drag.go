@@ -190,6 +190,12 @@ func (a *App) windowMoved(h winapi.HWND) {
 	}
 	w := a.windows[i]
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
+		// The live preview already queued or committed the destination.
+		// Do not replace that request on mouse-up (which could discard the
+		// deferred standalone-card insertion).
+		if g.into == d {
+			return
+		}
 		// A resize that ends over the strip is no drag into it.
 		if r := winapi.WindowRect(h); movedByUser(g.from, r) {
 			key := a.groupKey(w)

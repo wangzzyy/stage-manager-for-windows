@@ -581,7 +581,15 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Keep the pointer's tilt target during landing, even though the card
 	// itself stays inert until the flight has handed its windows over.
 	tilt := cardTilt(restTilt, hoverTilt, over, g.staged, st.dragging)
-	tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
+	if landing {
+		// The flight is the visible tilt animation while the card is hidden.
+		// Set the card to its exact handoff angle instead of starting a
+		// second, independent animation that could still be in progress
+		// when the flight disappears.
+		tilt = el.Jump("tilt", tilt)
+	} else {
+		tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
+	}
 	lift := float32(1)
 	switch {
 	case held && !st.moved && !g.staged:

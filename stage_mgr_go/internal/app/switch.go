@@ -381,6 +381,12 @@ func (a *App) request(act action, d *display, s *set) {
 
 // pick puts the apps of a card on the stage, in place of those there.
 func (a *App) pick(d *display, s *set) {
+	// A floating strip may have been sent behind a full-screen app. Raise
+	// it before starting the flights, so the app's own transition cannot
+	// cover the strip while the selected card is coming onto the stage.
+	if d.strip != nil {
+		d.strip.raiseForSwitch()
+	}
 	a.switchStage(d, s.names(), s.front().HWND, true, false)
 }
 

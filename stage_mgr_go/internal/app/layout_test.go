@@ -69,7 +69,7 @@ func TestStageWindowLayoutPreservesRelativeGeometry(t *testing.T) {
 		{Left: 200, Top: 450, Right: 400, Bottom: 600},
 		{Left: 700, Top: 200, Right: 900, Bottom: 350},
 	}
-	got := stageWindowLayout(card, bounds)
+	got := stageWindowLayout(card, bounds, false)
 	if len(got) != len(bounds) {
 		t.Fatalf("got %d windows, want all %d", len(got), len(bounds))
 	}

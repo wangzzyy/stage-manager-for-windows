@@ -219,20 +219,9 @@ func (s *strip) view(c *ui.Context) {
 			emptyHint(c, a.tr(), w, h)
 		}
 		// Draw the previously hovered card last so it sits above its
-		// neighbours. The hit state is refreshed by card() each frame.
-		drawOrder := slices.Clone(order)
-		slices.SortStableFunc(drawOrder, func(i, j int) int {
-			overI := d.cards[d.sets[i].key] != nil && d.cards[d.sets[i].key].over
-			overJ := d.cards[d.sets[j].key] != nil && d.cards[d.sets[j].key].over
-			if overI == overJ {
-				return 0
-			}
-			if overI {
-				return 1
-			}
-			return -1
-		})
-		for _, i := range drawOrder {
+		// neighbours. The cached order is rebuilt only when the layout or
+		// hovered card changes, not on every animation frame.
+		for _, i := range s.cardDrawOrder(order) {
 			if b := s.card(c, d.sets[i], shown.cards[slots[i]]); b.W > 0 {
 				hits = append(hits, b)
 			}
@@ -450,6 +439,36 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 		perspective = cardPerspective
 	}
 	return originY, perspective
+}
+
+// cardDrawOrder returns the cards in layout order, with the previously
+// hovered card last. It uses a stable partition rather than sorting, and
+// reuses its buffers until either the layout order or hover target changes.
+func (s *strip) cardDrawOrder(order []int) []int {
+	hover := -1
+	for _, i := range order {
+		if st := s.d.cards[s.d.sets[i].key]; st != nil && st.over {
+			hover = i
+			break
+		}
+	}
+	if s.drawOrderReady && s.drawHover == hover && slices.Equal(s.drawOrderBase, order) {
+		return s.drawOrder
+	}
+
+	s.drawOrderBase = append(s.drawOrderBase[:0], order...)
+	s.drawOrder = s.drawOrder[:0]
+	for _, i := range order {
+		if i != hover {
+			s.drawOrder = append(s.drawOrder, i)
+		}
+	}
+	if hover >= 0 {
+		s.drawOrder = append(s.drawOrder, hover)
+	}
+	s.drawHover = hover
+	s.drawOrderReady = true
+	return s.drawOrder
 }
 
 // card draws the card of a set of apps and handles its input. It returns

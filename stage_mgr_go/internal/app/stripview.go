@@ -186,7 +186,7 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
-	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
+	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h).Perspective(cardPerspective)
 	out := float32(0)
 	if !s.shown {
 		// A floating strip slides out over its display's edge.
@@ -601,14 +601,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		}
 	})
 
-	// The card scales and turns about its outer edge, the one by the
-	// display's edge.
+	// The whole card turns about its outer edge. Perspective belongs to
+	// the strip root, shared by every card, so neighboring horizontal edges
+	// project toward the same vanishing point instead of separate local ones.
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
-	// Keep the outer edge fixed, away from the screen's center. Every card
-	// uses the same signed Y rotation, so neighboring top/bottom edges stay
-	// parallel while the inner edge swings toward the center.
-	originX := (1 - sign) / 2
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.
@@ -624,7 +621,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).Opacity(shown * fade)
 		shell.Children(func() {
 			windows := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-				TransformOrigin(originX, 0.5).Scale(lift, lift).RotateY(tilt * sign).Perspective(cardPerspective)
+				Scale(lift, lift)
 			if ghost > 0 {
 				windows.Cache()
 			}
@@ -674,7 +671,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {

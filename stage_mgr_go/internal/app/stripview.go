@@ -671,7 +671,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// The card scales and turns about its outer edge, the one by the
 	// display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
-	stack := a.stack(g, local)
+	stack := a.stack(g, local, right)
 	originX := (1 - sign) / 2
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
@@ -870,7 +870,7 @@ func (s *strip) motion() string {
 func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[winapi.HWND]pose {
 	right := s.right()
 	card := ui.Rect{X: box.X + ox, Y: box.Y + oy, W: box.W, H: box.H}
-	stack := s.a.stack(g, card)
+	stack := s.a.stack(g, card, right)
 	poses := map[winapi.HWND]pose{}
 	var list []flight
 	for i := len(stack) - 1; i >= 0; i-- {

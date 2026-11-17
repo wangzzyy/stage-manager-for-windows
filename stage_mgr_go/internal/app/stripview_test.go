@@ -427,3 +427,25 @@ func TestCardDrawOrderCachesStablePartition(t *testing.T) {
 		t.Fatalf("layout order change was not preserved: %v", got)
 	}
 }
+
+
+func TestFlightTiltUsesLinearFlightProgress(t *testing.T) {
+	fl := flight{
+		from: pose{tilt: 0},
+		to:   pose{tilt: 24},
+	}
+	for _, tt := range []struct {
+		progress float64
+		want     float32
+	}{
+		{progress: 0, want: 0},
+		{progress: 0.25, want: 6},
+		{progress: 0.5, want: 12},
+		{progress: 1, want: 24},
+	} {
+		got := fl.at(tt.progress, flightEase(tt.progress)).tilt
+		if got != tt.want {
+			t.Fatalf("tilt at progress %v = %v, want %v", tt.progress, got, tt.want)
+		}
+	}
+}

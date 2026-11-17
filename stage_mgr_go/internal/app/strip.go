@@ -149,11 +149,19 @@ func (s *strip) place() {
 }
 
 // applyBounds moves the window to s.rect.
+// stripTopmost keeps a floating strip above full-screen windows: unlike
+// a fixed app bar it does not reserve work area, and hiding it under the
+// active window would make the sidebar disappear precisely when a card is
+// selected. Fixed strips still honor the shell's full-screen notification.
+func stripTopmost(mode settings.Mode, fullScreen bool) bool {
+	return mode == settings.Floating || !fullScreen
+}
+
 func (s *strip) applyBounds() {
 	r := s.rect
-	z := winapi.HwndTopmost
-	if s.fullScreen {
-		z = winapi.HwndNoTopmost
+	z := winapi.HwndNoTopmost
+	if stripTopmost(s.a.settings.Mode, s.fullScreen) {
+		z = winapi.HwndTopmost
 	}
 	winapi.SetWindowPos(s.hwnd, z, r.Left, r.Top, r.W(), r.H(), winapi.SwpNoActivate)
 }

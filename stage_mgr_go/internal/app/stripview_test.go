@@ -38,6 +38,18 @@ func testStrip(t *testing.T) (*strip, *[]request, *ui.Tester) {
 
 func center(r ui.Rect) (float32, float32) { return r.X + r.W/2, r.Y + r.H/2 }
 
+func TestFloatingStripStaysTopmostInFullscreen(t *testing.T) {
+	if !stripTopmost(settings.Floating, true) {
+		t.Fatal("a floating strip drops behind a full-screen stage window")
+	}
+	if stripTopmost(settings.Fixed, true) {
+		t.Fatal("a fixed strip ignores the shell's full-screen notification")
+	}
+	if !stripTopmost(settings.Fixed, false) {
+		t.Fatal("a fixed strip is not topmost outside full screen")
+	}
+}
+
 func TestClickPicksCard(t *testing.T) {
 	s, got, tt := testStrip(t)
 	x, y := center(s.d.layout.cards[1])

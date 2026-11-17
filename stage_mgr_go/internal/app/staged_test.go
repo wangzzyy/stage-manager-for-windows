@@ -264,7 +264,7 @@ func TestStagedCardIsAGhost(t *testing.T) {
 		tt.Frame()
 		tt.Advance(2 * time.Second)
 		tt.Frame()
-		stack := s.d.sets[i].stack(s.d.layout.cards[i], false)
+		stack := s.a.stack(s.d.sets[i], s.d.layout.cards[i])
 		x, y := center(stack[0])
 		return tt.Image().RGBAAt(int(x), int(y))
 	}

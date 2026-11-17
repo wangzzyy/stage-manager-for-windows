@@ -168,23 +168,26 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
-	if (s.switching && s.a.settings.Mode == settings.Floating) ||
-		(s.pointerOnStrip && !s.fullScreen) ||
-		(s.a.settings.Mode == settings.Floating && s.fullScreen && s.visible && !s.away) {
+	// A floating strip stays topmost for its entire visible lifetime. Its
+	// z-order is independent of the pointer and of full-screen detection;
+	// it drops below other windows only after the slide-out has finished.
+	if s.a.settings.Mode == settings.Floating && s.visible && !s.away {
+		return winapi.HwndTopmost
+	}
+	if s.pointerOnStrip && !s.fullScreen {
 		return winapi.HwndTopmost
 	}
 	return winapi.HwndBottom
 }
 
 // syncZOrder applies a changed z-order without disturbing the strip's bounds.
-// During a full-screen app's appearance, keep the strip above it until the
-// floating strip has completed its slide-out and the final frame has drawn.
+// A floating strip remains topmost for as long as it is visible, and drops
+// below other windows only after its slide-out's final frame has drawn.
 func (s *strip) syncZOrder() {
 	topmost := s.zOrder() == winapi.HwndTopmost
-	// Other topmost windows (including the flight layer and full-screen
-	// apps) can be raised after us. Reassert our position while the strip
-	// must remain visible; caching this state would miss those reorderings.
-	if !topmost && s.zOrderKnown && !s.zOrderTopmost {
+	// Avoid issuing SetWindowPos on every poll when the requested z-order
+	// has not changed.
+	if s.zOrderKnown && s.zOrderTopmost == topmost {
 		return
 	}
 	s.zOrderKnown, s.zOrderTopmost = true, topmost

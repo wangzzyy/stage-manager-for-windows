@@ -325,6 +325,12 @@ func (a *App) poll() {
 			d.strip.poll(cur, now)
 		}
 	}
+	// Native move/size loops do not reliably deliver a location-change
+	// event for every pointer update. The regular pointer poll is the
+	// fallback trigger for a window being dragged into its sidebar.
+	if a.drag != nil {
+		a.dragIntoStrip()
+	}
 	// After the strips: a corner button joined to a strip's panel comes in
 	// as the panel does.
 	a.watchCorner(cur, now)

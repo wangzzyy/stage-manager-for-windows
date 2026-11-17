@@ -1018,12 +1018,18 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	y := float32((at.y-float64(l.rect.Top))/l.scale) - oy
 	w, h := float32(at.w/l.scale), float32(at.h/l.scale)
 	radius := max(min(h*0.045, 8), 3)
-	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
+	// Put the image inside a transformed box, just as the strip does for
+	// its cards. Transforming the image element itself leaves the flight
+	// looking square in some renderer paths until the landing card appears.
+	box := sh.cast(ui.Box(c.Key(key)).Absolute().Left(x).Top(y).Size(w, h))
 	// Cards turn about their outer edge: a negative tilt is a card of a
 	// strip on the right, turned about its right edge.
 	originX := float32(0)
 	if at.tilt < 0 {
 		originX = 1
 	}
-	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	box.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	box.Children(func() {
+		ui.Image(c, still).Absolute().Left(0).Top(0).Size(w, h).Fit(ui.FillBox).Radius(radius)
+	})
 }

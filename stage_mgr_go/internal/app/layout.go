@@ -256,9 +256,9 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 	scale := min(card.W/width, card.H/height)
 	// Keep the group aligned to the card's edge farthest from the screen edge:
 	// right edge in a left strip, left edge in a right strip.
-	offsetX := card.X + card.W - width*scale - float32(left)*scale
+	offsetX := card.X - float32(left)*scale
 	if onRight {
-		offsetX = card.X - float32(left)*scale
+		offsetX = card.X + card.W - width*scale - float32(left)*scale
 	}
 	offsetY := card.Y + (card.H-height*scale)/2 - float32(top)*scale
 	out := make([]ui.Rect, len(bounds))

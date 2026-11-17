@@ -20,8 +20,8 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	tiltStep        = 4 // degrees a resting card turns for each step of the tilt setting: the default 6 turns it 24°
-	cardPerspective = 640
+	tiltStep        = 7.3666667 // degrees per tilt step: the default 6 matches the reference Stage Manager's 44.2° card turn
+	cardPerspective = 1346 // eye distance in DIPs, measured against the reference's 1800-DIP display
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the
@@ -34,11 +34,11 @@ const (
 // give it: its width a share of the cards', and its height in DIPs.
 type panel struct{ share, h float32 }
 
-// cardTilts returns the degrees a resting card turns at a tilt setting, and
-// a hovered one, which turns a quarter of that to face the user.
+// cardTilts returns the degrees a resting card turns at a tilt setting.
+// A hovered card faces the user square-on, as in the reference Stage Manager.
 func cardTilts(level int) (rest, hover float32) {
 	rest = float32(level) * tiltStep
-	return rest, rest / 4
+	return rest, 0
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

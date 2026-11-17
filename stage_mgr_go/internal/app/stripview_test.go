@@ -397,9 +397,12 @@ func TestCardDrawOrderCachesStablePartition(t *testing.T) {
 		t.Fatalf("new hovered card was not moved to the top: %v", got)
 	}
 
+	// Once the pointer leaves every card, a changed layout order must
+	// invalidate the cached order and be used as-is.
+	s.d.cards["notes"].over = false
 	changed := []int{1, 0}
 	got = s.cardDrawOrder(changed)
-	if !slices.Equal(got, []int{1, 0}) {
+	if !slices.Equal(got, changed) {
 		t.Fatalf("layout order change was not preserved: %v", got)
 	}
 }

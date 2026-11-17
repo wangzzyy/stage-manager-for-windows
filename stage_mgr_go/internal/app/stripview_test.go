@@ -372,3 +372,34 @@ func TestCardCloseButton(t *testing.T) {
 		t.Fatalf("requests %v", *got)
 	}
 }
+
+
+func TestCardDrawOrderCachesStablePartition(t *testing.T) {
+	s, _, _ := testStrip(t)
+	order := []int{0, 1}
+	first := s.cardDrawOrder(order)
+	if !slices.Equal(first, []int{0, 1}) {
+		t.Fatalf("initial order %v", first)
+	}
+	if &first[0] != &s.cardDrawOrder(order)[0] {
+		t.Fatal("unchanged order did not reuse its buffer")
+	}
+
+	s.d.cards["mail"] = &cardState{over: true}
+	got := s.cardDrawOrder(order)
+	if !slices.Equal(got, []int{1, 0}) {
+		t.Fatalf("hovered card was not moved to the top: %v", got)
+	}
+	s.d.cards["mail"].over = false
+	s.d.cards["notes"] = &cardState{over: true}
+	got = s.cardDrawOrder(order)
+	if !slices.Equal(got, []int{0, 1}) {
+		t.Fatalf("new hovered card was not moved to the top: %v", got)
+	}
+
+	changed := []int{1, 0}
+	got = s.cardDrawOrder(changed)
+	if !slices.Equal(got, []int{1, 0}) {
+		t.Fatalf("layout order change was not preserved: %v", got)
+	}
+}

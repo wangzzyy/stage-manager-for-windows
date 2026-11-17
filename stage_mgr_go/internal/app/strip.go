@@ -181,7 +181,10 @@ func (s *strip) zOrder() winapi.HWND {
 // floating strip has completed its slide-out and the final frame has drawn.
 func (s *strip) syncZOrder() {
 	topmost := s.zOrder() == winapi.HwndTopmost
-	if s.zOrderKnown && s.zOrderTopmost == topmost {
+	// Other topmost windows (including the flight layer and full-screen
+	// apps) can be raised after us. Reassert our position while the strip
+	// must remain visible; caching this state would miss those reorderings.
+	if !topmost && s.zOrderKnown && !s.zOrderTopmost {
 		return
 	}
 	s.zOrderKnown, s.zOrderTopmost = true, topmost

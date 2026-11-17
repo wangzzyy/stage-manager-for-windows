@@ -441,7 +441,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 		originY, perspective := s.cardViewpoint(card, rest)
 		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
 		pivotY := card.Y - verticalCompensation + originY*card.H
-		for j, r := range set.stack(card, right) {
+		for j, r := range f.a.stack(set, card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				shown := lifted(card, r, lift, right)
 				x, y, w, ht := s.toScreen(shown)
@@ -471,7 +471,14 @@ func (f *flights) landingIcons(d *display) []badge {
 			continue
 		}
 		card := l.cards[i]
-		row := iconRow(set.stack(card, right)[0], card, len(set.apps), float32(f.a.settings.IconScale), right)
+		// Match the strip's card rendering: icons for a window combination
+		// belong to the card, not to its most recently active window. This
+		// keeps the landing flight aligned with the final card position.
+		iconBase := f.a.stack(set, card, right)[0]
+		if len(set.windows) > 1 {
+			iconBase = card
+		}
+		row := iconRow(iconBase, card, len(set.apps), float32(f.a.settings.IconScale), right)
 		for j := len(row) - 1; j >= 0; j-- {
 			g := set.apps[j]
 			if icon := f.a.media.icon(g.front()); icon != nil {

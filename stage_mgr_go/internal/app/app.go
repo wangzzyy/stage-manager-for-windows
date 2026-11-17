@@ -324,7 +324,13 @@ func stageHome(frame, window, parkedHome, work winapi.Rect, parked, maximized bo
 
 // home returns where a window shows when it is on the stage.
 func (a *App) home(w catalog.Window) winapi.Rect {
-	parkedHome, parked := a.park.Home(w.HWND)
+	var parkedHome winapi.Rect
+	var parked bool
+	// Headless UI tests build an App without starting the parking service.
+	// Such windows are not parked, so their frame is their stage position.
+	if a != nil && a.park != nil {
+		parkedHome, parked = a.park.Home(w.HWND)
+	}
 	maximized := winapi.IsZoomed(w.HWND)
 	var work winapi.Rect
 	if maximized {

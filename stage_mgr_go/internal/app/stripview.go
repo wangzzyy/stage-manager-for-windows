@@ -120,7 +120,7 @@ var (
 	// badgeTurn is how much of the card's turn the badge takes, as a share,
 	// and badgePerspective how far away, in DIPs, it is seen from: the
 	// closer, the more the side turned from the eye shrinks.
-	badgeTurn        = float32(0.5)
+	badgeTurn        = float32(0.25)
 	badgePerspective = float32(160)
 )
 
@@ -671,7 +671,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// The card scales and turns about its outer edge, the one by the
 	// display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
-	stack := g.stack(local, right)
+	stack := a.stack(g, local, right)
 	originX := (1 - sign) / 2
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
@@ -725,7 +725,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			})
 		})
 		// The icons of a set's apps overlap a little, the first on top.
-		row := iconRow(stack[0], local, len(g.apps), float32(a.settings.IconScale), right)
+		// For a window combination, anchor them to the card's lower corner,
+		// not the front (most recently active) window: the windows may be
+		// arranged anywhere within the card.
+		iconBase := stack[0]
+		if len(g.windows) > 1 {
+			iconBase = local
+		}
+		row := iconRow(iconBase, local, len(g.apps), float32(a.settings.IconScale), right)
 		ir := row[len(row)-1]
 		// The overlay spans the card, above the windows: it lets the
 		// pointer through to them, or the button that closes them would
@@ -743,7 +750,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
 			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
-			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
+			// Anchor the stage mark to the card itself, not to the most
+			// recently active window in the group. The mark stays at the
+			// card's lower-left corner even when its windows are arranged
+			// side by side or offset from one another.
+			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
@@ -859,7 +870,7 @@ func (s *strip) motion() string {
 func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[winapi.HWND]pose {
 	right := s.right()
 	card := ui.Rect{X: box.X + ox, Y: box.Y + oy, W: box.W, H: box.H}
-	stack := g.stack(card, right)
+	stack := s.a.stack(g, card, right)
 	poses := map[winapi.HWND]pose{}
 	var list []flight
 	for i := len(stack) - 1; i >= 0; i-- {

@@ -1,10 +1,12 @@
 package app
 
 import (
+	"math"
 	"slices"
 	"testing"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
+	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -56,6 +58,60 @@ func TestStackStaysInCard(t *testing.T) {
 		if len(rs) > 1 && !(rs[1].Y < rs[0].Y && rs[1].X > rs[0].X) {
 			t.Fatalf("window behind does not peek out: %+v", rs)
 		}
+	}
+}
+
+func TestStageWindowLayoutPreservesRelativeGeometry(t *testing.T) {
+	card := ui.Rect{X: 10, Y: 20, W: 200, H: 120}
+	bounds := []winapi.Rect{
+		{Left: 100, Top: 100, Right: 500, Bottom: 400},
+		{Left: 550, Top: 100, Right: 950, Bottom: 400},
+		{Left: 200, Top: 450, Right: 400, Bottom: 600},
+		{Left: 700, Top: 200, Right: 900, Bottom: 350},
+	}
+	got := stageWindowLayout(card, bounds, false)
+	if len(got) != len(bounds) {
+		t.Fatalf("got %d windows, want all %d", len(got), len(bounds))
+	}
+	scale := got[0].W / float32(bounds[0].W())
+	for i, r := range got {
+		wantW := float32(bounds[i].W()) * scale
+		wantH := float32(bounds[i].H()) * scale
+		if math.Abs(float64(r.W-wantW)) > 0.01 || math.Abs(float64(r.H-wantH)) > 0.01 {
+			t.Fatalf("window %d size %+v does not share scale %v", i, r, scale)
+		}
+	}
+	// The horizontal gap and vertical offset are scaled by the same factor.
+	gap := got[1].X - (got[0].X + got[0].W)
+	if math.Abs(float64(gap-float32(50)*scale)) > 0.01 {
+		t.Fatalf("parallel windows gap %v, want %v", gap, float32(50)*scale)
+	}
+	if !(got[2].Y > got[0].Y && got[3].X > got[2].X) {
+		t.Fatalf("relative vertical and horizontal placement changed: %+v", got)
+	}
+	for i, r := range got {
+		if r.X < card.X-0.01 || r.Y < card.Y-0.01 || r.X+r.W > card.X+card.W+0.01 || r.Y+r.H > card.Y+card.H+0.01 {
+			t.Fatalf("window %d %+v leaves card %+v", i, r, card)
+		}
+	}
+}
+
+
+func TestStageWindowLayoutAlignsAwayFromScreenEdge(t *testing.T) {
+	card := ui.Rect{X: 20, Y: 30, W: 300, H: 200}
+	bounds := []winapi.Rect{
+		{Left: 100, Top: 100, Right: 500, Bottom: 500},
+	}
+	left := stageWindowLayout(card, bounds, false)[0]
+	if math.Abs(float64(left.X-card.X)) > 0.01 {
+		t.Fatalf("left strip group left edge %v, want card outer edge %v", left.X, card.X)
+	}
+	right := stageWindowLayout(card, bounds, true)[0]
+	if math.Abs(float64(right.X+right.W-(card.X+card.W))) > 0.01 {
+		t.Fatalf("right strip group right edge %v, want card outer edge %v", right.X+right.W, card.X+card.W)
+	}
+	if left.W >= card.W || right.W >= card.W {
+		t.Fatalf("test needs horizontal free space: left %+v right %+v", left, right)
 	}
 }
 

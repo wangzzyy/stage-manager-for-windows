@@ -264,7 +264,7 @@ func TestStagedCardIsAGhost(t *testing.T) {
 		tt.Frame()
 		tt.Advance(2 * time.Second)
 		tt.Frame()
-		stack := s.d.sets[i].stack(s.d.layout.cards[i], false)
+		stack := s.a.stack(s.d.sets[i], s.d.layout.cards[i], false)
 		x, y := center(stack[0])
 		return tt.Image().RGBAAt(int(x), int(y))
 	}
@@ -387,7 +387,7 @@ func TestStagedCardHasACheck(t *testing.T) {
 	badge := func(i int) (green, white int) {
 		card := s.d.layout.cards[i]
 		local := ui.Rect{W: card.W, H: card.H}
-		b := badgeRect(s.d.sets[i].stack(local, false), local, float32(s.a.settings.IconScale), false, ui.Rect{X: -card.X, W: s.d.viewW})
+		b := stageBadgeRect(local, float32(s.a.settings.IconScale), false)
 		img := tt.Image()
 		for y := int(card.Y + b.Y); y < int(card.Y+b.Y+b.H); y++ {
 			for x := int(card.X + b.X); x < int(card.X+b.X+b.W); x++ {
@@ -432,7 +432,7 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		tt.Frame()
 		card := s.d.layout.cards[0]
 		local := ui.Rect{W: card.W, H: card.H}
-		b := badgeRect(s.d.sets[0].stack(local, right), local, float32(s.a.settings.IconScale), right, ui.Rect{X: -card.X, W: s.d.viewW})
+		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
 		deg, _ := cardTilts(s.a.settings.Tilt)
 		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right)
 		img := tt.Image()
@@ -448,7 +448,10 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 			t.Fatalf("right=%v: no badge", right)
 		}
 		w, h := float32(x1-x0+1), float32(y1-y0+1)
-		if w/h < 0.88 || w/h > 1.05 {
+		// The badge is rasterized after the card's perspective transform;
+		// at this small size, a one-pixel difference in its bounds is normal.
+		// More than one pixel would be a visibly oval badge.
+		if abs(int(w-h)) > 1 {
 			t.Fatalf("right=%v: the badge is %v by %v, an oval", right, w, h)
 		}
 		cx, cy := float32(x0)+w/2-card.X, float32(y0)+h/2-card.Y

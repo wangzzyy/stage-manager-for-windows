@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -235,7 +236,55 @@ func stackWindows(card ui.Rect, aspects []float64, right bool) []ui.Rect {
 	return out
 }
 
-// stack places the windows a set's card shows in card, front first.
+// stageWindowLayout maps the windows' real stage rectangles into a card.
+// One scale and one translation are applied to the whole group, preserving
+// every window's size, position, overlap and spacing relative to the others.
+func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Rect {
+	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
+		return nil
+	}
+	left, top := bounds[0].Left, bounds[0].Top
+	edgeRight, bottom := bounds[0].Right, bounds[0].Bottom
+	for _, r := range bounds[1:] {
+		left, top = min(left, r.Left), min(top, r.Top)
+		edgeRight, bottom = max(edgeRight, r.Right), max(bottom, r.Bottom)
+	}
+	width, height := float32(edgeRight-left), float32(bottom-top)
+	if width <= 0 || height <= 0 {
+		return nil
+	}
+	scale := min(card.W/width, card.H/height)
+	// Keep the group aligned to the card's outer edge, away from the stage:
+	// left edge in a left strip, right edge in a right strip.
+	offsetX := card.X - float32(left)*scale
+	if onRight {
+		offsetX = card.X + card.W - width*scale - float32(left)*scale
+	}
+	offsetY := card.Y + (card.H-height*scale)/2 - float32(top)*scale
+	out := make([]ui.Rect, len(bounds))
+	for i, r := range bounds {
+		out[i] = ui.Rect{
+			X: offsetX + float32(r.Left)*scale,
+			Y: offsetY + float32(r.Top)*scale,
+			W: float32(r.W()) * scale,
+			H: float32(r.H()) * scale,
+		}
+	}
+	return out
+}
+
+// stack lays out every window as one uniformly scaled miniature of the
+// stage, using home() so parked windows retain their on-stage coordinates.
+func (a *App) stack(g *set, card ui.Rect, right bool) []ui.Rect {
+	bounds := make([]winapi.Rect, len(g.windows))
+	for i, w := range g.windows {
+		bounds[i] = a.home(w)
+	}
+	return stageWindowLayout(card, bounds, right)
+}
+
+// stack retains the legacy aspect-ratio stack used by layout-only tests.
+// Runtime cards use App.stack, which maps the actual stage window rectangles.
 func (s *set) stack(card ui.Rect, right bool) []ui.Rect {
 	ws := s.stacked()
 	aspects := make([]float64, len(ws))
@@ -286,6 +335,18 @@ func badgeRect(stack []ui.Rect, card ui.Rect, iconScale float32, right bool, wit
 
 // badgeShare is the badge's size against the app's icon: it only says where
 // the stage is, so it is well under the icon, which says which app.
+// stageBadgeRect puts the stage marker on the card's inner bottom corner,
+// independently of the position or size of any window shown on the card.
+func stageBadgeRect(card ui.Rect, iconScale float32, right bool) ui.Rect {
+	icon := min(max(card.H*0.34, 22), 52) * iconScale
+	size := icon * badgeShare
+	x := card.W - size/2
+	if right {
+		x = size / 2
+	}
+	return ui.Rect{X: x - size/2, Y: card.H - size, W: size, H: size}
+}
+
 const badgeShare = 0.55
 
 // lifted is r, in card, scaled by lift around the middle of the card's

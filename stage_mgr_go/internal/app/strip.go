@@ -39,7 +39,8 @@ type strip struct {
 	holdUntil    time.Time
 	dragging     bool // a card is dragged
 	holding      bool // the button went down on a card and is still down
-	fullScreen   bool // a full-screen app is on the display
+	fullScreen     bool // a full-screen app is on the display
+	pointerOnStrip bool // the pointer is over the visible strip band
 	lastBar      time.Time
 	wasInside    bool
 	edgeSince    time.Time // when the pointer came to the strip's edge
@@ -156,11 +157,29 @@ func (s *strip) place() {
 // applyBounds moves the window to s.rect.
 func (s *strip) applyBounds() {
 	r := s.rect
-	z := winapi.HwndTopmost
-	if s.fullScreen {
-		z = winapi.HwndNoTopmost
-	}
+	z := s.zOrder()
 	winapi.SetWindowPos(s.hwnd, z, r.Left, r.Top, r.W(), r.H(), winapi.SwpNoActivate)
+}
+
+// zOrder keeps ordinary app windows above the sidebar. The sidebar rises
+// above them only while the pointer is over its band; full-screen apps
+// always stay above it.
+func (s *strip) zOrder() winapi.HWND {
+	if s.pointerOnStrip && !s.fullScreen {
+		return winapi.HwndTopmost
+	}
+	return winapi.HwndBottom
+}
+
+// setPointerOnStrip changes z-order only when the pointer enters or leaves
+// the visible band, without moving, resizing, or activating the strip.
+func (s *strip) setPointerOnStrip(v bool) {
+	if s.pointerOnStrip == v {
+		return
+	}
+	s.pointerOnStrip = v
+	winapi.SetWindowPos(s.hwnd, s.zOrder(), 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
 func (s *strip) relayout() { s.place() }
@@ -289,6 +308,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// While the overview shows, it takes nothing, as the cards it shows do
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	s.setPointerOnStrip(band)
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)

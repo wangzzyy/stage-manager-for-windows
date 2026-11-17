@@ -21,7 +21,10 @@ const (
 	stripMargin     = 28
 	minCardScale    = 0.46
 	tiltStep        = 4 // degrees a resting card turns for each step of the tilt setting: the default 6 turns it 24°
-	cardPerspective = 640
+	// A long camera distance makes the card projection effectively orthographic:
+	// the inner edge narrows without vertical convergence, so neighboring
+	// cards keep parallel horizontal edges and a uniform gap.
+	cardPerspective = 100000
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the
@@ -57,13 +60,12 @@ func turnSign(right bool) float32 {
 	return 1
 }
 
-// turnedCard projects a w×h card turned deg degrees about its left edge,
-// seen from dist away: its right edge, gone back, comes to rx from the left
-// one, and rh above and below the middle.
-func turnedCard(w, h, deg, dist float32) (rx, rh float32) {
-	sin, cos := math.Sincos(float64(deg) * math.Pi / 180)
-	k := dist / (dist + w*float32(sin))
-	return w * float32(cos) * k, h / 2 * k
+// turnedCard projects a w×h card turned deg degrees about its outer edge.
+// The near-orthographic projection narrows its width without shortening or
+// tipping its vertical edges, keeping the horizontal edges parallel.
+func turnedCard(w, h, deg, _ float32) (rx, rh float32) {
+	_, cos := math.Sincos(float64(deg) * math.Pi / 180)
+	return w * float32(cos), h / 2
 }
 
 // stripLayout places n cards in a strip of the given size, gap DIPs apart
@@ -586,20 +588,18 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 	return ui.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
 }
 
-// turnedPoint is where the point (x, y) of a w×h card shows once the card is
-// turned deg degrees about its outer edge, as turnedCard has it, the one on the
-// left or, with right, on the right: pulled toward the edge and, as it goes
-// back, toward the card's middle.
-func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
-	sin, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
+// turnedPoint projects a point with the same near-orthographic transform as
+// turnedCard. Vertical coordinates are unchanged: the near edge stays
+// vertical and horizontal edges remain parallel with an even card gap.
+func turnedPoint(x, y, w, h, deg, _ float32, right bool) (float32, float32) {
+	_, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
 	u := x
 	if right {
 		u = w - x
 	}
-	k := dist / (dist + u*float32(sin))
-	x = u * float32(cos) * k
+	x = u * float32(cos)
 	if right {
 		x = w - x
 	}
-	return x, h/2 + (y-h/2)*k
+	return x, y
 }

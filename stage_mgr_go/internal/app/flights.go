@@ -1055,6 +1055,6 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	ui.Box(c.Key(key)).Absolute().Left(x).Top(y).Size(w, h).
 		TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(perspective).Opacity(op).
 		Children(func() {
-			sh.cast(ui.Image(c.Key(key), still).Size(w, h).Fit(ui.FillBox).Radius(radius))
+			sh.cast(ui.Image(c.Key(struct{ FlightImage int }{key}), still).Size(w, h).Fit(ui.FillBox).Radius(radius))
 		})
 }

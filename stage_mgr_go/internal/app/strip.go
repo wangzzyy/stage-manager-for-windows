@@ -191,6 +191,14 @@ func (s *strip) syncZOrder() {
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
+func (s *strip) setSwitching(v bool) {
+	if s.switching == v {
+		return
+	}
+	s.switching = v
+	s.syncZOrder()
+}
+
 // setPointerOnStrip changes z-order only when the pointer enters or leaves
 // the visible band, without moving, resizing, or activating the strip.
 func (s *strip) setPointerOnStrip(v bool) {

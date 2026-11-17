@@ -691,7 +691,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		cy = box.H/2 + (cy-box.H/2)*lift
 		px, py := turnedPoint(cx, cy, box.W, box.H, tilt, cardPerspective, right)
 		badgeSize := b.W * lift
-		stageBadge(c, ui.Rect{X: box.X + ox + shake + px - badgeSize/2, Y: box.Y + oy + py - badgeSize/2, W: badgeSize, H: badgeSize}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+		badgeLayer := ui.Box(c).Absolute().Left(0).Top(0).Size(d.viewW, d.viewH).Opacity(shown * ghost).PassThrough()
+		badgeLayer.Children(func() {
+			stageBadge(c, ui.Rect{X: box.X + ox + shake + px - badgeSize/2, Y: box.Y + oy + py - badgeSize/2, W: badgeSize, H: badgeSize}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+		})
 	}
 	if !s.shown {
 		return ui.Rect{}

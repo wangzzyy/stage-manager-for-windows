@@ -458,7 +458,7 @@ func (f *flights) landingIcons(d *display) []badge {
 			continue
 		}
 		card := l.cards[i]
-		row := iconRow(set.stack(card, right)[0], card, len(set.apps), float32(f.a.settings.IconScale), right)
+		row := iconRow(f.a.stack(set, card)[0], card, len(set.apps), float32(f.a.settings.IconScale), right)
 		for j := len(row) - 1; j >= 0; j-- {
 			g := set.apps[j]
 			if icon := f.a.media.icon(g.front()); icon != nil {

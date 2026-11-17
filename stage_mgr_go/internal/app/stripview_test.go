@@ -374,6 +374,29 @@ func TestCardCloseButton(t *testing.T) {
 }
 
 
+func TestCardTiltTracksPointerDuringLanding(t *testing.T) {
+	rest, hover := float32(24), float32(0)
+	tests := []struct {
+		name     string
+		over     bool
+		staged   bool
+		dragging bool
+		want     float32
+	}{
+		{name: "pointer remains over landing card", over: true, want: hover},
+		{name: "pointer leaves landing card", want: rest},
+		{name: "staged card does not react to hover", over: true, staged: true, want: rest},
+		{name: "dragged staged card reacts to hover", over: true, staged: true, dragging: true, want: hover},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cardTilt(rest, hover, tt.over, tt.staged, tt.dragging); got != tt.want {
+				t.Fatalf("card tilt = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCardDrawOrderCachesStablePartition(t *testing.T) {
 	s, _, _ := testStrip(t)
 	order := []int{0, 1}

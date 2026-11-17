@@ -120,7 +120,7 @@ var (
 	// badgeTurn is how much of the card's turn the badge takes, as a share,
 	// and badgePerspective how far away, in DIPs, it is seen from: the
 	// closer, the more the side turned from the eye shrinks.
-	badgeTurn        = float32(0.5)
+	badgeTurn        = float32(0.25)
 	badgePerspective = float32(160)
 )
 

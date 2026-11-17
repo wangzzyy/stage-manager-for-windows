@@ -21,7 +21,9 @@ const (
 	stripMargin     = 28
 	minCardScale    = 0.46
 	tiltStep        = 4 // degrees a resting card turns for each step of the tilt setting: the default 6 turns it 24°
-	cardPerspective = 640
+	// A near-orthographic camera keeps every card's horizontal edges parallel;
+	// the inner vertical edge is compressed by RotateY, not slanted.
+	cardPerspective = 100000
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the

@@ -207,6 +207,9 @@ type trip struct {
 	stats frameStats
 
 	takeOff, land, stop func()
+	// retarget keeps landing poses in step with the pointer while the
+	// flight is in progress, rather than freezing the first-frame hover.
+	retarget func()
 }
 
 // progress is how far into its flight time a trip is at now.
@@ -609,6 +612,14 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		}
 		done()
 	}
+	t.retarget = func() {
+		poses := f.cardPoses(d, want, false)
+		for i := range list {
+			if target, ok := poses[list[i].hwnd]; ok {
+				list[i].to.tilt = target.tilt
+			}
+		}
+	}
 	t.takeOff = func() {
 		if t.flying || finished {
 			return
@@ -878,6 +889,9 @@ func (l *layer) view(c *ui.Context) {
 		return
 	}
 	t := l.trip
+	if t.flying && !t.landed && t.retarget != nil {
+		t.retarget()
+	}
 	now := c.Now()
 	p := 0.0
 	switch {

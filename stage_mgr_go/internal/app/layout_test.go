@@ -64,8 +64,8 @@ func TestTurnedCard(t *testing.T) {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)
 	}
 	rx, rh := turnedCard(40, 30, 30, 120)
-	if !(rx < 40*0.87 && rh < 15) {
-		t.Fatalf("a turned card projects to %v, %v: its far edge should come nearer and shrink", rx, rh)
+	if !(rx < 40*0.87) || rh != 15 {
+		t.Fatalf("a turned card projects to %v, %v: its far edge should move inward while its height stays unchanged", rx, rh)
 	}
 }
 

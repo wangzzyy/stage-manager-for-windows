@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -236,13 +237,46 @@ func stackWindows(card ui.Rect, aspects []float64, right bool) []ui.Rect {
 }
 
 // stack places the windows a set's card shows in card, front first.
-func (s *set) stack(card ui.Rect, right bool) []ui.Rect {
-	ws := s.stacked()
-	aspects := make([]float64, len(ws))
-	for i, w := range ws {
-		aspects[i] = w.Aspect()
+// stageWindowLayout maps the windows' real stage rectangles into a card.
+// One scale and one translation are applied to the whole group, preserving
+// every window's size, position, overlap and spacing relative to the others.
+func stageWindowLayout(card ui.Rect, bounds []winapi.Rect) []ui.Rect {
+	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
+		return nil
 	}
-	return stackWindows(card, aspects, right)
+	left, top := bounds[0].Left, bounds[0].Top
+	right, bottom := bounds[0].Right, bounds[0].Bottom
+	for _, r := range bounds[1:] {
+		left, top = min(left, r.Left), min(top, r.Top)
+		right, bottom = max(right, r.Right), max(bottom, r.Bottom)
+	}
+	width, height := float32(right-left), float32(bottom-top)
+	if width <= 0 || height <= 0 {
+		return nil
+	}
+	scale := min(card.W/width, card.H/height)
+	offsetX := card.X + (card.W-width*scale)/2 - float32(left)*scale
+	offsetY := card.Y + (card.H-height*scale)/2 - float32(top)*scale
+	out := make([]ui.Rect, len(bounds))
+	for i, r := range bounds {
+		out[i] = ui.Rect{
+			X: offsetX + float32(r.Left)*scale,
+			Y: offsetY + float32(r.Top)*scale,
+			W: float32(r.W()) * scale,
+			H: float32(r.H()) * scale,
+		}
+	}
+	return out
+}
+
+// stack lays out every window as one uniformly scaled miniature of the
+// stage, using home() so parked windows retain their on-stage coordinates.
+func (a *App) stack(g *set, card ui.Rect) []ui.Rect {
+	bounds := make([]winapi.Rect, len(g.windows))
+	for i, w := range g.windows {
+		bounds[i] = a.home(w)
+	}
+	return stageWindowLayout(card, bounds)
 }
 
 // markRect is where the dashed outline of the stage last left goes around

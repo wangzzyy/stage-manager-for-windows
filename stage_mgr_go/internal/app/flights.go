@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/catalog"

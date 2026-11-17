@@ -57,12 +57,14 @@ func turnSign(right bool) float32 {
 	return 1
 }
 
-// turnedCard gives the far edge of a w×h card turned deg degrees about
-// its left edge with an orthographic projection. Its horizontal position is
-// shortened by cos(deg); its height is unchanged.
-func turnedCard(w, h, deg, _ float32) (rx, rh float32) {
-	_, cos := math.Sincos(float64(deg) * math.Pi / 180)
-	return w * float32(cos), h / 2
+// turnedCard gives the projected far top corner of a w×h card turned
+// deg degrees about its left edge, and the far edge's half-height. The
+// perspective factor shortens both dimensions with distance from the hinge.
+func turnedCard(w, h, deg, distance float32) (rx, rh float32) {
+	rad := math.Abs(float64(deg)) * math.Pi / 180
+	sin, cos := math.Sincos(rad)
+	factor := float64(distance) / (float64(distance) + float64(w)*sin)
+	return w * float32(cos*factor), h / 2 * float32(factor)
 }
 
 // stripLayout places n cards in a strip of the given size, gap DIPs apart
@@ -585,19 +587,21 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 	return ui.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
 }
 
-// turnedPoint is where a point shows after the card turns about its outer
-// edge with an orthographic projection. The horizontal coordinate is shortened
-// by cos(deg); the vertical coordinate is unchanged, so horizontal edges on
-// neighboring cards stay parallel.
-func turnedPoint(x, y, w, h, deg, _ float32, right bool) (float32, float32) {
-	_, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
+// turnedPoint is where a point shows under the same perspective projection
+// as a card turned about its outer edge. Points farther from the hinge recede
+// in both dimensions; the hinge itself remains fixed.
+func turnedPoint(x, y, w, h, deg, distance float32, right bool) (float32, float32) {
+	rad := math.Abs(float64(deg)) * math.Pi / 180
+	sin, cos := math.Sincos(rad)
 	u := x
 	if right {
 		u = w - x
 	}
-	x = u * float32(cos)
+	factor := float64(distance) / (float64(distance) + float64(u)*sin)
+	px := u * float32(cos*factor)
 	if right {
-		x = w - x
+		px = w - px
 	}
-	return x, y
+	py := h/2 + (y-h/2)*float32(factor)
+	return px, py
 }

@@ -408,7 +408,8 @@ func (o *ownShadow) release() {
 
 // cardPoses returns where the given windows show in a display's strip, as
 // it is laid out now. Live poses are the cards as last drawn, turned and
-// lifted by the pointer over them; otherwise the cards at rest.
+// lifted by the pointer over them; otherwise they retain the pointer's
+// hover angle during landing, without taking on the hover lift.
 func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[winapi.HWND]pose {
 	s := d.strip
 	out := map[winapi.HWND]pose{}
@@ -428,7 +429,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 	l := layoutStrip(len(d.sets), d.viewW, d.viewH, d.scroll, float32(f.a.settings.Spacing), f.a.panel(), s.lineupFor(d.viewW, d.viewH).extent, float32(f.a.settings.CardsAt), right)
 	rest, _ := cardTilts(f.a.settings.Tilt)
 	for i, set := range d.sets {
-			tilt, lift := rest, float32(1)
+		tilt, lift := rest, float32(1)
 		if st := d.cards[set.key]; st != nil {
 			tilt = cardTilt(rest, 0, st.over, set.staged, st.dragging)
 			if live && st.lift > 0 {

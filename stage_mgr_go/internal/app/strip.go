@@ -205,17 +205,28 @@ func (s *strip) syncZOrder() {
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
-// raiseAboveFlight keeps the sidebar above the transparent flight layer.
-// Both windows can be TOPMOST; insert the sidebar immediately above the layer
-// so its cards remain visible throughout the transition.
-func (s *strip) raiseAboveFlight(flight winapi.HWND) {
-	if flight == 0 || !winapi.IsWindow(flight) {
+// orderFlightLayers places the shrinking layer above the sidebar and
+// the growing layer below it. Each layer's shadow window stays immediately
+// behind its corresponding flight window.
+func (s *strip) orderFlightLayers(above, aboveUnder, below, belowUnder winapi.HWND) {
+	if s.hwnd == 0 || above == 0 || below == 0 ||
+		!winapi.IsWindow(s.hwnd) || !winapi.IsWindow(above) || !winapi.IsWindow(below) {
 		return
 	}
-	// SetWindowPos's insert-after semantics place the flight immediately
-	// behind the strip in the TOPMOST band.
-	winapi.SetWindowPos(flight, s.hwnd, 0, 0, 0, 0,
-		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+	const flags = winapi.SwpNoMove | winapi.SwpNoSize | winapi.SwpNoActivate
+	winapi.SetWindowPos(above, winapi.HwndTopmost, 0, 0, 0, 0, flags)
+	if aboveUnder != 0 && winapi.IsWindow(aboveUnder) {
+		winapi.SetWindowPos(aboveUnder, above, 0, 0, 0, 0, flags)
+	}
+	afterAbove := above
+	if aboveUnder != 0 && winapi.IsWindow(aboveUnder) {
+		afterAbove = aboveUnder
+	}
+	winapi.SetWindowPos(s.hwnd, afterAbove, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(below, s.hwnd, 0, 0, 0, 0, flags)
+	if belowUnder != 0 && winapi.IsWindow(belowUnder) {
+		winapi.SetWindowPos(belowUnder, below, 0, 0, 0, 0, flags)
+	}
 }
 
 func (s *strip) setSwitching(v bool) {

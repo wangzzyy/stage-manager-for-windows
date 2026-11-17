@@ -428,15 +428,21 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 	right := s.right()
 	l := layoutStrip(len(d.sets), d.viewW, d.viewH, d.scroll, float32(f.a.settings.Spacing), f.a.panel(), s.lineupFor(d.viewW, d.viewH).extent, float32(f.a.settings.CardsAt), right)
 	rest, _ := cardTilts(f.a.settings.Tilt)
+	pointer, pointerOK := winapi.CursorPosition()
 	for i, set := range d.sets {
 		tilt, lift := rest, float32(1)
+		card := l.cards[i]
 		if st := d.cards[set.key]; st != nil {
-			tilt = cardTilt(rest, 0, st.over, set.staged, st.dragging)
+			// st.over is only the last rendered frame and can remain true
+			// after the pointer has left. Resolve the landing angle from the
+			// live screen pointer so the flight and the card agree at handoff.
+			x, y, w, h := s.toScreen(card)
+			over := pointerOK && (winapi.Rect{Left: int32(x), Top: int32(y), Right: int32(x + w), Bottom: int32(y + h)}).Contains(pointer)
+			tilt = cardTilt(rest, 0, over, set.staged, st.dragging)
 			if live && st.lift > 0 {
 				tilt, lift = st.tilt, st.lift
 			}
 		}
-		card := l.cards[i]
 		for j, r := range set.stack(card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				x, y, w, ht := s.toScreen(lifted(card, r, lift, right))

@@ -57,13 +57,12 @@ func turnSign(right bool) float32 {
 	return 1
 }
 
-// turnedCard projects a w×h card turned deg degrees about its left edge,
-// seen from dist away: its right edge, gone back, comes to rx from the left
-// one, and rh above and below the middle.
-func turnedCard(w, h, deg, dist float32) (rx, rh float32) {
-	sin, cos := math.Sincos(float64(deg) * math.Pi / 180)
-	k := dist / (dist + w*float32(sin))
-	return w * float32(cos) * k, h / 2 * k
+// turnedCard gives the far edge of a w×h card turned deg degrees about
+// its left edge with an orthographic projection. Its horizontal position is
+// shortened by cos(deg); its height is unchanged.
+func turnedCard(w, h, deg, _ float32) (rx, rh float32) {
+	_, cos := math.Sincos(float64(deg) * math.Pi / 180)
+	return w * float32(cos), h / 2
 }
 
 // stripLayout places n cards in a strip of the given size, gap DIPs apart

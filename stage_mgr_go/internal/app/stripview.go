@@ -725,7 +725,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			})
 		})
 		// The icons of a set's apps overlap a little, the first on top.
-		row := iconRow(stack[0], local, len(g.apps), float32(a.settings.IconScale), right)
+		// For a window combination, anchor them to the card's lower corner,
+		// not the front (most recently active) window: the windows may be
+		// arranged anywhere within the card.
+		iconBase := stack[0]
+		if len(g.windows) > 1 {
+			iconBase = local
+		}
+		row := iconRow(iconBase, local, len(g.apps), float32(a.settings.IconScale), right)
 		ir := row[len(row)-1]
 		// The overlay spans the card, above the windows: it lets the
 		// pointer through to them, or the button that closes them would

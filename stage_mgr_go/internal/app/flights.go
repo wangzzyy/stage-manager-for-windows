@@ -53,11 +53,10 @@ func flightEase(p float64) float64 {
 type pose struct {
 	x, y, w, h float64
 	tilt       float32
-	perspective float32
 }
 
 func poseOf(r winapi.Rect) pose {
-	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H()), perspective: cardPerspective}
+	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H())}
 }
 
 // shade is the shadow under a flight: a tight ambient glow around the
@@ -208,9 +207,6 @@ type trip struct {
 	stats frameStats
 
 	takeOff, land, stop func()
-	// retarget keeps landing poses in step with the pointer while the
-	// flight is in progress, rather than freezing the first-frame hover.
-	retarget func()
 }
 
 // progress is how far into its flight time a trip is at now.
@@ -241,7 +237,6 @@ func lerpPose(a, b pose, e float64) pose {
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
-		perspective: a.perspective + (b.perspective-a.perspective)*float32(e),
 	}
 }
 
@@ -412,9 +407,8 @@ func (o *ownShadow) release() {
 }
 
 // cardPoses returns where the given windows show in a display's strip, as
-// it is laid out now. The card's current animated tilt is used in both cases,
-// so the flight meets the card at the exact angle it is drawing. Live poses
-// also retain the card's current lift.
+// it is laid out now. Live poses are the cards as last drawn, turned and
+// lifted by the pointer over them; otherwise the cards at rest.
 func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[winapi.HWND]pose {
 	s := d.strip
 	out := map[winapi.HWND]pose{}
@@ -435,24 +429,14 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 	rest, _ := cardTilts(f.a.settings.Tilt)
 	for i, set := range d.sets {
 		tilt, lift := rest, float32(1)
-		card := l.cards[i]
-		if st := d.cards[set.key]; st != nil {
-			// st.tilt is the value AnimateTo actually drew this frame, not
-			// merely its destination. Following it keeps the flight and card
-			// in sync even while the pointer-driven tilt is still animating.
-			tilt = st.tilt
-			if live {
-				lift = st.lift
-			}
+		if st := d.cards[set.key]; live && st != nil && st.lift > 0 {
+			tilt, lift = st.tilt, st.lift
 		}
-		// Match the card's actual vanishing point. A fixed, distant
-		// perspective on the flight made its rotation look almost flat,
-		// then the card's stronger perspective appeared all at once at handoff.
-		_, perspective := s.cardViewpoint(card, rest)
+		card := l.cards[i]
 		for j, r := range set.stack(card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				x, y, w, ht := s.toScreen(lifted(card, r, lift, right))
-				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right), perspective: perspective}
+				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right)}
 			}
 		}
 	}
@@ -614,14 +598,6 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 			f.hideLater(l)
 		}
 		done()
-	}
-	t.retarget = func() {
-		poses := f.cardPoses(d, want, false)
-		for i := range list {
-			if target, ok := poses[list[i].hwnd]; ok {
-				list[i].to.tilt = target.tilt
-			}
-		}
 	}
 	t.takeOff = func() {
 		if t.flying || finished {
@@ -892,9 +868,6 @@ func (l *layer) view(c *ui.Context) {
 		return
 	}
 	t := l.trip
-	if t.flying && !t.landed && t.retarget != nil {
-		t.retarget()
-	}
 	now := c.Now()
 	p := 0.0
 	switch {
@@ -1038,23 +1011,12 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	y := float32((at.y-float64(l.rect.Top))/l.scale) - oy
 	w, h := float32(at.w/l.scale), float32(at.h/l.scale)
 	radius := max(min(h*0.045, 8), 3)
-// Put the perspective and rotation on a parent, as the strip does
-	// for its card stack. Perspective on the image itself does not establish
-	// a vanishing point for that same image: the flight therefore looked
-	// like an untransformed rectangle until the real card took over.
+	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
 	// Cards turn about their outer edge: a negative tilt is a card of a
 	// strip on the right, turned about its right edge.
 	originX := float32(0)
 	if at.tilt < 0 {
 		originX = 1
 	}
-	perspective := at.perspective
-	if perspective <= 0 {
-		perspective = cardPerspective
-	}
-	ui.Box(c.Key(key)).Absolute().Left(x).Top(y).Size(w, h).
-		TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(perspective).Opacity(op).
-		Children(func() {
-			sh.cast(ui.Image(c.Key(struct{ FlightImage int }{key}), still).Size(w, h).Fit(ui.FillBox).Radius(radius))
-		})
+	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
 }

@@ -505,6 +505,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		tilt = hoverTilt
 	}
 	tilt = el.AnimateTo("tilt", tilt, ui.Snappy)
+	el.TransformOrigin((1-sign)/2, 0.5).RotateY(tilt * sign)
 	lift := float32(1)
 	switch {
 	case held && !st.moved && !g.staged:

@@ -59,6 +59,15 @@ func TestStackStaysInCard(t *testing.T) {
 	}
 }
 
+func TestCardTiltsKeepAdjacentEdgesParallel(t *testing.T) {
+	for _, level := range []int{0, 1, 6, 10} {
+		rest, hover := cardTilts(level)
+		if rest != hover {
+			t.Fatalf("level %d changes angle on hover: rest %v, hover %v", level, rest, hover)
+		}
+	}
+}
+
 func TestTurnedCard(t *testing.T) {
 	if rx, rh := turnedCard(40, 30, 0, 120); rx != 40 || rh != 15 {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)

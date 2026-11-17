@@ -1038,7 +1038,10 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	y := float32((at.y-float64(l.rect.Top))/l.scale) - oy
 	w, h := float32(at.w/l.scale), float32(at.h/l.scale)
 	radius := max(min(h*0.045, 8), 3)
-	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
+// Put the perspective and rotation on a parent, as the strip does
+	// for its card stack. Perspective on the image itself does not establish
+	// a vanishing point for that same image: the flight therefore looked
+	// like an untransformed rectangle until the real card took over.
 	// Cards turn about their outer edge: a negative tilt is a card of a
 	// strip on the right, turned about its right edge.
 	originX := float32(0)
@@ -1049,5 +1052,9 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if perspective <= 0 {
 		perspective = cardPerspective
 	}
-	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(perspective).Opacity(op)
+	ui.Box(c.Key(key)).Absolute().Left(x).Top(y).Size(w, h).
+		TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(perspective).Opacity(op).
+		Children(func() {
+			sh.cast(ui.Image(c.Key(key), still).Size(w, h).Fit(ui.FillBox).Radius(radius))
+		})
 }

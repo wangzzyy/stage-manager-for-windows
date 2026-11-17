@@ -911,7 +911,14 @@ func (l *layer) viewFlights(c *ui.Context, above bool) {
 		if t.start.IsZero() { t.start = now }
 		p = t.progress(now)
 		if p < 1 {
-			if !above { l.pace.frame(l.win); l.pace.frame(l.aboveWin) }
+			if !above {
+				// The pacer is shared by both panes, so asking it to pace the
+				// second window immediately after the first can suppress its
+				// frame. Pace the main pane and explicitly invalidate the
+				// shrinking pane on each animation frame.
+				l.pace.frame(l.win)
+				l.aboveWin.Invalidate()
+			}
 		} else if !t.arrived && !above {
 			t.arrived = true
 			if debugOn { l.reportTrip(t) }

@@ -575,7 +575,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		st.returning = false
 	}
 	// The shake runs along the strip's width, to and fro about where the card is.
-	el.Translate(ox+el.AnimateTo("shake", 0, shakeSpring), oy).Opacity(op)
+	shake := el.AnimateTo("shake", 0, shakeSpring)
+	el.Translate(ox+shake, oy).Opacity(op)
 
 	el.ContextMenu(func(m *ui.Menu) {
 		tr := a.tr()
@@ -655,22 +656,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// The overlay spans the card, above the windows: it lets the
 		// pointer through to them, or the button that closes them would
 		// not know it is under the pointer, nor take its click.
-		// The stage's card wears a green check, which is what makes the ghost
-		// read as the one that is open, and is not faded with its windows. It
-		// sits where the card's corner shows once the card is turned
-		// (turnedPoint), and lifts with the card. A disc turned as far as the
-		// card is squeezes to an oval that looks nothing like a button, and
-		// one that lies flat beside a card at an angle looks pasted on: it
-		// turns about itself by a share of the card's turn (badgeTurn), which
-		// is not what the geometry says, and looks right. It pops in as the
-		// ghost comes. Built for every card, so that the ones after it keep
-		// their place in the tree as the stage comes and goes.
-		badge := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-			TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
-		badge.Children(func() {
-			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
-			stageBadge(c, b, 0.5+0.5*ghost, badgeTurn*tilt*sign)
-		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
@@ -695,6 +680,19 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			label.Opacity(label.AnimateTo("label", op, fadeQuick))
 		})
 	})
+	// Draw the badge beside the card, not inside its turned layer. Otherwise
+	// the card's perspective squeezes the round disc into an oval. Project its
+	// center by the same card geometry, then let the badge turn on its own.
+	if ghost > 0 {
+		b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
+		cx, cy := b.X+b.W/2, b.Y+b.H/2
+		pivotX := (1-sign) / 2 * box.W
+		cx = pivotX + (cx-pivotX)*lift
+		cy = box.H/2 + (cy-box.H/2)*lift
+		px, py := turnedPoint(cx, cy, box.W, box.H, tilt, cardPerspective, right)
+		badgeSize := b.W * lift
+		stageBadge(c, ui.Rect{X: box.X + ox + shake + px - badgeSize/2, Y: box.Y + oy + py - badgeSize/2, W: badgeSize, H: badgeSize}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+	}
 	if !s.shown {
 		return ui.Rect{}
 	}

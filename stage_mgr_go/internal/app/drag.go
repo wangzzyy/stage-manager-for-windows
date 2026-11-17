@@ -22,6 +22,7 @@ type drag struct {
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over *display
+	into     *display // the strip the window has already flown into while still held
 	since    time.Time
 	stage    []string
 	dwell    *time.Timer
@@ -83,6 +84,37 @@ func (a *App) dragOver() {
 	}
 	g.over, g.stage = d, stage
 	a.switchStage(d, []string{a.groupKey(w)}, g.h, false, false)
+}
+
+// dragIntoStrip starts the card-flight animation as the held window
+// reaches its own display's strip. Waiting for MoveSizeEnd would make the
+// animation begin only after the user released the mouse.
+func (a *App) dragIntoStrip() {
+	g := a.drag
+	if !a.ready || g == nil || g.h == 0 || g.home == nil || g.into != nil {
+		return
+	}
+	d := a.stripUnder(winapi.Cursor())
+	if d == nil || d != g.home {
+		return
+	}
+	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h })
+	if i < 0 {
+		return
+	}
+	w := a.windows[i]
+	if !slices.Contains(a.heading(d), a.groupKey(w)) {
+		return
+	}
+	// Remember the original position before the switch parks the window.
+	// takeOff uses it to put the real window back when its app is restored.
+	if a.settings.HideInactive {
+		a.dropHomes[w.HWND] = g.from
+	}
+	g.into = d
+	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) })
+	debugf("%q dragged over its strip: start card flight before release", w.Title)
+	a.switchStage(d, next, w.HWND, false, false)
 }
 
 // windowMoved puts the app of a window moved to another display on that

@@ -405,6 +405,33 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 	})
 }
 
+
+// cardViewpoint puts the perspective's vanishing point at the middle of the
+// opposite vertical edge of the display. The outer edge remains the card's
+// fixed base; its top and bottom edges run toward that distant point, while
+// the inner edge is foreshortened without being turned around its own axis.
+func (s *strip) cardViewpoint(card ui.Rect) (originY, perspective float32) {
+	if s.scale <= 0 {
+		return 0.5, cardPerspective
+	}
+	work := s.d.mon.Work
+	scale := float64(s.scale)
+	outerX := float64(s.rect.Left) + float64(card.X)*scale
+	farX := float64(work.Right)
+	if s.right() {
+		outerX = float64(s.rect.Left) + float64(card.X+card.W)*scale
+		farX = float64(work.Left)
+	}
+	centerY := float64(work.Top+work.Bottom) / 2
+	localCenterY := (centerY - float64(s.rect.Top)) / scale
+	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	perspective = float32(math.Abs(farX-outerX) / scale)
+	if perspective < 1 {
+		perspective = cardPerspective
+	}
+	return originY, perspective
+}
+
 // card draws the card of a set of apps and handles its input. It returns
 // where the card showed, in DIPs of the window, for hit testing.
 func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
@@ -606,6 +633,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
 	originX := (1 - sign) / 2
+	originY, perspective := s.cardViewpoint(box)
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.
@@ -621,7 +649,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).Opacity(shown * fade)
 		shell.Children(func() {
 			windows := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-				TransformOrigin(originX, 0.5).Scale(lift, lift).RotateY(tilt * sign).Perspective(cardPerspective)
+				TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective)
 			if ghost > 0 {
 				windows.Cache()
 			}
@@ -665,13 +693,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-			TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {

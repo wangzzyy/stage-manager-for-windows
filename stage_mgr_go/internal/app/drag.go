@@ -24,8 +24,9 @@ type drag struct {
 	at, over *display
 	into     *display // the strip the window has already flown into while still held
 	since    time.Time
-	stage    []string
-	dwell    *time.Timer
+	stage     []string // stage on another display, if it made way
+	homeStage []string // stage to restore when the pointer leaves the home strip
+	dwell     *time.Timer
 }
 
 // startDrag follows window h, which the user began to move.
@@ -34,7 +35,11 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	if home != nil {
+		g.homeStage = home.model.Stage()
+	}
+	a.drag = g
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -91,10 +96,22 @@ func (a *App) dragOver() {
 // animation begin only after the user released the mouse.
 func (a *App) dragIntoStrip() {
 	g := a.drag
-	if !a.ready || g == nil || g.h == 0 || g.home == nil || g.into != nil {
+	if !a.ready || g == nil || g.h == 0 || g.home == nil {
 		return
 	}
 	d := a.stripUnder(winapi.Cursor())
+	if g.into != nil {
+		// Leaving the strip turns the preview back into the original stage.
+		// switchStage can take over an in-flight shrink and fly the window
+		// back from its current position instead of waiting for mouse-up.
+		if d == g.into {
+			return
+		}
+		g.into = nil
+		debugf("%x dragged out of strip: restore stage %v", g.h, g.homeStage)
+		a.switchStage(g.home, g.homeStage, g.h, false, false)
+		return
+	}
 	if d == nil || d != g.home {
 		return
 	}
@@ -104,12 +121,14 @@ func (a *App) dragIntoStrip() {
 	}
 	w := a.windows[i]
 	key := a.groupKey(w)
-	if !slices.Contains(a.heading(d), key) {
+	// Only a window that began on this display's stage can be previewed
+	// into its strip. Use the stage captured at drag start, not heading(),
+	// which may be an intermediate or queued preview.
+	if !slices.Contains(g.homeStage, key) {
 		return
 	}
 	p := winapi.Cursor()
 	target := a.cardUnder(d, p)
-	// Remember the original position before the switch parks the window.
 	if a.settings.HideInactive {
 		a.dropHomes[w.HWND] = g.from
 	}
@@ -129,7 +148,7 @@ func (a *App) dragIntoStrip() {
 	// The dragged app must leave the stage for the switch to create a
 	// departing flight. Keeping it in heading(d) makes start() see no
 	// departing window, so the card is inserted without any animation.
-	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == key })
+	next := slices.DeleteFunc(g.homeStage, func(app string) bool { return app == key })
 	a.start(&switchRequest{d: d, next: next, insert: []string{key}, insertAt: at})
 }
 

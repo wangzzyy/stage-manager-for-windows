@@ -126,7 +126,11 @@ func (a *App) dragIntoStrip() {
 	y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
 	at := d.layout.slotAt(y)
 	debugf("%q dragged over empty strip area: start card flight before release", w.Title)
-	a.start(&switchRequest{d: d, next: a.heading(d), insert: []string{key}, insertAt: at})
+	// The dragged app must leave the stage for the switch to create a
+	// departing flight. Keeping it in heading(d) makes start() see no
+	// departing window, so the card is inserted without any animation.
+	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == key })
+	a.start(&switchRequest{d: d, next: next, insert: []string{key}, insertAt: at})
 }
 
 // windowMoved puts the app of a window moved to another display on that

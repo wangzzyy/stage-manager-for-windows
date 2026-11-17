@@ -441,6 +441,16 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	return originY, perspective
 }
 
+// cardTilt keeps a landing flight at the card's resting angle. Hover is
+// applied only after the flight has landed, so a still-hovered card then
+// animates from its tilted resting pose to zero degrees.
+func cardTilt(rest, hover float32, pointerLive, landing bool) float32 {
+	if pointerLive && !landing {
+		return hover
+	}
+	return rest
+}
+
 // cardDrawOrder returns the cards in layout order, with the previously
 // hovered card last. It uses a stable partition rather than sorting, and
 // reuses its buffers until either the layout order or hover target changes.
@@ -545,7 +555,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// notice of the pointer passing over them as they make room: they
 	// would lift, and capture their windows at full size for a switch that
 	// will not come, holding the main thread up mid-drag.
-	hovered := (st.dragging || el.Hovered() && a.cardDrag == nil) && !landing
+	pointerOver := st.dragging || el.Hovered() && a.cardDrag == nil
+	hovered := pointerOver && !landing
 	// The pointer coming onto the stage's card shakes it too, as a click
 	// does: it has nothing to bring, and it says so before the click that
 	// would ask. The shake moves the card from under the pointer and back, so
@@ -560,17 +571,15 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// No switch follows a click on the stage's own card, so the pointer over
 	// it neither turns nor lifts it, nor takes the pictures of its windows,
 	// which the user is in; held and moved, it is a card like the others.
-	live := hovered && (!g.staged || st.dragging)
+	pointerLive := pointerOver && (!g.staged || st.dragging)
+	live := pointerLive && !landing
 	if live && !st.dragging {
 		// A switch may follow: take the pictures its flights need now, at
 		// the size the card cannot show.
 		a.media.preview(g.windows)
 	}
 	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
-	tilt := restTilt
-	if live {
-		tilt = hoverTilt
-	}
+	tilt := cardTilt(restTilt, hoverTilt, pointerLive, landing)
 	tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
 	lift := float32(1)
 	switch {

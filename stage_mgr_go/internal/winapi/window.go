@@ -68,6 +68,7 @@ const (
 	HwndTop       HWND = 0
 	HwndTopmost   HWND = ^HWND(0)     // -1
 	HwndNoTopmost HWND = ^HWND(0) - 1 // -2
+	HwndBottom    HWND = 1
 
 	swRestore         = 9
 	swShowNoActivate  = 4

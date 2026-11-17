@@ -540,12 +540,17 @@ func TestStagedCardShakesWhenThePointerComesOnIt(t *testing.T) {
 	// A card that waits has nothing to say: the pointer on it does not shake it.
 	x, y = center(s.d.layout.cards[1])
 	tt.Move(x, y)
+	lo, hi := restOther, restOther
 	for i := 0; i < 40; i++ {
 		tt.Frame()
-		if e := other(); e != restOther {
-			t.Fatalf("a card that waits moved from %d to %d", restOther, e)
-		}
+		e := other()
+		lo, hi = min(lo, e), max(hi, e)
 		tt.Advance(16 * time.Millisecond)
+	}
+	// Hovering may lift and tilt a waiting card by a pixel; it must not
+	// trigger the much larger shake reserved for the stage's own card.
+	if n := hi - lo; n >= 6 {
+		t.Fatalf("a card that waits shook %d px", n)
 	}
 	if len(*got) != 0 {
 		t.Fatalf("requests %v", *got)

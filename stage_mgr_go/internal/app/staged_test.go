@@ -448,7 +448,10 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 			t.Fatalf("right=%v: no badge", right)
 		}
 		w, h := float32(x1-x0+1), float32(y1-y0+1)
-		if w/h < 0.88 || w/h > 1.05 {
+		// The badge is rasterized after the card's perspective transform;
+		// at this small size, a one-pixel difference in its bounds is normal.
+		// More than one pixel would be a visibly oval badge.
+		if abs(int(w-h)) > 1 {
 			t.Fatalf("right=%v: the badge is %v by %v, an oval", right, w, h)
 		}
 		cx, cy := float32(x0)+w/2-card.X, float32(y0)+h/2-card.Y

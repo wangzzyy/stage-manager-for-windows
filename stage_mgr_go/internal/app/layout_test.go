@@ -64,8 +64,8 @@ func TestTurnedCard(t *testing.T) {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)
 	}
 	rx, rh := turnedCard(40, 30, 30, 120)
-	if !(rx < 40*0.87) || rh != 15 {
-		t.Fatalf("a turned card projects to %v, %v: its far edge should move inward while its height stays unchanged", rx, rh)
+	if !(rx < 40*0.87) || !(rh < 15) || rh <= 0 {
+		t.Fatalf("a turned card projects to %v, %v: perspective should shorten both its width and far-edge height", rx, rh)
 	}
 }
 
@@ -373,8 +373,8 @@ func TestBadgeRect(t *testing.T) {
 	}
 }
 
-// A point of a card shows where the card turned has it: those at its outer
-// edge stay, and the card's far edge goes where turnedCard puts it.
+// A point of a card shows where perspective puts it: those at its hinge
+// stay, while points farther away recede in both dimensions.
 func TestTurnedPoint(t *testing.T) {
 	const w, h, dist float32 = 160, 105, 640
 	for _, right := range []bool{false, true} {

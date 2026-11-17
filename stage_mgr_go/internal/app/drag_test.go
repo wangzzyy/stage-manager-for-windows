@@ -38,3 +38,37 @@ func TestCardUnderWithoutStrip(t *testing.T) {
 		t.Fatalf("cardUnder() without strip = %v, want nil", got)
 	}
 }
+
+func TestMovedByUser(t *testing.T) {
+	from := winapi.Rect{Left: 100, Top: 100, Right: 900, Bottom: 700}
+
+	tests := []struct {
+		name string
+		to   winapi.Rect
+		want bool
+	}{
+		{
+			name: "ordinary move",
+			to:   winapi.Rect{Left: 300, Top: 250, Right: 1100, Bottom: 850},
+			want: true,
+		},
+		{
+			name: "restore maximized window while dragging",
+			to:   winapi.Rect{Left: 250, Top: 120, Right: 1050, Bottom: 720},
+			want: true,
+		},
+		{
+			name: "resize from bottom right",
+			to:   winapi.Rect{Left: 100, Top: 100, Right: 1000, Bottom: 750},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := movedByUser(from, tt.to); got != tt.want {
+				t.Fatalf("movedByUser() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

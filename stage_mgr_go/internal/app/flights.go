@@ -594,14 +594,12 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	if below != 0 && winapi.IsWindow(below) {
 		l.lower(below)
 	} else {
-		// Above the strip, which a floating strip that just came out may be.
 		l.raise()
-	}
-	// The strip must remain above this flight layer. Reorder it explicitly:
-	// both windows may be TOPMOST, and merely retaining that flag does not
-	// guarantee their relative order.
-	if d.strip != nil {
-		d.strip.orderFlightLayers(l.aboveHwnd, l.aboveUhwnd, l.hwnd, l.uhwnd)
+		// Put the strip between the two flight windows: shrinking stays
+		// above it, while growing stays below it.
+		if d.strip != nil {
+			d.strip.orderFlightLayers(l.aboveHwnd, l.aboveUhwnd, l.hwnd, l.uhwnd)
+		}
 	}
 	l.release()
 	sw.lap("order layer")

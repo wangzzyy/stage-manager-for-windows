@@ -279,6 +279,17 @@ func (a *App) stack(g *set, card ui.Rect) []ui.Rect {
 	return stageWindowLayout(card, bounds)
 }
 
+// stack retains the legacy aspect-ratio stack used by layout-only tests.
+// Runtime cards use App.stack, which maps the actual stage window rectangles.
+func (s *set) stack(card ui.Rect, right bool) []ui.Rect {
+	ws := s.stacked()
+	aspects := make([]float64, len(ws))
+	for i, w := range ws {
+		aspects[i] = w.Aspect()
+	}
+	return stackWindows(card, aspects, right)
+}
+
 // markRect is where the dashed outline of the stage last left goes around
 // the windows of its card, stack, front first: a little out from all of
 // them, its corners rounding as far again as the front window's do.

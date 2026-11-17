@@ -116,6 +116,15 @@ func EnumChildWindows(parent HWND, fn func(HWND) bool) {
 	childFn = nil
 }
 
+// CursorPosition returns the current pointer position in screen pixels.
+func CursorPosition() (Point, bool) {
+	var p Point
+	if !boolCall(procGetCursorPos, uintptr(unsafe.Pointer(&p))) {
+		return Point{}, false
+	}
+	return p, true
+}
+
 func boolCall(p *syscall.LazyProc, args ...uintptr) bool {
 	r, _, _ := p.Call(args...)
 	return r != 0

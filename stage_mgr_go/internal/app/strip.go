@@ -148,6 +148,18 @@ func (s *strip) place() {
 	s.applyBounds()
 }
 
+// raiseForSwitch puts a floating strip back above the full-screen app
+// before a card switch starts its animation. Fixed strips keep their AppBar
+// behavior and do not need this nudge.
+func (s *strip) raiseForSwitch() {
+	if s.bar.Registered() || !s.visible {
+		return
+	}
+	s.fullScreen = false
+	winapi.SetWindowPos(s.hwnd, winapi.HwndTopmost, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+}
+
 // applyBounds moves the window to s.rect.
 func (s *strip) applyBounds() {
 	r := s.rect

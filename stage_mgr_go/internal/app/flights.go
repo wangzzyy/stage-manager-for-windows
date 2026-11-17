@@ -563,12 +563,6 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	} else {
 		// Above the strip, which a floating strip that just came out may be.
 		l.raise()
-		// The strip is intentionally above the flight layer during a
-		// floating transition. Reassert after raising this topmost window:
-		// raising the layer otherwise covers the strip again.
-		if d.strip != nil && d.strip.a.settings.Mode == settings.Floating {
-			d.strip.raiseAboveFlight()
-		}
 	}
 	l.release()
 	sw.lap("order layer")

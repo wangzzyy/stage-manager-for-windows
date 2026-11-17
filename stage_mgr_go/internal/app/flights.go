@@ -433,7 +433,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 			tilt, lift = st.tilt, st.lift
 		}
 		card := l.cards[i]
-		for j, r := range set.stack(card, right) {
+		for j, r := range f.a.stack(set, card) {
 			if h := set.windows[j].HWND; want[h] {
 				x, y, w, ht := s.toScreen(lifted(card, r, lift, right))
 				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right)}

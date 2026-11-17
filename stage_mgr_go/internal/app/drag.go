@@ -103,18 +103,30 @@ func (a *App) dragIntoStrip() {
 		return
 	}
 	w := a.windows[i]
-	if !slices.Contains(a.heading(d), a.groupKey(w)) {
+	key := a.groupKey(w)
+	if !slices.Contains(a.heading(d), key) {
 		return
 	}
+	p := winapi.Cursor()
+	target := a.cardUnder(d, p)
 	// Remember the original position before the switch parks the window.
-	// takeOff uses it to put the real window back when its app is restored.
 	if a.settings.HideInactive {
 		a.dropHomes[w.HWND] = g.from
 	}
 	g.into = d
-	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) })
-	debugf("%q dragged over its strip: start card flight before release", w.Title)
-	a.switchStage(d, next, w.HWND, false, false)
+	if target != nil {
+		next := target.names()
+		if !slices.Contains(next, key) {
+			next = append(next, key)
+		}
+		debugf("%q dragged over card %q: start flight before release", w.Title, target.title())
+		a.switchStage(d, next, w.HWND, false, false)
+		return
+	}
+	y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
+	at := d.layout.slotAt(y)
+	debugf("%q dragged over empty strip area: start card flight before release", w.Title)
+	a.start(&switchRequest{d: d, next: a.heading(d), insert: []string{key}, insertAt: at})
 }
 
 // windowMoved puts the app of a window moved to another display on that

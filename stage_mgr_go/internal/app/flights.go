@@ -229,7 +229,14 @@ type aloft struct {
 }
 
 // at is where f shows e of the way, eased, from its from to its to.
-func (f *flight) at(e float64) pose { return lerpPose(f.from, f.to, e) }
+// at eases the window's size and position, but turns it steadily throughout
+// the flight. Easing the angle with the geometry made almost all of the turn
+// happen while the window was still large, so it looked square until landing.
+func (f *flight) at(p, e float64) pose {
+	at := lerpPose(f.from, f.to, e)
+	at.tilt = f.from.tilt + (f.to.tilt-f.from.tilt)*float32(min(max(p, 0), 1))
+	return at
+}
 
 // lerpPose is e of the way from a to b.
 func lerpPose(a, b pose, e float64) pose {
@@ -689,7 +696,7 @@ func (f *flights) airborne(d *display) map[winapi.HWND]aloft {
 	e := flightEase(p)
 	fg := winapi.Foreground()
 	for _, fl := range l.list {
-		out[fl.hwnd] = aloft{at: fl.at(e), shade: lerpShade(fl.shade, fl.toward(fg), float32(e)), op: fl.opacity(p, e)}
+		out[fl.hwnd] = aloft{at: fl.at(p, e), shade: lerpShade(fl.shade, fl.toward(fg), float32(e)), op: fl.opacity(p, e)}
 	}
 	return out
 }
@@ -908,7 +915,7 @@ func (l *layer) view(c *ui.Context) {
 	}
 	stills := make([]still, len(l.list))
 	for i, f := range l.list {
-		at := f.at(e)
+		at := f.at(p, e)
 		op := f.opacity(p, e)
 		var sh shade
 		casting := !t.landed && (t.flying || !f.holdsShadow)

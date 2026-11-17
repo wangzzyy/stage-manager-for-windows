@@ -199,6 +199,18 @@ func (s *strip) syncZOrder() {
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
+// raiseAboveFlight keeps the sidebar above the transparent flight layer.
+// Both windows can be TOPMOST; insert the sidebar immediately above the layer
+// so its cards remain visible throughout the transition.
+func (s *strip) raiseAboveFlight(flight winapi.HWND) {
+	if flight == 0 || !winapi.IsWindow(flight) {
+		return
+	}
+	winapi.SetWindowPos(s.hwnd, flight, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+	s.zOrderKnown, s.zOrderTopmost = true, true
+}
+
 func (s *strip) setSwitching(v bool) {
 	if s.switching == v {
 		return

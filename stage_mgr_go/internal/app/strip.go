@@ -168,7 +168,9 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
-	if s.switching && s.a.settings.Mode == settings.Floating || s.pointerOnStrip && !s.fullScreen || s.a.settings.Mode == settings.Floating && s.fullScreen && s.visible && !s.away {
+	if (s.switching && s.a.settings.Mode == settings.Floating) ||
+		(s.pointerOnStrip && !s.fullScreen) ||
+		(s.a.settings.Mode == settings.Floating && s.fullScreen && s.visible && !s.away) {
 		return winapi.HwndTopmost
 	}
 	return winapi.HwndBottom

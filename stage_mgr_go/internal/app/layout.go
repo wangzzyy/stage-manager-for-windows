@@ -239,17 +239,17 @@ func stackWindows(card ui.Rect, aspects []float64, right bool) []ui.Rect {
 // stageWindowLayout maps the windows' real stage rectangles into a card.
 // One scale and one translation are applied to the whole group, preserving
 // every window's size, position, overlap and spacing relative to the others.
-func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, right bool) []ui.Rect {
+func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Rect {
 	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
 		return nil
 	}
 	left, top := bounds[0].Left, bounds[0].Top
-	right, bottom := bounds[0].Right, bounds[0].Bottom
+	edgeRight, bottom := bounds[0].Right, bounds[0].Bottom
 	for _, r := range bounds[1:] {
 		left, top = min(left, r.Left), min(top, r.Top)
-		right, bottom = max(right, r.Right), max(bottom, r.Bottom)
+		edgeRight, bottom = max(edgeRight, r.Right), max(bottom, r.Bottom)
 	}
-	width, height := float32(right-left), float32(bottom-top)
+	width, height := float32(edgeRight-left), float32(bottom-top)
 	if width <= 0 || height <= 0 {
 		return nil
 	}
@@ -257,7 +257,7 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, right bool) []ui.Rect
 	// Keep the group aligned to the card's edge farthest from the screen edge:
 	// right edge in a left strip, left edge in a right strip.
 	offsetX := card.X + card.W - width*scale - float32(left)*scale
-	if right {
+	if onRight {
 		offsetX = card.X - float32(left)*scale
 	}
 	offsetY := card.Y + (card.H-height*scale)/2 - float32(top)*scale

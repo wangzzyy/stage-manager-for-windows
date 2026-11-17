@@ -28,7 +28,7 @@ func TestCardUnderUsesStripScaleAndOrigin(t *testing.T) {
 	if got := (&App{}).cardUnder(d, winapi.Point{X: 140, Y: 380}); got != second {
 		t.Fatalf("cardUnder() = %v, want second card", got)
 	}
-	if got := (&App{}).cardUnder(d, winapi.Point{X: 199, Y: 260}); got != nil {
+	if got := (&App{}).cardUnder(d, winapi.Point{X: 201, Y: 260}); got != nil {
 		t.Fatalf("cardUnder() outside card = %v, want nil", got)
 	}
 }

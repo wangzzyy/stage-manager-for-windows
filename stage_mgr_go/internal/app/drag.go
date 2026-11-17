@@ -119,7 +119,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 			key := a.groupKey(w)
 			target := a.cardUnder(d, winapi.Cursor())
 			switch {
-			case d != g.home && a.settings.HideInactive:
+			case d != g.home:
 				stage := g.stage
 				if d != g.over {
 					stage = a.heading(d)

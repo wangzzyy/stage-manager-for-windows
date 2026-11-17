@@ -186,7 +186,7 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
-	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h).Perspective(cardPerspective)
+	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
 	out := float32(0)
 	if !s.shown {
 		// A floating strip slides out over its display's edge.
@@ -505,7 +505,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		tilt = hoverTilt
 	}
 	tilt = el.AnimateTo("tilt", tilt, ui.Snappy)
-	el.TransformOrigin((1-sign)/2, 0.5).RotateY(tilt * sign)
+	el.TransformOrigin((1-sign)/2, 0.5).RotateY(tilt * sign).Perspective(cardPerspective)
 	lift := float32(1)
 	switch {
 	case held && !st.moved && !g.staged:
@@ -669,8 +669,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
-			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+			stageBadge(c, b, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

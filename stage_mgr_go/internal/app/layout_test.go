@@ -402,3 +402,16 @@ func TestTurnedPoint(t *testing.T) {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
 }
+
+func TestCardPerspectiveMatchesReferenceStyle(t *testing.T) {
+	rest, hover := cardTilts(settings.Default().Tilt)
+	if rest < 44.1 || rest > 44.3 {
+		t.Fatalf("default resting card turn = %.2f°, want about 44.2°", rest)
+	}
+	if hover != 0 {
+		t.Fatalf("hovered card turn = %.2f°, want a flat, front-facing card", hover)
+	}
+	if cardPerspective != 1346 {
+		t.Fatalf("card perspective = %.0f DIPs, want the reference's 1800-DIP display value", cardPerspective)
+	}
+}

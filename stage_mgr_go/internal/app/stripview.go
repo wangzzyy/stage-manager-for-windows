@@ -441,6 +441,16 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	return originY, perspective
 }
 
+// cardTilt is the angle a card should head toward. Hover remains a visual
+// state during landing even though landing cards do not lift, preview, or
+// take actions; this lets the incoming flight and the card share one target.
+func cardTilt(rest, hover float32, over, staged, dragging bool) float32 {
+	if over && (!staged || dragging) {
+		return hover
+	}
+	return rest
+}
+
 // cardDrawOrder returns the cards in layout order, with the previously
 // hovered card last. It uses a stable partition rather than sorting, and
 // reuses its buffers until either the layout order or hover target changes.
@@ -545,13 +555,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// notice of the pointer passing over them as they make room: they
 	// would lift, and capture their windows at full size for a switch that
 	// will not come, holding the main thread up mid-drag.
-	hovered := (st.dragging || el.Hovered() && a.cardDrag == nil) && !landing
+	pointerOver := el.Hovered() && a.cardDrag == nil
+	hovered := (st.dragging || pointerOver) && !landing
 	// The pointer coming onto the stage's card shakes it too, as a click
 	// does: it has nothing to bring, and it says so before the click that
 	// would ask. The shake moves the card from under the pointer and back, so
 	// that it comes on it again: not within shakeGap of the last, or it would
 	// shake on forever at the card's edge.
-	over := hovered && !st.dragging
+	over := pointerOver && !st.dragging
 	if g.staged && over && !st.over && c.Now().Sub(st.shook) > shakeGap {
 		el.Jump("shake", shakeSize)
 		st.shook = c.Now()
@@ -567,10 +578,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		a.media.preview(g.windows)
 	}
 	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
-	tilt := restTilt
-	if live {
-		tilt = hoverTilt
-	}
+	// Keep the pointer's tilt target during landing, even though the card
+	// itself stays inert until the flight has handed its windows over.
+	tilt := cardTilt(restTilt, hoverTilt, over, g.staged, st.dragging)
 	tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
 	lift := float32(1)
 	switch {

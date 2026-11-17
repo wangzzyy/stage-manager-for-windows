@@ -330,6 +330,18 @@ func badgeRect(stack []ui.Rect, card ui.Rect, iconScale float32, right bool, wit
 
 // badgeShare is the badge's size against the app's icon: it only says where
 // the stage is, so it is well under the icon, which says which app.
+// stageBadgeRect puts the stage marker on the card's inner bottom corner,
+// independently of the position or size of any window shown on the card.
+func stageBadgeRect(card ui.Rect, iconScale float32, right bool) ui.Rect {
+	icon := min(max(card.H*0.34, 22), 52) * iconScale
+	size := icon * badgeShare
+	x := card.W - size/2
+	if right {
+		x = size / 2
+	}
+	return ui.Rect{X: x - size/2, Y: card.H - size, W: size, H: size}
+}
+
 const badgeShare = 0.55
 
 // lifted is r, in card, scaled by lift around the middle of the card's

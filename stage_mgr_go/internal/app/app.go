@@ -77,7 +77,7 @@ func frontFirst(x, y catalog.Window) int { return x.Z - y.Z }
 func (s *set) front() catalog.Window { return s.windows[0] }
 
 // stacked are the windows the card shows, front first.
-func (s *set) stacked() []catalog.Window { return s.windows }
+func (s *set) stacked() []catalog.Window { return s.windows[:min(len(s.windows), maxStacked)] }
 
 // names are the apps of a set, as it goes on the stage.
 func (s *set) names() []string {

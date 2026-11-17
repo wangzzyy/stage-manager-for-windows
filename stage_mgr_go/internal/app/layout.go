@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -238,11 +239,72 @@ func stackWindows(card ui.Rect, aspects []float64, right bool) []ui.Rect {
 // stack places the windows a set's card shows in card, front first.
 func (s *set) stack(card ui.Rect, right bool) []ui.Rect {
 	ws := s.stacked()
+	if s.staged && len(ws) > 1 {
+		return stackStageWindows(card, ws, right)
+	}
 	aspects := make([]float64, len(ws))
 	for i, w := range ws {
 		aspects[i] = w.Aspect()
 	}
 	return stackWindows(card, aspects, right)
+}
+
+// stackStageWindows maps the windows on the stage into the card as one
+// composition. Unlike the Alt+Tab-like stack used for inactive apps, a
+// stage card is a miniature of the desktop: each window keeps its size and
+// position relative to the other windows. The same uniform scale is applied
+// to every frame, so their proportions do not change.
+func stackStageWindows(card ui.Rect, windows []catalog.Window, right bool) []ui.Rect {
+	if len(windows) == 0 {
+		return nil
+	}
+	frames := make([]winapi.Rect, len(windows))
+	bounds := winapi.Rect{}
+	for i, w := range windows {
+		r := w.Frame
+		if r.Empty() {
+			r = w.Rect
+		}
+		if r.Empty() {
+			return stackWindows(card, func() []float64 {
+				aspects := make([]float64, len(windows))
+				for j, win := range windows {
+					aspects[j] = win.Aspect()
+				}
+				return aspects
+			}(), right)
+		}
+		frames[i] = r
+		if i == 0 {
+			bounds = r
+		} else {
+			bounds.Left = min(bounds.Left, r.Left)
+			bounds.Top = min(bounds.Top, r.Top)
+			bounds.Right = max(bounds.Right, r.Right)
+			bounds.Bottom = max(bounds.Bottom, r.Bottom)
+		}
+	}
+	if bounds.Empty() {
+		return nil
+	}
+	const inset = float32(0.06)
+	area := ui.Rect{X: card.X + card.W*inset, Y: card.Y + card.H*inset, W: card.W * (1 - 2*inset), H: card.H * (1 - 2*inset)}
+	scale := min(area.W/float32(bounds.W()), area.H/float32(bounds.H()))
+	usedW, usedH := float32(bounds.W())*scale, float32(bounds.H())*scale
+	offX, offY := area.X+(area.W-usedW)/2, area.Y+(area.H-usedH)/2
+	out := make([]ui.Rect, len(frames))
+	for i, r := range frames {
+		out[i] = ui.Rect{
+			X: offX + float32(r.Left-bounds.Left)*scale,
+			Y: offY + float32(r.Top-bounds.Top)*scale,
+			W: float32(r.W()) * scale,
+			H: float32(r.H()) * scale,
+		}
+		if right {
+			out[i] = mirror(out[i], card)
+		}
+	}
+	return out
 }
 
 // markRect is where the dashed outline of the stage last left goes around

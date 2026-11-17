@@ -4,6 +4,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
+	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
+
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/egoist/mygo/ui"
 )
@@ -55,6 +58,42 @@ func TestStackStaysInCard(t *testing.T) {
 		}
 		if len(rs) > 1 && !(rs[1].Y < rs[0].Y && rs[1].X > rs[0].X) {
 			t.Fatalf("window behind does not peek out: %+v", rs)
+		}
+	}
+}
+
+
+func TestStackStageWindowsPreservesRelativeGeometry(t *testing.T) {
+	card := ui.Rect{X: 18, Y: 100, W: 160, H: 105}
+	windows := []catalog.Window{
+		{Frame: winapi.Rect{Left: 100, Top: 100, Right: 900, Bottom: 700}},
+		{Frame: winapi.Rect{Left: 500, Top: 250, Right: 900, Bottom: 550}},
+	}
+	left := stackStageWindows(card, windows, false)
+	if len(left) != 2 {
+		t.Fatalf("got %d windows", len(left))
+	}
+	// The second window is half the first one's width and height.
+	if d := left[1].W/left[0].W - 0.5; d > 0.01 || d < -0.01 {
+		t.Fatalf("relative width changed: %v vs %v", left[0].W, left[1].W)
+	}
+	if d := left[1].H/left[0].H - 0.5; d > 0.01 || d < -0.01 {
+		t.Fatalf("relative height changed: %v vs %v", left[0].H, left[1].H)
+	}
+	// Its offset from the first window is preserved by the same scale.
+	wantDX := float32(400) * left[0].W / 800
+	wantDY := float32(150) * left[0].H / 600
+	if dx := (left[1].X-left[0].X)-wantDX; dx > 0.01 || dx < -0.01 {
+		t.Fatalf("relative x changed by %v", dx)
+	}
+	if dy := (left[1].Y-left[0].Y)-wantDY; dy > 0.01 || dy < -0.01 {
+		t.Fatalf("relative y changed by %v", dy)
+	}
+	right := stackStageWindows(card, windows, true)
+	for i := range left {
+		if right[i].W != left[i].W || right[i].H != left[i].H ||
+			right[i].X != card.X+card.W-(left[i].X-card.X)-left[i].W || right[i].Y != left[i].Y {
+			t.Fatalf("right-side geometry does not mirror left: left=%+v right=%+v", left[i], right[i])
 		}
 	}
 }

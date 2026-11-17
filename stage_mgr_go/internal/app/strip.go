@@ -199,6 +199,18 @@ func (s *strip) syncZOrder() {
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
+// raiseAboveFlight reasserts the strip's position above a newly raised
+// flight layer. The cached TOPMOST state is not enough here: another
+// TOPMOST window may have been moved above the strip in the meantime.
+func (s *strip) raiseAboveFlight() {
+	if s.zOrder() != winapi.HwndTopmost {
+		return
+	}
+	winapi.SetWindowPos(s.hwnd, winapi.HwndTopmost, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+	s.zOrderKnown, s.zOrderTopmost = true, true
+}
+
 func (s *strip) setSwitching(v bool) {
 	if s.switching == v {
 		return

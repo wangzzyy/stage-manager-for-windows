@@ -591,6 +591,14 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 // left or, with right, on the right: pulled toward the edge and, as it goes
 // back, toward the card's middle.
 func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
+	return turnedPointAtOrigin(x, y, w, h, h/2, deg, dist, right)
+}
+
+// turnedPointAtOrigin projects a point around a vertical-axis rotation whose
+// vertical pivot is shared with the card edge next to it. Using the same
+// distance from the adjoining edges to their respective pivots makes those
+// edges parallel after perspective, while preserving the gap between them.
+func turnedPointAtOrigin(x, y, w, h, pivotY, deg, dist float32, right bool) (float32, float32) {
 	sin, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
 	u := x
 	if right {
@@ -601,5 +609,5 @@ func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
 	if right {
 		x = w - x
 	}
-	return x, h/2 + (y-h/2)*k
+	return x, pivotY + (y-pivotY)*k
 }

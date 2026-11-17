@@ -40,7 +40,9 @@ type panel struct{ share, h float32 }
 // a hovered one, which turns a quarter of that to face the user.
 func cardTilts(level int) (rest, hover float32) {
 	rest = float32(level) * tiltStep
-	return rest, rest / 4
+	// Keep the same yaw while hovering so adjacent card edges stay parallel.
+	// The hover animation lifts the card without changing its perspective.
+	return rest, rest
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

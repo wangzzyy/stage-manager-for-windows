@@ -41,6 +41,9 @@ type strip struct {
 	holding      bool // the button went down on a card and is still down
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
+	switching      bool // a stage transition is in progress
+	zOrderKnown    bool
+	zOrderTopmost  bool
 	lastBar      time.Time
 	wasInside    bool
 	edgeSince    time.Time // when the pointer came to the strip's edge
@@ -165,10 +168,27 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
-	if s.pointerOnStrip && !s.fullScreen {
+	if s.switching || s.pointerOnStrip && !s.fullScreen || s.fullScreen && s.visible && !s.away {
 		return winapi.HwndTopmost
 	}
 	return winapi.HwndBottom
+}
+
+// syncZOrder applies a changed z-order without disturbing the strip's bounds.
+// During a full-screen app's appearance, keep the strip above it until the
+// floating strip has completed its slide-out and the final frame has drawn.
+func (s *strip) syncZOrder() {
+	topmost := s.zOrder() == winapi.HwndTopmost
+	if s.zOrderKnown && s.zOrderTopmost == topmost {
+		return
+	}
+	s.zOrderKnown, s.zOrderTopmost = true, topmost
+	z := winapi.HwndBottom
+	if topmost {
+		z = winapi.HwndTopmost
+	}
+	winapi.SetWindowPos(s.hwnd, z, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
 }
 
 // setPointerOnStrip changes z-order only when the pointer enters or leaves
@@ -178,8 +198,7 @@ func (s *strip) setPointerOnStrip(v bool) {
 		return
 	}
 	s.pointerOnStrip = v
-	winapi.SetWindowPos(s.hwnd, s.zOrder(), 0, 0, 0, 0,
-		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+	s.syncZOrder()
 }
 
 func (s *strip) relayout() { s.place() }
@@ -309,6 +328,9 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
 	s.setPointerOnStrip(band)
+	// The renderer marks away only after the last slide-out frame. Recheck
+	// here so a full-screen window is raised only after that frame completes.
+	s.syncZOrder()
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)

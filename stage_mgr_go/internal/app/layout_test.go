@@ -64,8 +64,8 @@ func TestTurnedCard(t *testing.T) {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)
 	}
 	rx, rh := turnedCard(40, 30, 30, 120)
-	if !(rx < 40*0.87 && rh < 15) {
-		t.Fatalf("a turned card projects to %v, %v: its far edge should come nearer and shrink", rx, rh)
+	if !(rx < 40*0.87) || rh != 15 {
+		t.Fatalf("a turned card projects to %v, %v: its width should narrow without shortening its vertical edges", rx, rh)
 	}
 }
 
@@ -382,10 +382,17 @@ func TestTurnedPoint(t *testing.T) {
 			t.Fatalf("right=%v: a card not turned moved a point to %v, %v", right, x, y)
 		}
 	}
-	rx, rh := turnedCard(w, h, 24, dist)
+	rx, _ := turnedCard(w, h, 24, dist)
 	x, y := turnedPoint(w, 0, w, h, 24, dist, false)
-	if d := x - rx; d > 0.01 || d < -0.01 || y-(h/2-rh) > 0.01 || y-(h/2-rh) < -0.01 {
-		t.Fatalf("the far top corner at %v, %v, not %v, %v", x, y, rx, h/2-rh)
+	if d := x - rx; d > 0.01 || d < -0.01 || y != 0 {
+		t.Fatalf("the far top corner at %v, %v, not %v, 0", x, y, rx)
+	}
+	// Both horizontal edges remain horizontal and parallel; the vertical
+	// edge changes width position but never tips or changes its height.
+	_, top := turnedPoint(40, 0, w, h, 24, dist, false)
+	_, bottom := turnedPoint(40, h, w, h, 24, dist, false)
+	if top != 0 || bottom != h {
+		t.Fatalf("vertical edge endpoints moved vertically to %v and %v", top, bottom)
 	}
 	// On the right, the same card is the mirror image, and a turn the other
 	// way, as the strip makes it, changes nothing.

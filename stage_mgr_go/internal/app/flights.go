@@ -352,8 +352,14 @@ func (l *layer) hasFlights(above bool) bool {
 	return false
 }
 
-// invalidate redraws only the panes that currently have content.
+// invalidate redraws panes with content. When the last flight is removed,
+// both panes must still be invalidated once to erase their previous frame.
 func (l *layer) invalidate() {
+	if len(l.list) == 0 && len(l.drag) == 0 {
+		l.win.Invalidate()
+		l.aboveWin.Invalidate()
+		return
+	}
 	if l.hasFlights(false) {
 		l.win.Invalidate()
 	}

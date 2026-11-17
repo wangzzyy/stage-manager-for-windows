@@ -580,7 +580,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	}
 	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
 	tilt := cardTilt(restTilt, hoverTilt, pointerLive, landing)
-	tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
+	if landing {
+		// The flight already arrives at the resting angle. Snap the card to
+		// that same pose under the flight, then animate hover only after it
+		// has been uncovered.
+		el.Jump("tilt", tilt)
+	} else {
+		tilt = el.AnimateTo("tilt", tilt, ui.Smooth)
+	}
 	lift := float32(1)
 	switch {
 	case held && !st.moved && !g.staged:

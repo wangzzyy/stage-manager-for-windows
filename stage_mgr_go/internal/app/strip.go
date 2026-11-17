@@ -44,6 +44,11 @@ type strip struct {
 	wasInside    bool
 	edgeSince    time.Time // when the pointer came to the strip's edge
 	hits         []ui.Rect // the cards, in DIPs of the window, as last drawn
+	// drawOrder caches the stable card order; it changes only when the layout or hover target changes.
+	drawOrder     []int
+	drawOrderBase []int
+	drawHover     int
+	drawOrderReady bool
 	footerHit    ui.Rect   // the band the overview's button shows in, likewise
 	lineupHit    ui.Rect   // the list of the stage's windows, likewise
 	// previous is the first app of the set the stage last left, whose

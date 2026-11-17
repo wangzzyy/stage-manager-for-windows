@@ -251,10 +251,14 @@ func lerpPose(a, b pose, e float64) pose {
 // window could not show beyond its edge. Another such window right under
 // it, under, shows the shadows apps draw in windows of their own.
 type layer struct {
-	win     *mygo.Window
-	hwnd    winapi.HWND
-	under   *mygo.Window
-	uhwnd   winapi.HWND
+	win        *mygo.Window // growing flights, below the strip
+	hwnd       winapi.HWND
+	under      *mygo.Window
+	uhwnd      winapi.HWND
+	aboveWin   *mygo.Window // shrinking flights, above the strip
+	aboveHwnd  winapi.HWND
+	aboveUnder *mygo.Window
+	aboveUhwnd winapi.HWND
 	rect    winapi.Rect
 	scale   float64
 	shown   bool
@@ -306,6 +310,8 @@ func (f *flights) layer(d *display) *layer {
 	}
 	l.win, l.hwnd = pane(l.view)
 	l.under, l.uhwnd = pane(func(c *ui.Context) { c.Root().Background(ui.Transparent) })
+	l.aboveWin, l.aboveHwnd = pane(l.viewAbove)
+	l.aboveUnder, l.aboveUhwnd = pane(func(c *ui.Context) { c.Root().Background(ui.Transparent) })
 	f.layers[d.mon.Device] = l
 	return l
 }
@@ -314,7 +320,9 @@ func (f *flights) layer(d *display) *layer {
 // its under window right beneath it.
 func (l *layer) raise() {
 	const flags = winapi.SwpNoActivate | winapi.SwpNoMove | winapi.SwpNoSize
-	winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.aboveHwnd, winapi.HwndTopmost, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.aboveUhwnd, l.aboveHwnd, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.hwnd, l.aboveUhwnd, 0, 0, 0, 0, flags)
 	winapi.SetWindowPos(l.uhwnd, l.hwnd, 0, 0, 0, 0, flags)
 	l.low = false
 }
@@ -324,9 +332,40 @@ func (l *layer) raise() {
 // either, until raised.
 func (l *layer) lower(h winapi.HWND) {
 	const flags = winapi.SwpNoActivate | winapi.SwpNoMove | winapi.SwpNoSize
-	winapi.SetWindowPos(l.hwnd, h, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.aboveHwnd, h, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.aboveUhwnd, l.aboveHwnd, 0, 0, 0, 0, flags)
+	winapi.SetWindowPos(l.hwnd, l.aboveUhwnd, 0, 0, 0, 0, flags)
 	winapi.SetWindowPos(l.uhwnd, l.hwnd, 0, 0, 0, 0, flags)
 	l.low = true
+}
+
+// hasFlights reports whether this pane has flight content to draw.
+func (l *layer) hasFlights(above bool) bool {
+	if above && len(l.drag) > 0 {
+		return true
+	}
+	for _, fl := range l.list {
+		if fl.lands != above {
+			return true
+		}
+	}
+	return false
+}
+
+// invalidate redraws panes with content. When the last flight is removed,
+// both panes must still be invalidated once to erase their previous frame.
+func (l *layer) invalidate() {
+	if len(l.list) == 0 && len(l.drag) == 0 {
+		l.win.Invalidate()
+		l.aboveWin.Invalidate()
+		return
+	}
+	if l.hasFlights(false) {
+		l.win.Invalidate()
+	}
+	if l.hasFlights(true) {
+		l.aboveWin.Invalidate()
+	}
 }
 
 // release lets go of the shadows the flights show of their apps' own.
@@ -578,21 +617,23 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	if below != 0 && winapi.IsWindow(below) {
 		l.lower(below)
 	} else {
-		// Above the strip, which a floating strip that just came out may be.
 		l.raise()
-	}
-	// The strip must remain above this flight layer. Reorder it explicitly:
-	// both windows may be TOPMOST, and merely retaining that flag does not
-	// guarantee their relative order.
-	if d.strip != nil {
-		d.strip.raiseAboveFlight(l.hwnd)
+		// Put the strip between the two flight windows: shrinking stays
+		// above it, while growing stays below it.
+		if d.strip != nil {
+			d.strip.orderFlightLayers(l.aboveHwnd, l.aboveUhwnd, l.hwnd, l.uhwnd)
+		}
 	}
 	l.release()
 	sw.lap("order layer")
 	for i := range list {
 		// Without a shadow from DWM, a window may have one its app draws.
 		if fl := &list[i]; !fl.casts {
-			fl.own = newOwnShadow(l.uhwnd, fl.hwnd)
+			under := l.aboveUhwnd
+			if fl.lands {
+				under = l.uhwnd
+			}
+			fl.own = newOwnShadow(under, fl.hwnd)
 		}
 	}
 	sw.lap("app shadows")
@@ -618,7 +659,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		if l.trip == t {
 			l.release()
 			l.trip, l.list, l.badges = nil, nil, nil
-			l.win.Invalidate()
+			l.invalidate()
 			f.hideLater(l)
 		}
 		done()
@@ -636,7 +677,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 			}
 		}
 		t.flying = true
-		l.win.Invalidate()
+		l.invalidate()
 		// A switch asked for meanwhile takes over now that every window
 		// is on the layer.
 		if f.a.queued[d] != nil {
@@ -653,7 +694,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		finished = true
 		t.stoppedAt, t.stopped = t.progress(time.Now()), true
 		l.badges = nil
-		l.win.Invalidate()
+		l.invalidate()
 		stop()
 		if l.trip == t {
 			// Nothing flew on.
@@ -675,14 +716,14 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 			}
 		}
 		land()
-		l.win.Invalidate()
+		l.invalidate()
 		after(landingDelay, finish)
 	}
 	l.list, l.trip = list, t
 	l.badges = f.landingIcons(d)
 	l.drag = nil // a dropped card's windows fly on from where they are
 	d.dropPoses = nil
-	l.win.Invalidate()
+	l.invalidate()
 	// Should the layer not draw, the windows still change places.
 	after(takeOffDelay+t.span+flightTimeout, func() {
 		if !finished {
@@ -744,7 +785,11 @@ func (f *flights) show(d *display) *layer {
 	l.rect, l.scale, l.shown, l.low = area, d.mon.Scale(), true, false
 	l.win.ShowInactive()
 	l.under.ShowInactive()
-	winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
+	l.aboveWin.ShowInactive()
+	l.aboveUnder.ShowInactive()
+	winapi.SetWindowPos(l.aboveHwnd, winapi.HwndTopmost, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
+	winapi.SetWindowPos(l.aboveUhwnd, l.aboveHwnd, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
+	winapi.SetWindowPos(l.hwnd, l.aboveUhwnd, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
 	winapi.SetWindowPos(l.uhwnd, l.hwnd, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
 	return l
 }
@@ -771,6 +816,8 @@ func (f *flights) hideLater(l *layer) {
 		l.shown = false
 		l.win.Hide()
 		l.under.Hide()
+		l.aboveWin.Hide()
+		l.aboveUnder.Hide()
 	})
 }
 
@@ -823,7 +870,7 @@ func (f *flights) dragged(d *display, list []flight) {
 		l.dragGen++
 		// At the pace the display shows it: the strip draws a frame for
 		// every move of the pointer, many more.
-		l.pace.frame(l.win)
+		l.pace.frame(l.aboveWin)
 	}
 }
 
@@ -854,7 +901,7 @@ func (f *flights) clearDrag(d *display, delay time.Duration) {
 	clear := func() {
 		if l.dragGen == gen && l.drag != nil {
 			l.drag = nil
-			l.win.Invalidate()
+			l.invalidate()
 			f.hideLater(l)
 		}
 	}
@@ -867,117 +914,77 @@ func (f *flights) clearDrag(d *display, delay time.Duration) {
 
 func lerp(a, b, t float64) float64 { return a + (b-a)*t }
 
-func (l *layer) view(c *ui.Context) {
+func (l *layer) view(c *ui.Context) { l.viewFlights(c, false) }
+func (l *layer) viewAbove(c *ui.Context) { l.viewFlights(c, true) }
+
+func (l *layer) viewFlights(c *ui.Context, above bool) {
 	c.Root().Background(ui.Transparent)
-	if l.framed != nil {
-		// Posted, it runs once this frame is done.
-		post(l.framed)
+	if !above && l.framed != nil { post(l.framed) }
+	if above {
+		for i, f := range l.drag { l.draw(c, i, f.still, f.from, 1, cardShade(float32(f.from.h/l.scale)), 0, 0) }
 	}
-	if debugOn {
-		t0 := time.Now()
-		if t := l.trip; t != nil && t.flying {
-			defer func() { t.stats.built(time.Since(t0)) }()
-		}
-		if len(l.drag) > 0 {
-			// A card dragged out of a strip shows here, frame by frame.
-			l.frames.frame(c.Now(), "card dragged")
-			l.frames.burst("flight layer " + l.name)
-			defer func() { l.frames.built(time.Since(t0)) }()
-		}
-	}
-	for i, f := range l.drag {
-		l.draw(c, i+len(l.list), f.still, f.from, 1, cardShade(float32(f.from.h/l.scale)), 0, 0)
-	}
-	if len(l.list) == 0 || l.trip == nil {
-		return
-	}
-	t := l.trip
-	now := c.Now()
+	if len(l.list) == 0 || l.trip == nil { return }
+	t, now := l.trip, c.Now()
 	p := 0.0
 	switch {
 	case !t.held:
-		// The flights show where they start; once they surely cover
-		// the real windows, those may go.
-		t.held = true
-		after(t.hold, t.takeOff)
-	case t.stopped:
-		p = t.stoppedAt
+		if !above { t.held = true; after(t.hold, t.takeOff) }
+	case t.stopped: p = t.stoppedAt
 	case t.flying:
-		// The clock starts with the first frame that moves, so a late
-		// frame cannot eat into the flight and make it jump.
-		if t.start.IsZero() {
-			t.start = now
-		}
+		if t.start.IsZero() { t.start = now }
 		p = t.progress(now)
-		if debugOn {
-			t.stats.frame(now, progress(p))
-		}
-		if p < 1 {
-			l.pace.frame(l.win)
-		} else if !t.arrived {
-			t.arrived = true
-			if debugOn {
-				l.reportTrip(t)
+		if p < 1 && !above {
+			// Use the pane with flight content as the animation driver.
+			// When both directions fly, pace the main pane and invalidate
+			// the shrinking pane; when only shrinking, pace it directly
+			// instead of redrawing an empty main pane every frame.
+			switch {
+			case l.hasFlights(false):
+				l.pace.frame(l.win)
+				if l.hasFlights(true) {
+					l.aboveWin.Invalidate()
+				}
+			case l.hasFlights(true):
+				l.pace.frame(l.aboveWin)
 			}
+		} else if p >= 1 && !t.arrived && !above {
+			t.arrived = true
+			if debugOn { l.reportTrip(t) }
 			post(t.land)
 		}
 	}
-	e := flightEase(p)
-	fg := winapi.Foreground()
+	e, fg := flightEase(p), winapi.Foreground()
 	hole, cut := l.holeRect()
-	type still struct {
-		at pose
-		op float32
-		sh shade
-	}
-	stills := make([]still, len(l.list))
-	for i, f := range l.list {
-		at := f.at(e)
-		op := f.opacity(p, e)
+	type still struct { index int; at pose; op float32; sh shade }
+	stills := make([]still, 0, len(l.list))
+	for i, fl := range l.list {
+		if fl.lands == above { continue }
+		at, op := fl.at(e), fl.opacity(p, e)
 		var sh shade
-		casting := !t.landed && (t.flying || !f.holdsShadow)
-		if casting {
-			sh = lerpShade(f.shade, f.toward(fg), float32(e))
-		}
-		if f.own != nil {
-			// The app's own shadow shows the more, the nearer the flight
-			// is to the window's size and place. Its window is under the
-			// layer, above the hole's: none shows while there is one.
+		casting := !t.landed && (t.flying || !fl.holdsShadow)
+		if casting { sh = lerpShade(fl.shade, fl.toward(fg), float32(e)) }
+		if fl.own != nil {
 			near := 0.0
-			switch {
-			case !casting || cut:
-			case f.lands:
-				near = e
-			default:
-				near = 1 - e
-			}
-			f.own.show(l.rect, at, near*float64(op))
+			switch { case !casting || cut: case fl.lands: near=e; default: near=1-e }
+			fl.own.show(l.rect, at, near*float64(op))
 		}
-		stills[i] = still{at, op, sh}
+		stills = append(stills, still{i,at,op,sh})
 	}
 	if !cut {
-		for i, s := range stills {
-			l.draw(c, i, l.list[i].still, s.at, s.op, s.sh, 0, 0)
-		}
+		for _, st := range stills { l.draw(c, st.index, l.list[st.index].still, st.at, st.op, st.sh, 0, 0) }
 	} else {
-		// The flights show in the bands around the hole, each clipping
-		// them to itself.
-		for b, r := range around(ui.Rect{W: float32(float64(l.rect.W()) / l.scale), H: float32(float64(l.rect.H()) / l.scale)}, hole) {
-			ui.Box(c.Key(-1-b)).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).Clip().Children(func() {
-				for i, s := range stills {
-					l.draw(c, i, l.list[i].still, s.at, s.op, s.sh, r.X, r.Y)
-				}
+		for b, r := range around(ui.Rect{W:float32(float64(l.rect.W())/l.scale),H:float32(float64(l.rect.H())/l.scale)},hole) {
+			ui.Box(c.Key(-1-b)).Absolute().Left(r.X).Top(r.Y).Size(r.W,r.H).Clip().Children(func() {
+				for _, st := range stills { l.draw(c,st.index,l.list[st.index].still,st.at,st.op,st.sh,r.X,r.Y) }
 			})
 		}
 	}
-	// The icons fade in part of the way and hold until the strip draws its own.
-	iconOp := float32(min(max((p-iconRevealPoint)*float64(t.span)/float64(fadeQuick.Duration), 0), 1))
-	if iconOp > 0 {
-		for _, b := range l.badges {
-			x := float32((b.at.x - float64(l.rect.Left)) / l.scale)
-			y := float32((b.at.y - float64(l.rect.Top)) / l.scale)
-			ui.Image(c.Key(b.app), b.icon).Absolute().Left(x).Top(y).Size(float32(b.at.w/l.scale), float32(b.at.h/l.scale)).Opacity(iconOp)
-		}
+	if above {
+		iconOp := float32(min(max((p-iconRevealPoint)*float64(t.span)/float64(fadeQuick.Duration),0),1))
+		if iconOp>0 { for _, b := range l.badges {
+			x:=float32((b.at.x-float64(l.rect.Left))/l.scale); y:=float32((b.at.y-float64(l.rect.Top))/l.scale)
+			ui.Image(c.Key(b.app),b.icon).Absolute().Left(x).Top(y).Size(float32(b.at.w/l.scale),float32(b.at.h/l.scale)).Opacity(iconOp)
+		} }
 	}
 }
 

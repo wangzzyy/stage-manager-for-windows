@@ -53,10 +53,13 @@ func flightEase(p float64) float64 {
 type pose struct {
 	x, y, w, h float64
 	tilt       float32
+	// originY and perspective carry the card's exact projection into the
+	// flight, so its final frame is geometrically identical to the card.
+	originY, perspective float32
 }
 
 func poseOf(r winapi.Rect) pose {
-	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H())}
+	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H()), originY: 0.5, perspective: cardPerspective}
 }
 
 // shade is the shadow under a flight: a tight ambient glow around the
@@ -237,6 +240,8 @@ func lerpPose(a, b pose, e float64) pose {
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
+		originY: a.originY + (b.originY-a.originY)*float32(e),
+		perspective: a.perspective + (b.perspective-a.perspective)*float32(e),
 	}
 }
 
@@ -433,10 +438,18 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 			tilt, lift = st.tilt, st.lift
 		}
 		card := l.cards[i]
+		originY, perspective := s.cardViewpoint(card, rest)
+		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
+		pivotY := card.Y - verticalCompensation + originY*card.H
 		for j, r := range set.stack(card, right) {
 			if h := set.windows[j].HWND; want[h] {
-				x, y, w, ht := s.toScreen(lifted(card, r, lift, right))
-				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right)}
+				shown := lifted(card, r, lift, right)
+				x, y, w, ht := s.toScreen(shown)
+				windowOriginY := float32((float64(pivotY)-float64(shown.Y))/float64(max(shown.H, 1)))
+				out[h] = pose{
+					x: x, y: y, w: w, h: ht,
+					tilt: tilt * turnSign(right), originY: windowOriginY, perspective: perspective,
+				}
 			}
 		}
 	}
@@ -1029,5 +1042,5 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	img.TransformOrigin(originX, at.originY).RotateY(at.tilt).Perspective(at.perspective).Opacity(op)
 }

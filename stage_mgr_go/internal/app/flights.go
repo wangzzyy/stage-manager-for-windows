@@ -524,7 +524,9 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		}
 		list = append(list, fl)
 	}
-	// The arriving windows are added last so that they fly above.
+	// Keep separate directions: departing (shrinking) flights must be drawn above
+	// arriving (growing) flights, because the last flight drawn is on top.
+	var arrivingFlights []flight
 	fg := winapi.Foreground()
 	for _, w := range slices.Backward(arriving) {
 		st := f.a.media.still(w.HWND)
@@ -543,8 +545,11 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 			fl.from = pose{x: home.x + home.w*0.03, y: home.y + home.h*0.03, w: home.w * 0.94, h: home.h * 0.94}
 			fl.shade, fl.fromOp, fl.fadeIn = fl.toward(fg), 0, true
 		}
-		list = append(list, fl)
+		arrivingFlights = append(arrivingFlights, fl)
 	}
+	// The layer draws flights in order, last on top. Put arriving flights
+	// first and departing flights last so shrinking stays above growing.
+	list = append(arrivingFlights, list...)
 	if len(list) == 0 || mygo.Theme.Preferences().ReduceMotion {
 		d.dropPoses = nil
 		f.endDrag(d, 0)
@@ -562,6 +567,12 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	} else {
 		// Above the strip, which a floating strip that just came out may be.
 		l.raise()
+	}
+	// The strip must remain above this flight layer. Reorder it explicitly:
+	// both windows may be TOPMOST, and merely retaining that flag does not
+	// guarantee their relative order.
+	if d.strip != nil {
+		d.strip.raiseAboveFlight(l.hwnd)
 	}
 	l.release()
 	sw.lap("order layer")

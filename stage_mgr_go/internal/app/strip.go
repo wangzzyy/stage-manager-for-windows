@@ -39,7 +39,11 @@ type strip struct {
 	holdUntil    time.Time
 	dragging     bool // a card is dragged
 	holding      bool // the button went down on a card and is still down
-	fullScreen   bool // a full-screen app is on the display
+	fullScreen     bool // a full-screen app is on the display
+	pointerOnStrip bool // the pointer is over the visible strip band
+	switching      bool // a stage transition is in progress
+	zOrderKnown    bool
+	zOrderTopmost  bool
 	lastBar      time.Time
 	wasInside    bool
 	edgeSince    time.Time // when the pointer came to the strip's edge
@@ -156,11 +160,80 @@ func (s *strip) place() {
 // applyBounds moves the window to s.rect.
 func (s *strip) applyBounds() {
 	r := s.rect
-	z := winapi.HwndTopmost
-	if s.fullScreen {
-		z = winapi.HwndNoTopmost
-	}
+	z := s.zOrder()
 	winapi.SetWindowPos(s.hwnd, z, r.Left, r.Top, r.W(), r.H(), winapi.SwpNoActivate)
+}
+
+// zOrder keeps ordinary app windows above the sidebar. The sidebar rises
+// above them only while the pointer is over its band; full-screen apps
+// always stay above it.
+func (s *strip) zOrder() winapi.HWND {
+	// Keep the strip above the flight layer throughout a stage transition,
+	// including in fixed mode. The normal mode-specific policy resumes when
+	// the transition ends.
+	if s.switching {
+		return winapi.HwndTopmost
+	}
+	// A floating strip stays topmost for its entire visible lifetime. Its
+	// z-order is independent of the pointer and of full-screen detection;
+	// it drops below other windows only after the slide-out has finished.
+	if s.a.settings.Mode == settings.Floating && s.visible && !s.away {
+		return winapi.HwndTopmost
+	}
+	if s.pointerOnStrip && !s.fullScreen {
+		return winapi.HwndTopmost
+	}
+	return winapi.HwndBottom
+}
+
+// syncZOrder applies a changed z-order without disturbing the strip's bounds.
+// A floating strip remains topmost for as long as it is visible, and drops
+// below other windows only after its slide-out's final frame has drawn.
+func (s *strip) syncZOrder() {
+	topmost := s.zOrder() == winapi.HwndTopmost
+	// Avoid issuing SetWindowPos on every poll when the requested z-order
+	// has not changed.
+	if s.zOrderKnown && s.zOrderTopmost == topmost {
+		return
+	}
+	s.zOrderKnown, s.zOrderTopmost = true, topmost
+	z := winapi.HwndBottom
+	if topmost {
+		z = winapi.HwndTopmost
+	}
+	winapi.SetWindowPos(s.hwnd, z, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+}
+
+// raiseAboveFlight keeps the sidebar above the transparent flight layer.
+// Both windows can be TOPMOST; insert the sidebar immediately above the layer
+// so its cards remain visible throughout the transition.
+func (s *strip) raiseAboveFlight(flight winapi.HWND) {
+	if flight == 0 || !winapi.IsWindow(flight) {
+		return
+	}
+	// SetWindowPos's insert-after semantics place the flight immediately
+	// behind the strip in the TOPMOST band.
+	winapi.SetWindowPos(flight, s.hwnd, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+}
+
+func (s *strip) setSwitching(v bool) {
+	if s.switching == v {
+		return
+	}
+	s.switching = v
+	s.syncZOrder()
+}
+
+// setPointerOnStrip changes z-order only when the pointer enters or leaves
+// the visible band, without moving, resizing, or activating the strip.
+func (s *strip) setPointerOnStrip(v bool) {
+	if s.pointerOnStrip == v {
+		return
+	}
+	s.pointerOnStrip = v
+	s.syncZOrder()
 }
 
 func (s *strip) relayout() { s.place() }
@@ -289,6 +362,10 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// While the overview shows, it takes nothing, as the cards it shows do
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	s.setPointerOnStrip(band)
+	// The renderer marks away only after the last slide-out frame. Recheck
+	// here so a full-screen window is raised only after that frame completes.
+	s.syncZOrder()
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)

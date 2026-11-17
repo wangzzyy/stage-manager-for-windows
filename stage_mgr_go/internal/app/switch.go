@@ -88,6 +88,9 @@ func (a *App) start(r *switchRequest) {
 			winapi.Activate(focus)
 		}
 		a.refresh()
+		if d.strip != nil {
+			d.strip.setSwitching(false)
+		}
 		return
 	}
 	a.busy = true
@@ -155,6 +158,12 @@ func (a *App) start(r *switchRequest) {
 			front = hole
 		}
 		h := handover{a: a, d: d, departing: departing, arriving: arriving, focus: focus, activate: activate, front: front}
+		// Raise the strip only when the flight layer is about to start.
+		// Doing this before window enumeration and still capture needlessly
+		// adds a synchronous z-order change to the click-to-animation path.
+		if d.strip != nil {
+			d.strip.setSwitching(true)
+		}
 		a.flights.run(d, departing, arriving, from, followed, below, hole, h.takeOff, h.land, h.stop, h.done)
 		sw.lap("flights")
 	})
@@ -240,7 +249,9 @@ func (h *handover) land() {
 func (h *handover) stop() {
 	clear(h.d.landing)
 	h.a.busy, h.a.running = false, nil
-	h.a.runQueued(h.d)
+	if !h.a.runQueued(h.d) && h.d.strip != nil {
+		h.d.strip.setSwitching(false)
+	}
 }
 
 // done ends the switch once the flights are gone.
@@ -257,6 +268,9 @@ func (a *App) ended(d *display) {
 	a.refresh()
 	if a.runQueued(d) {
 		return
+	}
+	if d.strip != nil {
+		d.strip.setSwitching(false)
 	}
 	if a.fg.h != 0 && a.fg.timer == nil {
 		a.fg.timer = after(10*time.Millisecond, a.settleForeground)

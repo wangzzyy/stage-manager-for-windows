@@ -168,6 +168,12 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
+	// Keep the strip above the flight layer throughout a stage transition,
+	// including in fixed mode. The normal mode-specific policy resumes when
+	// the transition ends.
+	if s.switching {
+		return winapi.HwndTopmost
+	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
 	// z-order is independent of the pointer and of full-screen detection;
 	// it drops below other windows only after the slide-out has finished.
@@ -206,9 +212,10 @@ func (s *strip) raiseAboveFlight(flight winapi.HWND) {
 	if flight == 0 || !winapi.IsWindow(flight) {
 		return
 	}
-	winapi.SetWindowPos(s.hwnd, flight, 0, 0, 0, 0,
+	// SetWindowPos's insert-after semantics place the flight immediately
+	// behind the strip in the TOPMOST band.
+	winapi.SetWindowPos(flight, s.hwnd, 0, 0, 0, 0,
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
-	s.zOrderKnown, s.zOrderTopmost = true, true
 }
 
 func (s *strip) setSwitching(v bool) {

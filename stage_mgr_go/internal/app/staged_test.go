@@ -387,7 +387,7 @@ func TestStagedCardHasACheck(t *testing.T) {
 	badge := func(i int) (green, white int) {
 		card := s.d.layout.cards[i]
 		local := ui.Rect{W: card.W, H: card.H}
-		b := badgeRect(s.d.sets[i].stack(local, false), local, float32(s.a.settings.IconScale), false, ui.Rect{X: -card.X, W: s.d.viewW})
+		b := stageBadgeRect(local, float32(s.a.settings.IconScale), false)
 		img := tt.Image()
 		for y := int(card.Y + b.Y); y < int(card.Y+b.Y+b.H); y++ {
 			for x := int(card.X + b.X); x < int(card.X+b.X+b.W); x++ {
@@ -432,7 +432,7 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		tt.Frame()
 		card := s.d.layout.cards[0]
 		local := ui.Rect{W: card.W, H: card.H}
-		b := badgeRect(s.d.sets[0].stack(local, right), local, float32(s.a.settings.IconScale), right, ui.Rect{X: -card.X, W: s.d.viewW})
+		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
 		deg, _ := cardTilts(s.a.settings.Tilt)
 		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right)
 		img := tt.Image()

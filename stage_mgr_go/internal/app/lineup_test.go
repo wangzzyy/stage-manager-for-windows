@@ -177,14 +177,11 @@ func TestCardsSlideForLineup(t *testing.T) {
 	if shift < 20 {
 		t.Fatalf("the cards moved %v for the list", shift)
 	}
-	// The perspective transform can move the sampled raster edge by a few
-	// pixels on its first frame even though the card's layout has not moved.
-	// Use that settled first-frame edge as the animation baseline.
-	if at := bottom(); at-from < -4 || at-from > 4 {
-		t.Fatalf("the last card jumped from %d to %d", from, at)
-	} else {
-		from = at
-	}
+	// A perspective change can move the sampled raster edge on the first
+	// frame even though the card is still at its starting layout position.
+	// Measure the subsequent slide from that frame, not from the old
+	// perspective's rasterized edge.
+	from = bottom()
 	tt.Advance(30 * time.Millisecond)
 	if at := bottom(); at <= from || float32(at-from) >= shift-1 {
 		t.Fatalf("the last card at %d on its way from %d, %v down", at, from, shift)

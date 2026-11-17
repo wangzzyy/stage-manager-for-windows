@@ -96,6 +96,25 @@ func TestStageWindowLayoutPreservesRelativeGeometry(t *testing.T) {
 	}
 }
 
+
+func TestStageWindowLayoutAlignsAwayFromScreenEdge(t *testing.T) {
+	card := ui.Rect{X: 20, Y: 30, W: 300, H: 200}
+	bounds := []winapi.Rect{
+		{Left: 100, Top: 100, Right: 500, Bottom: 500},
+	}
+	left := stageWindowLayout(card, bounds, false)[0]
+	if math.Abs(float64(left.X+left.W-(card.X+card.W))) > 0.01 {
+		t.Fatalf("left strip group right edge %v, want card inner edge %v", left.X+left.W, card.X+card.W)
+	}
+	right := stageWindowLayout(card, bounds, true)[0]
+	if math.Abs(float64(right.X-card.X)) > 0.01 {
+		t.Fatalf("right strip group left edge %v, want card inner edge %v", right.X, card.X)
+	}
+	if left.W >= card.W || right.W >= card.W {
+		t.Fatalf("test needs horizontal free space: left %+v right %+v", left, right)
+	}
+}
+
 func TestTurnedCard(t *testing.T) {
 	if rx, rh := turnedCard(40, 30, 0, 120); rx != 40 || rh != 15 {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)

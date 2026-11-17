@@ -485,8 +485,8 @@ func TestStagedCardShakesWhenThePointerComesOnIt(t *testing.T) {
 	tt.Frame()
 	tt.Advance(time.Second)
 	tt.Frame()
-	edge, other := redEdge(s, tt, 0), redEdge(s, tt, 1)
-	rest, restOther := edge(), other()
+	edge := redEdge(s, tt, 0)
+	rest := edge()
 	// How far, in pixels, the card swings in the next 640 ms.
 	swing := func() int {
 		lo, hi := rest, rest
@@ -537,20 +537,21 @@ func TestStagedCardShakesWhenThePointerComesOnIt(t *testing.T) {
 	if n := swing(); n != 0 {
 		t.Fatalf("the card still shook %d px with the pointer at rest at its edge", n)
 	}
-	// A card that waits has nothing to say: the pointer on it does not shake it.
+	// A waiting card may move for its ordinary hover effect, but must not
+	// start the shake animation reserved for the stage's own card.
+	waiting := s.d.card(s.d.sets[1].key)
+	shook := waiting.shook
 	x, y = center(s.d.layout.cards[1])
 	tt.Move(x, y)
-	lo, hi := restOther, restOther
 	for i := 0; i < 40; i++ {
 		tt.Frame()
-		e := other()
-		lo, hi = min(lo, e), max(hi, e)
 		tt.Advance(16 * time.Millisecond)
 	}
-	// Hovering may lift and tilt a waiting card by a pixel; it must not
-	// trigger the much larger shake reserved for the stage's own card.
-	if n := hi - lo; n >= 6 {
-		t.Fatalf("a card that waits shook %d px", n)
+	if !waiting.over {
+		t.Fatal("the pointer did not reach the waiting card")
+	}
+	if !waiting.shook.Equal(shook) {
+		t.Fatal("a card that waits started shaking")
 	}
 	if len(*got) != 0 {
 		t.Fatalf("requests %v", *got)

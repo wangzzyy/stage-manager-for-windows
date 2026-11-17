@@ -547,7 +547,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// the size the card cannot show.
 		a.media.preview(g.windows)
 	}
-	tilt, hoverTilt := cardTilts(a.settings.Tilt)
+	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
+	tilt := restTilt
 	if live {
 		tilt = hoverTilt
 	}
@@ -653,7 +654,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
 	originX := (1 - sign) / 2
-	originY, perspective := s.cardViewpoint(box, tilt)
+	// Keep the perspective fixed at the resting angle while the card
+	// turns toward the user. Recomputing it from the animated angle would
+	// drive it toward zero, then abruptly fall back to cardPerspective.
+	originY, perspective := s.cardViewpoint(box, restTilt)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement
 	// so hovering enlarges a card in place instead of pulling it toward the

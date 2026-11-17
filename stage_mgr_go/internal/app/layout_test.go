@@ -402,3 +402,24 @@ func TestTurnedPoint(t *testing.T) {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
 }
+
+
+func TestAdjacentCardEdgesSharePerspective(t *testing.T) {
+	const (
+		w       = float32(180)
+		h       = float32(120)
+		gap     = float32(18)
+		degrees = float32(24)
+		dist    = float32(cardPerspective)
+	)
+	// Each card's pivot sits half a gap beyond its adjoining edge.
+	pivotA := h + gap/2
+	pivotB := h + gap + gap/2
+	for _, x := range []float32{0, 40, 90, 140, w} {
+		_, lower := turnedPointAtOrigin(x, h, w, h, pivotA, degrees, dist, false)
+		_, upper := turnedPointAtOrigin(x, h+gap, w, h, pivotB, degrees, dist, false)
+		if d := upper - lower; d < gap-0.001 || d > gap+0.001 {
+			t.Fatalf("projected adjoining-edge gap at x=%v is %v, want %v", x, d, gap)
+		}
+	}
+}

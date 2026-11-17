@@ -94,6 +94,7 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 	case winapi.EventObjectLocationChange:
 		if a.drag != nil && h == a.drag.h {
 			a.dragOver()
+			a.dragIntoStrip()
 		}
 		// Moves of parked windows are ours. Others only matter for whether
 		// a floating strip is covered.

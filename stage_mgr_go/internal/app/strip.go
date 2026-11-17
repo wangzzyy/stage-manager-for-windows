@@ -158,6 +158,19 @@ func (s *strip) applyBounds() {
 	winapi.SetWindowPos(s.hwnd, z, r.Left, r.Top, r.W(), r.H(), winapi.SwpNoActivate)
 }
 
+// raiseForStageSwitch keeps a visible floating strip above the window whose
+// transition is about to begin. Full-screen transitions can otherwise cover
+// the strip before the flight layer has a chance to draw.
+func (s *strip) raiseForStageSwitch() {
+	if s == nil || s.a.settings.Mode != settings.Floating || !s.visible {
+		return
+	}
+	if winapi.SetWindowPos(s.hwnd, winapi.HwndTopmost, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate) {
+		debugf("strip %s: raised above stage transition", s.d.mon.Device)
+	}
+}
+
 func (s *strip) relayout() { s.place() }
 
 // message handles the shell's app bar notices.

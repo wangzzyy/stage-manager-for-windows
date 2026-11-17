@@ -89,6 +89,15 @@ func (a *App) dragOver() {
 // display's stage: the user put it there to use it, so it must not be taken
 // for a stray and parked. A window dragged into a strip takes its app off
 // the stage instead.
+// movedByUser distinguishes a move from a resize. Restoring a maximized
+// window while dragging changes its size as well as its position, so size
+// equality alone must not reject that drop. A resize from the bottom or
+// right edge keeps the top-left corner fixed and is not a drop.
+func movedByUser(from, to winapi.Rect) bool {
+	return (from.W() == to.W() && from.H() == to.H()) ||
+		from.Left != to.Left || from.Top != to.Top
+}
+
 func (a *App) windowMoved(h winapi.HWND) {
 	g := a.drag
 	moved := g != nil && g.h == h
@@ -115,7 +124,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 	w := a.windows[i]
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
 		// A resize that ends over the strip is no drag into it.
-		if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+		if r := winapi.WindowRect(h); movedByUser(g.from, r) {
 			key := a.groupKey(w)
 			target := a.cardUnder(d, winapi.Cursor())
 			switch {

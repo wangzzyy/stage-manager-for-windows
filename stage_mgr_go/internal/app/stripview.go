@@ -646,6 +646,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 					b.Absolute().Left(f.X+f.W-cardCloseSize/2).Top(f.Y-cardCloseSize/2).
 						Shadow(0, 1, 4, 0, ui.RGBA(0, 0, 0, 0.3)).Opacity(closing)
 				}
+				// A bold lower edge makes the space between slices read as a
+				// deliberate divider. It lives inside the same perspective
+				// transform as the card, so every divider stays parallel and
+				// keeps the strip's even spacing.
+				ui.Box(c.Key("slice-separator")).Absolute().Left(0).Top(max(box.H-3, 0)).
+					Size(box.W, 3).Radius(1.5).Background(ui.RGBA(255, 255, 255, 0.78))
 			})
 		})
 		// The icons of a set's apps overlap a little, the first on top.

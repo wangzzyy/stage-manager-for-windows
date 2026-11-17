@@ -567,7 +567,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		// floating transition. Reassert after raising this topmost window:
 		// raising the layer otherwise covers the strip again.
 		if d.strip != nil && d.strip.a.settings.Mode == settings.Floating {
-			d.strip.syncZOrder()
+			d.strip.raiseAboveFlight()
 		}
 	}
 	l.release()

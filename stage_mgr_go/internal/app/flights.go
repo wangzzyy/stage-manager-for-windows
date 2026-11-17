@@ -339,10 +339,27 @@ func (l *layer) lower(h winapi.HWND) {
 	l.low = true
 }
 
-// invalidate redraws both halves of the flight layer.
+// hasFlights reports whether this pane has flight content to draw.
+func (l *layer) hasFlights(above bool) bool {
+	if above && len(l.drag) > 0 {
+		return true
+	}
+	for _, fl := range l.list {
+		if fl.lands != above {
+			return true
+		}
+	}
+	return false
+}
+
+// invalidate redraws only the panes that currently have content.
 func (l *layer) invalidate() {
-	l.win.Invalidate()
-	l.aboveWin.Invalidate()
+	if l.hasFlights(false) {
+		l.win.Invalidate()
+	}
+	if l.hasFlights(true) {
+		l.aboveWin.Invalidate()
+	}
 }
 
 // release lets go of the shadows the flights show of their apps' own.
@@ -910,16 +927,21 @@ func (l *layer) viewFlights(c *ui.Context, above bool) {
 	case t.flying:
 		if t.start.IsZero() { t.start = now }
 		p = t.progress(now)
-		if p < 1 {
-			if !above {
-				// The pacer is shared by both panes, so asking it to pace the
-				// second window immediately after the first can suppress its
-				// frame. Pace the main pane and explicitly invalidate the
-				// shrinking pane on each animation frame.
+		if p < 1 && !above {
+			// Use the pane with flight content as the animation driver.
+			// When both directions fly, pace the main pane and invalidate
+			// the shrinking pane; when only shrinking, pace it directly
+			// instead of redrawing an empty main pane every frame.
+			switch {
+			case l.hasFlights(false):
 				l.pace.frame(l.win)
-				l.aboveWin.Invalidate()
+				if l.hasFlights(true) {
+					l.aboveWin.Invalidate()
+				}
+			case l.hasFlights(true):
+				l.pace.frame(l.aboveWin)
 			}
-		} else if !t.arrived && !above {
+		} else if p >= 1 && !t.arrived && !above {
 			t.arrived = true
 			if debugOn { l.reportTrip(t) }
 			post(t.land)

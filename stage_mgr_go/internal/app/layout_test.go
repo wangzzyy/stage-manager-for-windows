@@ -103,12 +103,12 @@ func TestStageWindowLayoutAlignsAwayFromScreenEdge(t *testing.T) {
 		{Left: 100, Top: 100, Right: 500, Bottom: 500},
 	}
 	left := stageWindowLayout(card, bounds, false)[0]
-	if math.Abs(float64(left.X+left.W-(card.X+card.W))) > 0.01 {
-		t.Fatalf("left strip group right edge %v, want card inner edge %v", left.X+left.W, card.X+card.W)
+	if math.Abs(float64(left.X-card.X)) > 0.01 {
+		t.Fatalf("left strip group left edge %v, want card outer edge %v", left.X, card.X)
 	}
 	right := stageWindowLayout(card, bounds, true)[0]
-	if math.Abs(float64(right.X-card.X)) > 0.01 {
-		t.Fatalf("right strip group left edge %v, want card inner edge %v", right.X, card.X)
+	if math.Abs(float64(right.X+right.W-(card.X+card.W))) > 0.01 {
+		t.Fatalf("right strip group right edge %v, want card outer edge %v", right.X+right.W, card.X+card.W)
 	}
 	if left.W >= card.W || right.W >= card.W {
 		t.Fatalf("test needs horizontal free space: left %+v right %+v", left, right)

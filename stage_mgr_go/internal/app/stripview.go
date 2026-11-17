@@ -411,7 +411,7 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 // opposite vertical edge of the display. The outer edge remains the card's
 // fixed base; its top and bottom edges run toward that distant point, while
 // the inner edge is foreshortened without being turned around its own axis.
-func (s *strip) cardViewpoint(card ui.Rect) (originY, perspective float32) {
+func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
 	if s.scale <= 0 {
 		return 0.5, cardPerspective
 	}
@@ -426,7 +426,12 @@ func (s *strip) cardViewpoint(card ui.Rect) (originY, perspective float32) {
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
 	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
-	perspective = float32(math.Abs(farX-outerX) / scale)
+	// With a Y rotation, parallel lines converge at p/sin(tilt).
+	// Set p so that the vanishing point lands on the opposite display edge,
+	// rather than beyond it; using the full edge distance here made the
+	// perspective too weak and the cards looked almost flat.
+	angle := math.Abs(float64(tilt)) * math.Pi / 180
+	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle))
 	if perspective < 1 {
 		perspective = cardPerspective
 	}
@@ -634,7 +639,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := g.stack(local, right)
 	originX := (1 - sign) / 2
-	originY, perspective := s.cardViewpoint(box)
+	originY, perspective := s.cardViewpoint(box, tilt)
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.

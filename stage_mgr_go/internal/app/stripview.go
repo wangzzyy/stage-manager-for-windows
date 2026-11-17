@@ -747,10 +747,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// recently active window in the group. The mark stays at the
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
-			size := min(max(local.H*0.34, 22), 52) * float32(a.settings.IconScale) * badgeShare
-			corner := ui.Rect{X: 0, Y: local.H - size, W: size, H: size}
-			x, y := turnedPoint(corner.X+corner.W/2, corner.Y+corner.H/2, box.W, box.H, tilt, cardPerspective, right)
-			stageBadge(c, ui.Rect{X: x - size/2, Y: y - size/2, W: size, H: size}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
+			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
+			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

@@ -53,10 +53,11 @@ func flightEase(p float64) float64 {
 type pose struct {
 	x, y, w, h float64
 	tilt       float32
+	perspective float32
 }
 
 func poseOf(r winapi.Rect) pose {
-	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H())}
+	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H()), perspective: cardPerspective}
 }
 
 // shade is the shadow under a flight: a tight ambient glow around the
@@ -240,6 +241,7 @@ func lerpPose(a, b pose, e float64) pose {
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
+		perspective: a.perspective + (b.perspective-a.perspective)*float32(e),
 	}
 }
 
@@ -443,10 +445,14 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 				lift = st.lift
 			}
 		}
+		// Match the card's actual vanishing point. A fixed, distant
+		// perspective on the flight made its rotation look almost flat,
+		// then the card's stronger perspective appeared all at once at handoff.
+		_, perspective := s.cardViewpoint(card, rest)
 		for j, r := range set.stack(card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				x, y, w, ht := s.toScreen(lifted(card, r, lift, right))
-				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right)}
+				out[h] = pose{x: x, y: y, w: w, h: ht, tilt: tilt * turnSign(right), perspective: perspective}
 			}
 		}
 	}
@@ -1039,5 +1045,9 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+	perspective := at.perspective
+	if perspective <= 0 {
+		perspective = cardPerspective
+	}
+	img.TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(perspective).Opacity(op)
 }

@@ -27,6 +27,11 @@ func (a *App) start(r *switchRequest) {
 	if !a.managed(d) {
 		return
 	}
+	// Raise a floating strip on the click path, before capture or activation
+	// can start the incoming window's full-screen transition.
+	if d.strip != nil {
+		d.strip.raiseForStageSwitch()
+	}
 	if a.busy {
 		// A click does not wait for the switch running to end: it takes
 		// over, and the windows in the air turn where they are, as on macOS.

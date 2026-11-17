@@ -36,9 +36,12 @@ type panel struct{ share, h float32 }
 
 // cardTilts returns the degrees a resting card turns at a tilt setting, and
 // a hovered one, which turns a quarter of that to face the user.
+// cardTilts returns one shared angle for every card, at rest and on hover.
+// Keeping the angle shared is what makes neighboring slice edges parallel;
+// hover still lifts the card, without changing the direction of its edges.
 func cardTilts(level int) (rest, hover float32) {
 	rest = float32(level) * tiltStep
-	return rest, rest / 4
+	return rest, rest
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

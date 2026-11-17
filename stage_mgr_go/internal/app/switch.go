@@ -27,11 +27,6 @@ func (a *App) start(r *switchRequest) {
 	if !a.managed(d) {
 		return
 	}
-	// Keep the floating strip above the incoming window while its own
-	// restore/full-screen transition and the card flights are in progress.
-	if d.strip != nil {
-		d.strip.setSwitching(true)
-	}
 	if a.busy {
 		// A click does not wait for the switch running to end: it takes
 		// over, and the windows in the air turn where they are, as on macOS.
@@ -163,6 +158,12 @@ func (a *App) start(r *switchRequest) {
 			front = hole
 		}
 		h := handover{a: a, d: d, departing: departing, arriving: arriving, focus: focus, activate: activate, front: front}
+		// Raise the strip only when the flight layer is about to start.
+		// Doing this before window enumeration and still capture needlessly
+		// adds a synchronous z-order change to the click-to-animation path.
+		if d.strip != nil {
+			d.strip.setSwitching(true)
+		}
 		a.flights.run(d, departing, arriving, from, followed, below, hole, h.takeOff, h.land, h.stop, h.done)
 		sw.lap("flights")
 	})

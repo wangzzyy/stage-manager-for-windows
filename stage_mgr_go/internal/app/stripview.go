@@ -567,6 +567,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		a.media.preview(g.windows)
 	}
 	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
+	// A card whose windows are still flying into it is hidden. Prime its
+	// resting angle while hidden, so the tilt animation does not begin from
+	// zero only after the landing flight ends. Once it is visible, hovering
+	// may smoothly take it from the resting angle to the hover angle.
+	if landing {
+		el.Jump("tilt", restTilt)
+	}
 	tilt := restTilt
 	if live {
 		tilt = hoverTilt

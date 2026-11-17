@@ -218,7 +218,21 @@ func (s *strip) view(c *ui.Context) {
 		if n == 0 && a.ready {
 			emptyHint(c, a.tr(), w, h)
 		}
-		for _, i := range order {
+		// Draw the previously hovered card last so it sits above its
+		// neighbours. The hit state is refreshed by card() each frame.
+		drawOrder := slices.Clone(order)
+		slices.SortStableFunc(drawOrder, func(i, j int) int {
+			overI := d.cards[d.sets[i].key] != nil && d.cards[d.sets[i].key].over
+			overJ := d.cards[d.sets[j].key] != nil && d.cards[d.sets[j].key].over
+			if overI == overJ {
+				return 0
+			}
+			if overI {
+				return 1
+			}
+			return -1
+		})
+		for _, i := range drawOrder {
 			if b := s.card(c, d.sets[i], shown.cards[slots[i]]); b.W > 0 {
 				hits = append(hits, b)
 			}
@@ -640,6 +654,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	stack := g.stack(local, right)
 	originX := (1 - sign) / 2
 	originY, perspective := s.cardViewpoint(box, tilt)
+	// Scaling about the screen's vertical midpoint moves cards above and
+	// below it in opposite directions. Counter that scale-only displacement
+	// so hovering enlarges a card in place instead of pulling it toward the
+	// midpoint.
+	verticalCompensation := (0.5 - originY) * box.H * (lift - 1)
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.
@@ -654,7 +673,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// opacity of what holds it.
 		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).Opacity(shown * fade)
 		shell.Children(func() {
-			windows := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
+			windows := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
 				TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective)
 			if ghost > 0 {
 				windows.Cache()
@@ -698,14 +717,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// is not what the geometry says, and looks right. It pops in as the
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
-		badge := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
+		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
 			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {

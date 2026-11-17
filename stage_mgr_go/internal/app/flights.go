@@ -471,7 +471,14 @@ func (f *flights) landingIcons(d *display) []badge {
 			continue
 		}
 		card := l.cards[i]
-		row := iconRow(f.a.stack(set, card)[0], card, len(set.apps), float32(f.a.settings.IconScale), right)
+		// Match the strip's card rendering: icons for a window combination
+		// belong to the card, not to its most recently active window. This
+		// keeps the landing flight aligned with the final card position.
+		iconBase := f.a.stack(set, card)[0]
+		if len(set.windows) > 1 {
+			iconBase = card
+		}
+		row := iconRow(iconBase, card, len(set.apps), float32(f.a.settings.IconScale), right)
 		for j := len(row) - 1; j >= 0; j-- {
 			g := set.apps[j]
 			if icon := f.a.media.icon(g.front()); icon != nil {

@@ -666,7 +666,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).
-			TransformOrigin(originX, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
+			TransformOrigin((1-sign)/2, 0.5).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)

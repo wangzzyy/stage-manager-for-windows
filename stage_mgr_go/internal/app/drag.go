@@ -34,6 +34,15 @@ func (a *App) startDrag(h winapi.HWND) {
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	// Take the window's still before the user moves it over the strip.
+	// Capturing only after the drop can race the window's move/resize
+	// notifications and leave the flight layer with no picture to animate.
+	if a.ready && a.media != nil && !a.media.pending[h] {
+		st := a.media.still(h)
+		if st == nil || time.Since(st.at) > 2*time.Second {
+			a.media.capture([]winapi.HWND{h}, false, 150*time.Millisecond, nil)
+		}
+	}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS

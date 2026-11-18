@@ -123,12 +123,9 @@ func (a *App) windowMoved(h winapi.HWND) {
 			a.leave(g.home, w)
 			a.sendAcross(d, w, stage)
 			return
-		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
-			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
-				a.sendToStrip(d, w, g.from)
-				return
-			}
+		case dropIntoStrip(g, d, h, slices.Contains(a.heading(d), a.groupKey(w)), winapi.WindowRect(h)):
+			a.sendToStrip(d, w, g.from)
+			return
 		}
 	}
 	d := a.displayOf(w)
@@ -140,6 +137,14 @@ func (a *App) windowMoved(h winapi.HWND) {
 	if d != nil && a.managed(d) && !slices.Contains(a.heading(d), a.groupKey(w)) {
 		a.switchStage(d, []string{a.groupKey(w)}, w.HWND, false, false)
 	}
+}
+
+// dropIntoStrip reports whether a same-display, same-size window move ended
+// over the strip while the window was on that display's stage. A size change
+// is a resize, not the gesture that turns a stage window into a card.
+func dropIntoStrip(g *drag, d *display, h winapi.HWND, staged bool, r winapi.Rect) bool {
+	return g != nil && d != nil && d == g.home && g.h == h && staged &&
+		r.W() == g.from.W() && r.H() == g.from.H()
 }
 
 // leave lets display d go of the app of window w, just moved off it, at

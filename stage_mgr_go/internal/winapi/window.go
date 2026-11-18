@@ -389,3 +389,21 @@ func SetExStyleBits(h HWND, add, remove uint32) {
 	ex := (ExStyle(h) | add) &^ remove
 	procSetWindowLongPtrW.Call(uintptr(h), uintptr(int32ToUintptr(gwlExStyle)), uintptr(ex))
 }
+
+
+// BeginCaptionDrag hands an already-held left-button drag to the system's
+// native non-client caption mover. The caller must first place the window
+// so the current pointer is over the intended title-bar grab point.
+func BeginCaptionDrag(h HWND, p Point) bool {
+	if h == 0 || !IsWindow(h) {
+		return false
+	}
+	const (
+		wmNCLButtonDown = 0x00A1
+		htCaption       = 2
+	)
+	procReleaseCapture.Call()
+	lParam := uintptr(uint16(p.X)) | uintptr(uint16(p.Y))<<16
+	r, _, _ := procPostMessageW.Call(uintptr(h), wmNCLButtonDown, htCaption, lParam)
+	return r != 0
+}

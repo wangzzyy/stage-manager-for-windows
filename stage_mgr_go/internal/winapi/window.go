@@ -402,8 +402,18 @@ func BeginCaptionDrag(h HWND, p Point) bool {
 		wmNCLButtonDown = 0x00A1
 		htCaption       = 2
 	)
+	if !IsLeftButtonDown() {
+		return false
+	}
 	procReleaseCapture.Call()
 	lParam := uintptr(uint16(p.X)) | uintptr(uint16(p.Y))<<16
 	r, _, _ := procPostMessageW.Call(uintptr(h), wmNCLButtonDown, htCaption, lParam)
 	return r != 0
+}
+
+
+// IsLeftButtonDown reports whether the physical left mouse button is held.
+func IsLeftButtonDown() bool {
+	r, _, _ := procGetAsyncKeyState.Call(0x01)
+	return r&0x8000 != 0
 }

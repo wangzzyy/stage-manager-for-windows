@@ -278,6 +278,16 @@ func Redraw(h HWND) {
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }
 
+// BeginCaptionDrag asks Windows to move h as if its title bar had been
+// pressed at p. Posting, rather than sending, lets the target window's own
+// thread enter the native move loop without blocking Stage Manager's UI.
+func BeginCaptionDrag(h HWND, p Point) bool {
+	const wmNCLButtonDown, htCaption = 0x00A1, 2
+	procReleaseCapture.Call()
+	lParam := uintptr(uint16(p.X)) | uintptr(uint16(p.Y))<<16
+	return boolCall(procPostMessageW, uintptr(h), wmNCLButtonDown, htCaption, lParam)
+}
+
 // Close asks a window to close, as its close button does.
 func Close(h HWND) {
 	const wmClose = 0x0010

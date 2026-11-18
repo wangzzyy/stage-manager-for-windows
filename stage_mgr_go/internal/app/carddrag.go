@@ -184,6 +184,9 @@ func (a *App) cardLanded() {
 // drag follows card g of the strip as it is held, moved by dx and dy.
 func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 	a := s.a
+	if st.promoting {
+		return
+	}
 	st.dx += dx
 	st.dy += dy
 	if !st.dragging {
@@ -199,6 +202,25 @@ func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 		}
 	}
 	a.aimCard(s.d, g, st)
+	// Crossing onto the stage side restores the real front window at
+	// once and hands the still-held pointer to Windows' native caption drag.
+	if c := a.cardDrag; c != nil && c.from == s.d && c.key == g.key &&
+		c.aim == aimJoin && a.straightToStage(s.d, winapi.Cursor()) {
+		st.promoting = true
+		st.dragging = false
+		s.setDragging(false)
+		cur := winapi.Cursor()
+		front := g.front().HWND
+		grab := winapi.Point{}
+		if p, ok := st.poses[front]; ok {
+			grab = winapi.Point{X: cur.X - int32(p.x), Y: cur.Y - int32(p.y)}
+		}
+		a.setCardDrag(nil)
+		if a.flights != nil {
+			a.flights.endDrag(s.d, 0)
+		}
+		a.requestNativeJoin(s.d, g, grab)
+	}
 }
 
 // letGo sends card g of the strip, at box, where it was aimed at as it was
@@ -238,6 +260,7 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 	}
 	st.dragging = false
+	st.promoting = false
 	st.dx, st.dy = 0, 0
 	st.poses = nil
 	s.setDragging(false)

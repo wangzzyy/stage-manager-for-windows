@@ -118,7 +118,7 @@ stage_mgr_go/
 
 ### 拖动卡片
 
-`stripview` 记录 `cardState`；`carddrag` 每帧算 `aim`：`aimBack`（几乎没动）、`aimSort`（本侧边栏排序）、`aimJoin`（拖到舞台侧后立即加入舞台，不等松开鼠标）、`aimMove`（跨过 `crossReach` 进另一台显示器的侧边栏）。加入舞台时沿用拖动中的窗口姿态与位置，交给常规卡片到舞台的飞行动画；侧边栏内排序仍由侧边栏自身绘制。
+`stripview` 记录 `cardState`；`carddrag` 每帧算 `aim`：`aimBack`（几乎没动）、`aimSort`（本侧边栏排序）、`aimJoin`（拖到舞台侧后立即加入舞台，不等松开鼠标）、`aimMove`（跨过 `crossReach` 进另一台显示器的侧边栏）。拖到舞台侧时将卡片还原为真实窗口，并通过 `WM_NCLBUTTONDOWN/HTCAPTION` 交给 Windows 原生标题栏拖动；侧边栏内排序仍由侧边栏自身绘制。
 
 ### 概览与 Win+Tab
 

@@ -13,9 +13,10 @@ import (
 
 // cardState is what a card remembers between frames.
 type cardState struct {
-	dx, dy   float32 // how far it is dragged
-	dragging bool
-	moved    bool // the press became a drag, so it is no click
+	dx, dy    float32 // how far it is dragged
+	dragging  bool
+	promoting bool // the drag has left the strip and is becoming a stage window
+	moved     bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
 	// it is dragged, and returning that it is on its way back.
 	poses     map[winapi.HWND]pose

@@ -184,6 +184,9 @@ func (a *App) cardLanded() {
 // drag follows card g of the strip as it is held, moved by dx and dy.
 func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 	a := s.a
+	if st.promoting {
+		return
+	}
 	st.dx += dx
 	st.dy += dy
 	if !st.dragging {
@@ -199,6 +202,21 @@ func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 		}
 	}
 	a.aimCard(s.d, g, st)
+	// Once the pointer crosses from the strip onto the stage side, the
+	// held card becomes a stage window at once. Its last dragged poses
+	// carry the pointer's position into the normal card-to-stage flight.
+	if c := a.cardDrag; c != nil && c.from == s.d && c.key == g.key &&
+		c.aim == aimJoin && a.straightToStage(s.d, winapi.Cursor()) {
+		st.promoting = true
+		st.dragging = false
+		s.setDragging(false)
+		s.d.dropPoses = st.poses
+		a.setCardDrag(nil)
+		a.request(actJoin, s.d, g)
+		if a.flights != nil {
+			a.flights.endDrag(s.d, 800*time.Millisecond)
+		}
+	}
 }
 
 // letGo sends card g of the strip, at box, where it was aimed at as it was
@@ -238,6 +256,7 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 	}
 	st.dragging = false
+	st.promoting = false
 	st.dx, st.dy = 0, 0
 	st.poses = nil
 	s.setDragging(false)

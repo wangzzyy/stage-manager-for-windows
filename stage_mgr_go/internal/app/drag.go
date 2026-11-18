@@ -8,101 +8,79 @@ import (
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 )
 
-// dwell is how long a window dragged onto another display rests there
-// before the stage there makes way, so that one only passing over, on to
-// a third display or back, does not set it flying.
-const dwell = 150 * time.Millisecond
+// dragPhase describes the preview lifecycle. Stage ownership is deliberately
+// untouched while the pointer is moving; only windowMoved commits a drop.
+type dragPhase uint8
 
-// drag is a window the user is moving, from the start of the move to its
-// end.
+const (
+	dragTracking dragPhase = iota
+	dragOverStrip
+	dragCommitted
+	dragCancelled
+)
+
+// drag is a window the user is moving, from the start of the move to its end.
 type drag struct {
-	h    winapi.HWND
-	from winapi.Rect // where it was as the move began
-	home *display    // the display it was on then
-	// at is the display it is over, since since; over the one whose stage
-	// made way for it, and stage what was on that stage.
-	at, over *display
-	since    time.Time
-	stage    []string
-	dwell    *time.Timer
+	h      winapi.HWND
+	from   winapi.Rect // where it was as the move began
+	home   *display    // the display it was on then
+	at     *display    // display currently under the window
+	target *display    // strip currently previewed, if any
+	phase  dragPhase
 }
 
-// startDrag follows window h, which the user began to move.
-func (a *App) startDrag(h winapi.HWND) {
-	if a.drag != nil && a.drag.dwell != nil {
-		a.drag.dwell.Stop()
+// setTarget changes the preview destination without changing either display's
+// stage. Returning false means the pointer stayed in the same preview state.
+func (g *drag) setTarget(d *display) bool {
+	if g.target == d {
+		return false
 	}
-	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	g.target = d
+	if d == nil {
+		g.phase = dragTracking
+	} else {
+		g.phase = dragOverStrip
+	}
+	return true
 }
 
-// dragOver makes way for a window dragged onto another display, as macOS
-// does: the stage there flies into the strip once the window comes over,
-// and back out should the window leave again before it is let go.
+// startDrag follows window h, which the user began to move. This is a
+// snapshot only: it must not park the window or switch any stage.
+func (a *App) startDrag(h winapi.HWND) {
+	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
+	a.drag = &drag{
+		h: h, from: winapi.WindowRect(h), home: home, at: home,
+		phase: dragTracking,
+	}
+}
+
+// dragOver tracks the current monitor and strip target. It is called for
+// every native move event, so it must be idempotent and must not start,
+// reverse, or commit a stage transition. The window itself remains live
+// throughout the preview; leaving a strip therefore resumes from its exact
+// current native rectangle rather than replaying from the drag origin.
 func (a *App) dragOver() {
 	g := a.drag
 	if !a.ready || g == nil {
 		return
 	}
-	// By its visible frame, as displayOf goes: a switch must not take the
-	// window for one of the stage it leaves, and park it under the pointer.
-	// Not by its size: crossing to a display of another DPI resizes it.
-	d := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(g.h)))
-	if d != g.at {
-		g.at, g.since = d, time.Now()
-	}
-	if d == g.over {
-		return
-	}
-	if o := g.over; o != nil {
-		g.over = nil
-		a.switchStage(o, g.stage, g.h, false, false)
-	}
-	if d == nil || d == g.home || !a.managed(d) || !a.settings.HideInactive {
-		return
-	}
-	if wait := dwell - time.Since(g.since); wait > 0 {
-		if g.dwell == nil {
-			g.dwell = after(wait, func() {
-				g.dwell = nil
-				if a.drag == g {
-					a.dragOver()
-				}
-			})
-		}
-		return
-	}
-	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h })
-	if i < 0 {
-		return
-	}
-	w := a.windows[i]
-	stage := a.heading(d)
-	if slices.Contains(stage, a.groupKey(w)) {
-		return
-	}
-	g.over, g.stage = d, stage
-	a.switchStage(d, []string{a.groupKey(w)}, g.h, false, false)
+	g.at = a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(g.h)))
+	g.setTarget(a.stripUnder(winapi.Cursor()))
 }
 
-// windowMoved puts the app of a window moved to another display on that
-// display's stage: the user put it there to use it, so it must not be taken
-// for a stray and parked. A window dragged into a strip takes its app off
-// the stage instead.
+// windowMoved commits the final destination only after Windows ends its
+// move/size loop. Until this point dragOver has only tracked preview state.
 func (a *App) windowMoved(h winapi.HWND) {
 	g := a.drag
 	moved := g != nil && g.h == h
 	if moved {
-		// Where it was let go.
 		a.dragOver()
-	}
-	if g != nil && g.dwell != nil {
-		g.dwell.Stop()
+		g.phase = dragCommitted
 	}
 	a.drag = nil
 	if !moved {
 		// A move whose start went unseen.
-		g = &drag{}
+		g = &drag{phase: dragCancelled}
 	}
 	if !a.ready || a.park.IsParked(h) {
 		return
@@ -116,10 +94,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
 		switch {
 		case d != g.home && a.settings.HideInactive:
-			stage := g.stage
-			if d != g.over {
-				stage = a.heading(d)
-			}
+			stage := a.heading(d)
 			a.leave(g.home, w)
 			a.sendAcross(d, w, stage)
 			return

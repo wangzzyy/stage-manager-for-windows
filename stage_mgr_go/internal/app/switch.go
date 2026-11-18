@@ -428,6 +428,50 @@ func (a *App) join(d *display, s *set) {
 	a.switchStage(d, next, s.front().HWND, true, false)
 }
 
+// requestNativeJoin restores a dragged card as real windows and starts the
+// system's own caption move loop. grab is the pointer offset from the front
+// window's visible frame, measured when the card crossed the strip edge.
+func (a *App) requestNativeJoin(d *display, s *set, grab winapi.Point) {
+	post(func() { a.joinAndDrag(d, s, grab) })
+}
+
+// joinAndDrag puts the card on the stage without a flight: the real windows
+// return at the pointer's position, then Windows handles the drag natively.
+func (a *App) joinAndDrag(d *display, s *set, grab winapi.Point) {
+	if !a.managed(d) || s == nil || len(s.windows) == 0 {
+		return
+	}
+	a.windows = a.cat.Windows()
+	front := s.front()
+	frame := a.home(front)
+	cur := winapi.Cursor()
+	dx, dy := cur.X-grab.X-frame.Left, cur.Y-grab.Y-frame.Top
+	var parked []winapi.HWND
+	for _, w := range s.windows {
+		if home, ok := a.park.Home(w.HWND); ok {
+			a.park.Rehome(w.HWND, home.Offset(dx, dy))
+			parked = append(parked, w.HWND)
+			continue
+		}
+		r := winapi.WindowRect(w.HWND)
+		winapi.SetWindowPos(w.HWND, 0, r.Left+dx, r.Top+dy, 0, 0,
+			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	}
+	// Commit the model before the native move starts, so refresh never
+	// mistakes the newly visible windows for apps that should be parked.
+	now := time.Now()
+	next := append(a.heading(d), s.names()...)
+	d.model.Switch(next, now)
+	a.park.UnparkUnder(front.HWND, parked...)
+	a.windows = a.cat.Windows()
+	a.arrange(d, a.groupsOf(d), now)
+	a.redraw()
+	if !winapi.BeginCaptionDrag(front.HWND, cur) {
+		debugf("native caption drag could not be posted for %x", front.HWND)
+	}
+	a.refreshSoon()
+}
+
 // closeApps asks every window of a card's apps to close.
 func (a *App) closeApps(s *set) {
 	for _, w := range s.windows {

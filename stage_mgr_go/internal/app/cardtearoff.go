@@ -97,6 +97,6 @@ func (a *App) tickCardTearoff(now time.Time) {
 	// start a native move after the release.
 	a.cardTearoff = nil
 	if winapi.IsLeftButtonDown() {
-		winapi.BeginCaptionDrag(t.hwnd, winapi.Cursor())
+		winapi.BeginCaptionDrag(t.hwnd, t.grab)
 	}
 }

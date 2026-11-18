@@ -210,7 +210,9 @@ type trip struct {
 	// offset freezes on release, then the flight settles to its target.
 	dragging   bool
 	dragStart  winapi.Point
+	dragBase   winapi.Point
 	dragOffset winapi.Point
+	drop       *display
 	// stats measures the frames drawn while flying, for the debug log.
 	stats frameStats
 
@@ -518,6 +520,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	air := f.airborne(d)
 	dragFollow := d.dropHeld && winapi.LeftButtonDown()
 	dragStart := d.dropCursor
+	dragBase := d.dropOffset
 	d.dropHeld = false
 	// A window with no slot of its own in its card, as the fourth of an
 	// app, shrinks into the card's front window and fades on the way.
@@ -588,9 +591,9 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	// If the pointer was released before the switch finished preparing its
 	// flights, the strip layer already advanced the drop pose; carry that
 	// final offset into the destination as well.
-	if !dragFollow && (d.dropOffset.X != 0 || d.dropOffset.Y != 0) {
+	if dragBase.X != 0 || dragBase.Y != 0 {
 		for i := range list {
-			list[i].to = offsetPose(list[i].to, d.dropOffset)
+			list[i].to = offsetPose(list[i].to, dragBase)
 		}
 	}
 	if len(list) == 0 || mygo.Theme.Preferences().ReduceMotion {
@@ -627,7 +630,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	}
 	sw.lap("app shadows")
 	defer sw.report("flights: setting off")
-	t := &trip{hold: takeOffDelay, span: f.a.flightSpan(), dragging: dragFollow, dragStart: dragStart}
+	t := &trip{hold: takeOffDelay, span: f.a.flightSpan(), dragging: dragFollow, dragStart: dragStart, dragBase: dragBase, drop: d}
 	if !slices.ContainsFunc(list, func(fl flight) bool { return !fl.fadeOut }) {
 		t.span = fadeTime
 	}
@@ -959,6 +962,7 @@ func (l *layer) view(c *ui.Context) {
 		if winapi.LeftButtonDown() {
 			cur := winapi.Cursor()
 			t.dragOffset = winapi.Point{X: cur.X - t.dragStart.X, Y: cur.Y - t.dragStart.Y}
+			t.drop.dropOffset = winapi.Point{X: t.dragBase.X + t.dragOffset.X, Y: t.dragBase.Y + t.dragOffset.Y}
 			// Keep the layer paced while the user holds the promoted window,
 			// even after the zoom itself has reached full size.
 			l.pace.frame(l.win)
@@ -971,14 +975,17 @@ func (l *layer) view(c *ui.Context) {
 				e := flightEase(p)
 				for i := range l.list {
 					l.list[i].from = offsetPose(l.list[i].at(e), t.dragOffset)
+					l.list[i].to = offsetPose(l.list[i].to, t.dragOffset)
 				}
 				t.span = max(160*time.Millisecond, time.Duration(float64(t.span)*(1-p)))
 				t.start, t.arrived = now, false
 			} else {
 				for i := range l.list {
 					l.list[i].from = offsetPose(l.list[i].from, t.dragOffset)
+					l.list[i].to = offsetPose(l.list[i].to, t.dragOffset)
 				}
 			}
+			t.drop.dropOffset = winapi.Point{X: t.dragBase.X + t.dragOffset.X, Y: t.dragBase.Y + t.dragOffset.Y}
 			t.dragOffset = winapi.Point{}
 		}
 	}

@@ -202,28 +202,24 @@ func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 		}
 	}
 	a.aimCard(s.d, g, st)
-	// Once the pointer crosses from the strip onto the stage side, the
-	// held card becomes a stage window at once. Its last dragged poses
-	// carry the pointer's position into the normal card-to-stage flight.
+	// Crossing onto the stage side restores the real front window at
+	// once and hands the still-held pointer to Windows' native caption drag.
 	if c := a.cardDrag; c != nil && c.from == s.d && c.key == g.key &&
 		c.aim == aimJoin && a.straightToStage(s.d, winapi.Cursor()) {
 		st.promoting = true
 		st.dragging = false
 		s.setDragging(false)
-		s.d.dropPoses = st.poses
-		s.d.dropCursor = winapi.Cursor()
-		s.d.dropFront = g.front().HWND
-		s.d.dropGrab = winapi.Point{}
-		if p, ok := st.poses[s.d.dropFront]; ok {
-			s.d.dropGrab = winapi.Point{X: s.d.dropCursor.X - int32(p.x), Y: s.d.dropCursor.Y - int32(p.y)}
+		cur := winapi.Cursor()
+		front := g.front().HWND
+		grab := winapi.Point{}
+		if p, ok := st.poses[front]; ok {
+			grab = winapi.Point{X: cur.X - int32(p.x), Y: cur.Y - int32(p.y)}
 		}
-		s.d.dropOffset = winapi.Point{}
-		s.d.dropHeld = true
 		a.setCardDrag(nil)
-		a.request(actJoin, s.d, g)
 		if a.flights != nil {
-			a.flights.endDrag(s.d, 800*time.Millisecond)
+			a.flights.endDrag(s.d, 0)
 		}
+		a.requestNativeJoin(s.d, g, grab)
 	}
 }
 

@@ -634,6 +634,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			op = 0
 		}
 	}
+	if st.dragging && !g.staged && !s.rect.Contains(winapi.Cursor()) {
+		a.startCardTearoff(g, st)
+	}
 	if s.leaving(g) {
 		ox, oy, op = el.Jump("dx", 0), el.Jump("dy", 0), 0
 	}

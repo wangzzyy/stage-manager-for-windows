@@ -32,7 +32,7 @@ func TestDropIntoStrip(t *testing.T) {
 			if got := dropIntoStrip(tc.g, tc.to, tc.h, tc.stage, tc.r); got != tc.want {
 				t.Fatalf("dropIntoStrip = %v, want %v", got, tc.want)
 			}
-			})
-		}
+		})
 	}
+}
 }

@@ -225,6 +225,18 @@ func (h *handover) land() {
 			winapi.ShowNoActivate(w.HWND)
 		}
 	}
+	// A card promoted into the stage may still have been dragged when its
+	// flight began. Rehome its parked windows by the final pointer offset so
+	// the real windows take over exactly where the flight lands.
+	offset := h.d.dropOffset
+	if offset.X != 0 || offset.Y != 0 {
+		for _, w := range parked {
+			if home, ok := h.a.park.Home(w); ok {
+				h.a.park.Rehome(w, home.Offset(offset.X, offset.Y))
+			}
+		}
+	}
+	h.d.dropOffset = winapi.Point{}
 	// Together, so that they come home in the order they flew in, under
 	// the window they stay under: they come home on top, and it goes back
 	// above them in the same raise, not in one of its own that would race

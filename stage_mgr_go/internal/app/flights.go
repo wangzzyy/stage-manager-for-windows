@@ -773,7 +773,7 @@ func (f *flights) airborne(d *display) map[winapi.HWND]aloft {
 		return out
 	}
 	p := l.trip.stoppedAt
-	e := flightEase(p)
+	e = flightEase(p)
 	fg := winapi.Foreground()
 	var shift winapi.Point
 	if l.trip.dragging && len(l.list) > 0 {

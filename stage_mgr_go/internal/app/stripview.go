@@ -515,6 +515,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Dragged tells whether the card is held, wherever the pointer is;
 	// Pressed only while it is over the card.
 	dx, dy, held := el.Dragged()
+	if len(g.windows) > 0 && a.cardTearoff != nil && a.cardTearoff.hwnd == g.windows[0].HWND {
+		held = false
+	}
 	if held {
 		s.drag(g, st, dx, dy)
 	} else if st.dragging || st.dx != 0 || st.dy != 0 {
@@ -636,6 +639,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	}
 	if st.dragging && !g.staged && !s.rect.Contains(winapi.Cursor()) {
 		a.startCardTearoff(s.d, g, st)
+	}
+	if a.cardTearoff != nil && len(g.windows) > 0 && a.cardTearoff.hwnd == g.windows[0].HWND {
+		op = 0
 	}
 	if s.leaving(g) {
 		ox, oy, op = el.Jump("dx", 0), el.Jump("dy", 0), 0

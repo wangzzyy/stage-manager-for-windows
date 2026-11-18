@@ -84,6 +84,7 @@ func (a *App) start(r *switchRequest) {
 	})
 	if len(departing)+len(arriving) == 0 {
 		r.commit(time.Now())
+		a.finishStripDrop(r)
 		if activate && focus != 0 {
 			winapi.Activate(focus)
 		}
@@ -123,6 +124,7 @@ func (a *App) start(r *switchRequest) {
 		from := a.flights.cardPoses(d, arriving, true)
 		sw.lap("card poses")
 		r.commit(time.Now())
+		a.finishStripDrop(r)
 		// Fading where they are, the windows land in no card: theirs
 		// come in as new cards do.
 		for _, app := range leaving {
@@ -289,8 +291,9 @@ type switchRequest struct {
 	split string
 	// stripApps are apps that leave the stage by being dragged into its
 	// strip; stripAt is their drop slot in the layout the user saw.
-	stripApps []string
-	stripAt   int
+	stripApps   []string
+	stripAt     int
+	stripArrival winapi.Rect
 }
 
 // commit makes the model of the request's display what the switch asks for.
@@ -304,6 +307,28 @@ func (r *switchRequest) commit(now time.Time) {
 	r.d.model.Switch(r.next, now)
 	if len(r.stripApps) > 0 {
 		r.d.model.Insert(r.stripApps, r.stripAt)
+	}
+}
+
+// finishStripDrop transfers the temporary incoming-card placeholder into
+// the real card's arrival pose. The placeholder has held neighbouring cards
+// apart throughout the switch; clearing it now lets them animate into their
+// final slots as the new card flies in from the dropped window.
+func (a *App) finishStripDrop(r *switchRequest) {
+	if r == nil || len(r.stripApps) == 0 {
+		return
+	}
+	if !r.stripArrival.Empty() {
+		a.windows = a.cat.Windows()
+		if g := a.groupsOf(r.d); len(g) > 0 {
+			key := r.stripApps[0]
+			if slices.ContainsFunc(g, func(x *group) bool { return x.app == key }) {
+				r.d.card(key).arrive = r.stripArrival
+			}
+		}
+	}
+	if c := a.cardDrag; c != nil && c.to == r.d && c.key == r.stripApps[0] {
+		a.setCardDrag(nil)
 	}
 }
 

@@ -130,14 +130,8 @@ type display struct {
 	// cards.
 	landing map[string]bool
 	// dropPoses is where the windows of a card dropped on the stage were
-	// let go, for their flight home. While the pointer is still held after
-	// promotion, dropCursor advances with it until the flight layer takes over.
-	dropPoses  map[winapi.HWND]pose
-	dropCursor winapi.Point
-	dropFront  winapi.HWND
-	dropGrab   winapi.Point // pointer's offset from the front window's top-left
-	dropOffset winapi.Point // final offset of the real windows from their homes
-	dropHeld   bool
+	// let go, for their flight home.
+	dropPoses map[winapi.HWND]pose
 	// inOverview is set while the overview shows the display's windows:
 	// the strip's cards are out there, and show nothing in the strip.
 	inOverview bool

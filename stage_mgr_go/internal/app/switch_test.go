@@ -4,11 +4,11 @@ import "testing"
 
 func TestStaysOnStage(t *testing.T) {
 	cases := []struct {
-		name          string
-		in            bool
-		hideInactive  bool
-		forceDepart   bool
-		want          bool
+		name         string
+		in           bool
+		hideInactive bool
+		forceDepart  bool
+		want         bool
 	}{
 		{name: "selected app", in: true, hideInactive: true, want: true},
 		{name: "selected app explicitly dropped", in: true, hideInactive: true, forceDepart: true},
@@ -22,6 +22,7 @@ func TestStaysOnStage(t *testing.T) {
 				t.Fatalf("staysOnStage = %v, want %v", got, tc.want)
 			}
 			})
+		}
 		}
 	}
 }

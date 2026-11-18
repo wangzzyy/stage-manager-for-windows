@@ -75,3 +75,13 @@ func TestOffsetPoseMovesOnlyItsScreenPosition(t *testing.T) {
 		t.Fatalf("offsetPose = %+v, want %+v", got, want)
 	}
 }
+func TestPointerShiftKeepsGrabbedPointUnderCursor(t *testing.T) {
+	at := pose{x: 240, y: 160, w: 900, h: 600}
+	grab := winapi.Point{X: 36, Y: 14}
+	cursor := winapi.Point{X: 510, Y: 330}
+	shift := pointerShift(at, cursor, grab)
+	moved := offsetPose(at, shift)
+	if moved.x != float64(cursor.X-grab.X) || moved.y != float64(cursor.Y-grab.Y) {
+		t.Fatalf("grabbed point moved to (%.0f, %.0f), want (%d, %d)", moved.x+float64(grab.X), moved.y+float64(grab.Y), cursor.X, cursor.Y)
+	}
+}

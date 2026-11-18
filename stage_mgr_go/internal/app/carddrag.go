@@ -212,6 +212,12 @@ func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 		s.setDragging(false)
 		s.d.dropPoses = st.poses
 		s.d.dropCursor = winapi.Cursor()
+		s.d.dropFront = g.front().HWND
+		s.d.dropGrab = winapi.Point{}
+		if p, ok := st.poses[s.d.dropFront]; ok {
+			s.d.dropGrab = winapi.Point{X: s.d.dropCursor.X - int32(p.x), Y: s.d.dropCursor.Y - int32(p.y)}
+		}
+		s.d.dropOffset = winapi.Point{}
 		s.d.dropHeld = true
 		a.setCardDrag(nil)
 		a.request(actJoin, s.d, g)

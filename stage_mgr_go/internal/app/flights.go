@@ -208,11 +208,10 @@ type trip struct {
 	span      time.Duration // App.flightSpan, or fadeTime with nothing but fades
 	// A promoted card keeps following the pointer through its flight. The
 	// offset freezes on release, then the flight settles to its target.
-	dragging   bool
-	dragStart  winapi.Point
-	dragBase   winapi.Point
-	dragOffset winapi.Point
-	drop       *display
+	dragging bool
+	dragFront winapi.HWND
+	dragGrab  winapi.Point
+	drop      *display
 	// stats measures the frames drawn while flying, for the debug log.
 	stats frameStats
 
@@ -257,6 +256,14 @@ func offsetPose(p pose, offset winapi.Point) pose {
 	p.x += float64(offset.X)
 	p.y += float64(offset.Y)
 	return p
+}
+
+// pointerShift keeps the grabbed point of a window at the current pointer.
+func pointerShift(at pose, cursor, grab winapi.Point) winapi.Point {
+	return winapi.Point{
+		X: cursor.X - grab.X - int32(math.Round(at.x)),
+		Y: cursor.Y - grab.Y - int32(math.Round(at.y)),
+	}
 }
 
 // layer is a transparent window over a whole display,
@@ -519,9 +526,8 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	cardShadeAt := func(p pose) shade { return cardShade(float32(p.h / scale)) }
 	air := f.airborne(d)
 	dragFollow := d.dropHeld && winapi.LeftButtonDown()
-	dragStart := d.dropCursor
-	dragBase := d.dropOffset
-	d.dropHeld = false
+	dragFront, dragGrab := d.dropFront, d.dropGrab
+	d.dropHeld, d.dropFront, d.dropGrab = false, 0, winapi.Point{}
 	// A window with no slot of its own in its card, as the fourth of an
 	// app, shrinks into the card's front window and fades on the way.
 	front := map[string]winapi.HWND{}
@@ -588,12 +594,27 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	// The layer draws flights in order, last on top. Put arriving flights
 	// first and departing flights last so shrinking stays above growing.
 	list = append(arrivingFlights, list...)
-	// If the pointer was released before the switch finished preparing its
-	// flights, the strip layer already advanced the drop pose; carry that
-	// final offset into the destination as well.
-	if dragBase.X != 0 || dragBase.Y != 0 {
+	// If the pointer was released before the switch finished preparing
+	// its flights, finish the drop at the current pointer position.
+	if !dragFollow && dragFront != 0 && len(list) > 0 {
+		cur := winapi.Cursor()
+		front := -1
 		for i := range list {
-			list[i].to = offsetPose(list[i].to, dragBase)
+			if list[i].hwnd == dragFront {
+				front = i
+				break
+			}
+		}
+		if front < 0 {
+			front = 0
+		}
+		delta := winapi.Point{
+			X: cur.X - dragGrab.X - int32(math.Round(list[front].to.x)),
+			Y: cur.Y - dragGrab.Y - int32(math.Round(list[front].to.y)),
+		}
+		d.dropOffset = delta
+		for i := range list {
+			list[i].to = offsetPose(list[i].to, delta)
 		}
 	}
 	if len(list) == 0 || mygo.Theme.Preferences().ReduceMotion {
@@ -630,7 +651,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	}
 	sw.lap("app shadows")
 	defer sw.report("flights: setting off")
-	t := &trip{hold: takeOffDelay, span: f.a.flightSpan(), dragging: dragFollow, dragStart: dragStart, dragBase: dragBase, drop: d}
+	t := &trip{hold: takeOffDelay, span: f.a.flightSpan(), dragging: dragFollow, dragFront: dragFront, dragGrab: dragGrab, drop: d}
 	if !slices.ContainsFunc(list, func(fl flight) bool { return !fl.fadeOut }) {
 		t.span = fadeTime
 	}
@@ -717,13 +738,22 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	d.dropPoses = nil
 	l.win.Invalidate()
 	// Should the layer not draw, the windows still change places.
-	after(takeOffDelay+t.span+flightTimeout, func() {
-		if !finished {
-			debugf("flights: timed out, held=%v flying=%v arrived=%v", t.held, t.flying, t.arrived)
-			t.takeOff()
-			t.land()
+	var timeout func()
+	timeout = func() {
+		if finished {
+			return
 		}
-	})
+		if t.dragging {
+			// A deliberate long drag is not a stalled animation.
+			t.takeOff()
+			after(time.Second, timeout)
+			return
+		}
+		debugf("flights: timed out, held=%v flying=%v arrived=%v", t.held, t.flying, t.arrived)
+		t.takeOff()
+		t.land()
+	}
+	after(takeOffDelay+t.span+flightTimeout, timeout)
 }
 
 // interrupt stops the switch in flight on a display, for the one asked for
@@ -745,10 +775,21 @@ func (f *flights) airborne(d *display) map[winapi.HWND]aloft {
 	p := l.trip.stoppedAt
 	e := flightEase(p)
 	fg := winapi.Foreground()
+	var shift winapi.Point
+	if l.trip.dragging && len(l.list) > 0 {
+		front := l.list[0]
+		for _, fl := range l.list {
+			if fl.hwnd == l.trip.dragFront {
+				front = fl
+				break
+			}
+		}
+		shift = pointerShift(front.at(e), winapi.Cursor(), l.trip.dragGrab)
+	}
 	for _, fl := range l.list {
 		at := fl.at(e)
 		if l.trip.dragging {
-			at = offsetPose(at, l.trip.dragOffset)
+			at = offsetPose(at, shift)
 		}
 		out[fl.hwnd] = aloft{at: at, shade: lerpShade(fl.shade, fl.toward(fg), float32(e)), op: fl.opacity(p, e)}
 	}
@@ -836,7 +877,7 @@ func (f *flights) standByAll() {
 // followDrop advances the promoted card's stills while the pointer remains
 // held between removing the strip card and starting its normal flight.
 func (f *flights) followDrop(d *display) {
-	if d == nil || !d.dropHeld || !winapi.LeftButtonDown() {
+	if d == nil || !d.dropHeld {
 		return
 	}
 	cur := winapi.Cursor()
@@ -958,35 +999,53 @@ func (l *layer) view(c *ui.Context) {
 	t := l.trip
 	now := c.Now()
 	p := 0.0
+	if t.flying {
+		p = t.progress(now)
+	}
+	e := flightEase(p)
+	// Keep the point grabbed on the front window anchored under the pointer.
+	// Other windows in the card retain their relative stack while they grow.
+	dragShift := func(cur winapi.Point, progressEase float64) winapi.Point {
+		for i := range l.list {
+			if l.list[i].hwnd == t.dragFront {
+				return pointerShift(l.list[i].at(progressEase), cur, t.dragGrab)
+			}
+		}
+		if len(l.list) > 0 {
+			return pointerShift(l.list[0].at(progressEase), cur, t.dragGrab)
+		}
+		return winapi.Point{}
+	}
+	var heldShift winapi.Point
 	if t.dragging {
+		cur := winapi.Cursor()
+		heldShift = dragShift(cur, e)
 		if winapi.LeftButtonDown() {
-			cur := winapi.Cursor()
-			t.dragOffset = winapi.Point{X: cur.X - t.dragStart.X, Y: cur.Y - t.dragStart.Y}
-			t.drop.dropOffset = winapi.Point{X: t.dragBase.X + t.dragOffset.X, Y: t.dragBase.Y + t.dragOffset.Y}
-			// Keep the layer paced while the user holds the promoted window,
-			// even after the zoom itself has reached full size.
+			// Keep drawing while held, even after the zoom reaches full size.
 			l.pace.frame(l.win)
 		} else {
-			// Freeze at the exact pose under the pointer. If take-off has
-			// begun, restart only the short remaining settle to the target.
+			// Freeze the front window under the pointer. The real windows
+			// then take over at this position, like releasing a title-bar drag.
 			t.dragging = false
-			if t.flying {
-				p = t.progress(now)
-				e := flightEase(p)
-				for i := range l.list {
-					l.list[i].from = offsetPose(l.list[i].at(e), t.dragOffset)
-					l.list[i].to = offsetPose(l.list[i].to, t.dragOffset)
-				}
-				t.span = max(160*time.Millisecond, time.Duration(float64(t.span)*(1-p)))
-				t.start, t.arrived = now, false
-			} else {
-				for i := range l.list {
-					l.list[i].from = offsetPose(l.list[i].from, t.dragOffset)
-					l.list[i].to = offsetPose(l.list[i].to, t.dragOffset)
+			delta := winapi.Point{}
+			for i := range l.list {
+				if l.list[i].hwnd == t.dragFront {
+					delta = pointerShift(l.list[i].to, cur, t.dragGrab)
+					break
 				}
 			}
-			t.drop.dropOffset = winapi.Point{X: t.dragBase.X + t.dragOffset.X, Y: t.dragBase.Y + t.dragOffset.Y}
-			t.dragOffset = winapi.Point{}
+			if delta == (winapi.Point{}) && len(l.list) > 0 {
+				delta = pointerShift(l.list[0].to, cur, t.dragGrab)
+			}
+			for i := range l.list {
+				l.list[i].from = offsetPose(l.list[i].at(e), heldShift)
+				l.list[i].to = offsetPose(l.list[i].to, delta)
+			}
+			t.drop.dropOffset = delta
+			if t.flying {
+				t.span = max(160*time.Millisecond, time.Duration(float64(t.span)*(1-p)))
+				t.start, t.arrived = now, false
+			}
 		}
 	}
 	switch {
@@ -1029,7 +1088,7 @@ func (l *layer) view(c *ui.Context) {
 	for i, f := range l.list {
 		at := f.at(e)
 		if t.dragging {
-			at = offsetPose(at, t.dragOffset)
+			at = offsetPose(at, heldShift)
 		}
 		op := f.opacity(p, e)
 		var sh shade

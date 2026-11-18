@@ -211,6 +211,8 @@ func (s *strip) drag(g *set, st *cardState, dx, dy float32) {
 		st.dragging = false
 		s.setDragging(false)
 		s.d.dropPoses = st.poses
+		s.d.dropCursor = winapi.Cursor()
+		s.d.dropHeld = true
 		a.setCardDrag(nil)
 		a.request(actJoin, s.d, g)
 		if a.flights != nil {

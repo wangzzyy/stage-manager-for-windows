@@ -65,3 +65,13 @@ func TestArrivalShadeOnlyCarriesForDWMShadow(t *testing.T) {
 		t.Fatalf("arrivalShade with DWM shadow = %+v, want %+v", got, card)
 	}
 }
+
+func TestOffsetPoseMovesOnlyItsScreenPosition(t *testing.T) {
+	in := pose{x: 10, y: 20, w: 300, h: 200, tilt: 12, originY: 0.4, perspective: 160}
+	got := offsetPose(in, winapi.Point{X: 35, Y: -8})
+	want := in
+	want.x, want.y = 45, 12
+	if got != want {
+		t.Fatalf("offsetPose = %+v, want %+v", got, want)
+	}
+}

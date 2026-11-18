@@ -206,6 +206,11 @@ type trip struct {
 	stopped   bool
 	stoppedAt float64
 	span      time.Duration // App.flightSpan, or fadeTime with nothing but fades
+	// A promoted card keeps following the pointer through its flight. The
+	// offset freezes on release, then the flight settles to its target.
+	dragging   bool
+	dragStart  winapi.Point
+	dragOffset winapi.Point
 	// stats measures the frames drawn while flying, for the debug log.
 	stats frameStats
 
@@ -245,7 +250,14 @@ func lerpPose(a, b pose, e float64) pose {
 	}
 }
 
-// layer is a transparent window over a whole display, the strip included,
+// offsetPose moves a flight pose by the pointer's displacement.
+func offsetPose(p pose, offset winapi.Point) pose {
+	p.x += float64(offset.X)
+	p.y += float64(offset.Y)
+	return p
+}
+
+// layer is a transparent window over a whole display,
 // that lets every click through. It shows the flights while a switch runs,
 // and the windows of a card dragged out of the strip, which the strip's own
 // window could not show beyond its edge. Another such window right under
@@ -504,6 +516,9 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	scale := d.mon.Scale()
 	cardShadeAt := func(p pose) shade { return cardShade(float32(p.h / scale)) }
 	air := f.airborne(d)
+	dragFollow := d.dropHeld && winapi.LeftButtonDown()
+	dragStart := d.dropCursor
+	d.dropHeld = false
 	// A window with no slot of its own in its card, as the fourth of an
 	// app, shrinks into the card's front window and fades on the way.
 	front := map[string]winapi.HWND{}
@@ -604,7 +619,7 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	}
 	sw.lap("app shadows")
 	defer sw.report("flights: setting off")
-	t := &trip{hold: takeOffDelay, span: f.a.flightSpan()}
+	t := &trip{hold: takeOffDelay, span: f.a.flightSpan(), dragging: dragFollow, dragStart: dragStart}
 	if !slices.ContainsFunc(list, func(fl flight) bool { return !fl.fadeOut }) {
 		t.span = fadeTime
 	}
@@ -720,7 +735,11 @@ func (f *flights) airborne(d *display) map[winapi.HWND]aloft {
 	e := flightEase(p)
 	fg := winapi.Foreground()
 	for _, fl := range l.list {
-		out[fl.hwnd] = aloft{at: fl.at(e), shade: lerpShade(fl.shade, fl.toward(fg), float32(e)), op: fl.opacity(p, e)}
+		at := fl.at(e)
+		if l.trip.dragging {
+			at = offsetPose(at, l.trip.dragOffset)
+		}
+		out[fl.hwnd] = aloft{at: at, shade: lerpShade(fl.shade, fl.toward(fg), float32(e)), op: fl.opacity(p, e)}
 	}
 	return out
 }
@@ -800,6 +819,33 @@ func (f *flights) standByAll() {
 		if d.strip != nil {
 			f.standBy(d)
 		}
+	}
+}
+
+// followDrop advances the promoted card's stills while the pointer remains
+// held between removing the strip card and starting its normal flight.
+func (f *flights) followDrop(d *display) {
+	if d == nil || !d.dropHeld || !winapi.LeftButtonDown() {
+		return
+	}
+	cur := winapi.Cursor()
+	dx, dy := cur.X-d.dropCursor.X, cur.Y-d.dropCursor.Y
+	if dx == 0 && dy == 0 {
+		return
+	}
+	d.dropCursor = cur
+	for h, p := range d.dropPoses {
+		p.x += float64(dx)
+		p.y += float64(dy)
+		d.dropPoses[h] = p
+	}
+	if l := f.layers[d.mon.Device]; l != nil && len(l.drag) > 0 {
+		for i := range l.drag {
+			if p, ok := d.dropPoses[l.drag[i].hwnd]; ok {
+				l.drag[i].from = p
+			}
+		}
+		l.win.Invalidate()
 	}
 }
 
@@ -901,6 +947,33 @@ func (l *layer) view(c *ui.Context) {
 	t := l.trip
 	now := c.Now()
 	p := 0.0
+	if t.dragging {
+		if winapi.LeftButtonDown() {
+			cur := winapi.Cursor()
+			t.dragOffset = winapi.Point{X: cur.X - t.dragStart.X, Y: cur.Y - t.dragStart.Y}
+			// Keep the layer paced while the user holds the promoted window,
+			// even after the zoom itself has reached full size.
+			l.pace.frame(l.win)
+		} else {
+			// Freeze at the exact pose under the pointer. If take-off has
+			// begun, restart only the short remaining settle to the target.
+			t.dragging = false
+			if t.flying {
+				p = t.progress(now)
+				e := flightEase(p)
+				for i := range l.list {
+					l.list[i].from = offsetPose(l.list[i].at(e), t.dragOffset)
+				}
+				t.span = max(160*time.Millisecond, time.Duration(float64(t.span)*(1-p)))
+				t.start, t.arrived = now, false
+			} else {
+				for i := range l.list {
+					l.list[i].from = offsetPose(l.list[i].from, t.dragOffset)
+				}
+			}
+			t.dragOffset = winapi.Point{}
+		}
+	}
 	switch {
 	case !t.held:
 		// The flights show where they start; once they surely cover
@@ -919,7 +992,7 @@ func (l *layer) view(c *ui.Context) {
 		if debugOn {
 			t.stats.frame(now, progress(p))
 		}
-		if p < 1 {
+		if p < 1 || t.dragging {
 			l.pace.frame(l.win)
 		} else if !t.arrived {
 			t.arrived = true
@@ -940,6 +1013,9 @@ func (l *layer) view(c *ui.Context) {
 	stills := make([]still, len(l.list))
 	for i, f := range l.list {
 		at := f.at(e)
+		if t.dragging {
+			at = offsetPose(at, t.dragOffset)
+		}
 		op := f.opacity(p, e)
 		var sh shade
 		casting := !t.landed && (t.flying || !f.holdsShadow)

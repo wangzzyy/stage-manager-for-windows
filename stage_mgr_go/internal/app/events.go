@@ -323,6 +323,9 @@ func (a *App) poll() {
 		if d.strip != nil {
 			d.strip.poll(cur, now)
 		}
+		if a.flights != nil {
+			a.flights.followDrop(d)
+		}
 	}
 	// After the strips: a corner button joined to a strip's panel comes in
 	// as the panel does.

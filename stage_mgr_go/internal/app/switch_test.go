@@ -21,8 +21,6 @@ func TestStaysOnStage(t *testing.T) {
 			if got := staysOnStage(tc.in, tc.hideInactive, tc.forceDepart); got != tc.want {
 				t.Fatalf("staysOnStage = %v, want %v", got, tc.want)
 			}
-			})
-		}
-		}
+		})
 	}
 }

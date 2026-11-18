@@ -25,6 +25,10 @@ type drag struct {
 	since    time.Time
 	stage    []string
 	dwell    *time.Timer
+	// sent means the window has already become a strip card while the
+	// pointer is still held there. The move-size-end event must not create
+	// the same card a second time.
+	sent bool
 }
 
 // startDrag follows window h, which the user began to move.
@@ -41,7 +45,7 @@ func (a *App) startDrag(h winapi.HWND) {
 // and back out should the window leave again before it is let go.
 func (a *App) dragOver() {
 	g := a.drag
-	if !a.ready || g == nil {
+	if !a.ready || g == nil || g.sent {
 		return
 	}
 	// By its visible frame, as displayOf goes: a switch must not take the
@@ -51,6 +55,40 @@ func (a *App) dragOver() {
 	if d != g.at {
 		g.at, g.since = d, time.Now()
 	}
+
+	// A window dropped into a strip becomes its real card as soon as the
+	// pointer reaches the strip, not only after the user releases the
+	// mouse. The normal stage switch creates the card and its stills, so
+	// it inherits the same hover, click, context-menu and drag behavior as
+	// every other card.
+	if strip := a.stripUnder(winapi.Cursor()); strip != nil {
+		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h })
+		if i >= 0 {
+			w := a.windows[i]
+			switch {
+			case strip == g.home && slices.Contains(a.heading(strip), a.groupKey(w)):
+				g.sent = true
+				if g.dwell != nil {
+					g.dwell.Stop()
+					g.dwell = nil
+				}
+				a.sendToStrip(strip, w, g.from)
+			case strip != g.home && a.settings.HideInactive:
+				stage := a.heading(strip)
+				g.sent = true
+				if g.dwell != nil {
+					g.dwell.Stop()
+					g.dwell = nil
+				}
+				a.leave(g.home, w)
+				a.sendAcross(strip, w, stage)
+			}
+			if g.sent {
+				return
+			}
+		}
+	}
+
 	if d == g.over {
 		return
 	}
@@ -100,6 +138,10 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	a.drag = nil
+	if moved && g.sent {
+		// The strip card was already created while the mouse was held.
+		return
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}

@@ -202,14 +202,10 @@ func (a *App) stripUnder(p winapi.Point) *display {
 func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 	debugf("%q dragged into the strip", w.Title)
 	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) })
-	if a.settings.HideInactive {
-		a.dropHomes[w.HWND] = from
-	} else {
-		// Nothing is parked: the window goes back at once.
-		winapi.SetWindowPos(w.HWND, 0, from.Left, from.Top, 0, 0,
-			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	}
-	a.switchStage(d, next, 0, true, false)
+	// An explicit strip drop parks the window after its still has flown
+	// into the new card, regardless of automatic-hide settings.
+	a.dropHomes[w.HWND] = from
+	a.switchStageDrop(d, next, 0, a.groupKey(w))
 }
 
 // sendAcross puts the app of a window dragged into the strip of another

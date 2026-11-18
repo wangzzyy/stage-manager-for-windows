@@ -585,6 +585,14 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 	// The layer draws flights in order, last on top. Put arriving flights
 	// first and departing flights last so shrinking stays above growing.
 	list = append(arrivingFlights, list...)
+	// If the pointer was released before the switch finished preparing its
+	// flights, the strip layer already advanced the drop pose; carry that
+	// final offset into the destination as well.
+	if !dragFollow && (d.dropOffset.X != 0 || d.dropOffset.Y != 0) {
+		for i := range list {
+			list[i].to = offsetPose(list[i].to, d.dropOffset)
+		}
+	}
 	if len(list) == 0 || mygo.Theme.Preferences().ReduceMotion {
 		d.dropPoses = nil
 		f.endDrag(d, 0)

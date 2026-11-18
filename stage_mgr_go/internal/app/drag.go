@@ -196,7 +196,18 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // to where the drag began, for when its app returns.
 func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 	debugf("%q dragged into the strip", w.Title)
-	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) })
+	key := a.groupKey(w)
+	next := slices.DeleteFunc(a.heading(d), func(app string) bool { return app == key })
+	// Use the same slot calculation as a card dragged into another strip:
+	// the window becomes a normal card exactly where the pointer let it go.
+	p := winapi.Cursor()
+	at := 0
+	if d.strip != nil && d.strip.scale > 0 {
+		at = d.layout.slotAt(float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale))
+	}
+	// Remember where the window was released before it is parked or
+	// returned home. The new card will fly in from this exact screen rect.
+	drop := winapi.FrameBounds(w.HWND)
 	if a.settings.HideInactive {
 		a.dropHomes[w.HWND] = from
 	} else {
@@ -204,7 +215,15 @@ func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 		winapi.SetWindowPos(w.HWND, 0, from.Left, from.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
-	a.switchStage(d, next, 0, true, false)
+	// Make room before the switch starts, just as a card dragged in from
+	// another strip does. Keep it until the model has inserted the new card.
+	a.setCardDrag(&cardDrag{key: key, to: d, at: at, done: true})
+	// Keep the requested insertion and its arrival pose with the switch.
+	// A queued switch must retain both until it actually commits.
+	a.start(&switchRequest{
+		d: d, next: next, activate: true,
+		stripApps: []string{key}, stripAt: at, stripArrival: drop,
+	})
 }
 
 // sendAcross puts the app of a window dragged into the strip of another

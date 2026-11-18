@@ -30,6 +30,15 @@ func (a *App) start(r *switchRequest) {
 	if a.busy {
 		// A click does not wait for the switch running to end: it takes
 		// over, and the windows in the air turn where they are, as on macOS.
+		// Replacing a queued window drop must also release its temporary
+		// incoming-card slot, unless the new request owns that same slot.
+		if old := a.queued[d]; old != nil && len(old.stripApps) > 0 {
+			c := a.cardDrag
+			if c != nil && c.to == d && c.key == old.stripApps[0] &&
+				(len(r.stripApps) == 0 || r.stripApps[0] != c.key || r.d != c.to) {
+				a.setCardDrag(nil)
+			}
+		}
 		a.queued[d] = r
 		a.flights.interrupt(d)
 		return
@@ -84,6 +93,7 @@ func (a *App) start(r *switchRequest) {
 	})
 	if len(departing)+len(arriving) == 0 {
 		r.commit(time.Now())
+		a.finishStripDrop(r)
 		if activate && focus != 0 {
 			winapi.Activate(focus)
 		}
@@ -123,6 +133,7 @@ func (a *App) start(r *switchRequest) {
 		from := a.flights.cardPoses(d, arriving, true)
 		sw.lap("card poses")
 		r.commit(time.Now())
+		a.finishStripDrop(r)
 		// Fading where they are, the windows land in no card: theirs
 		// come in as new cards do.
 		for _, app := range leaving {
@@ -287,6 +298,11 @@ type switchRequest struct {
 	// split is the app whose set breaks into sets of one app each as the
 	// stage changes (App.split), or "".
 	split string
+	// stripApps are apps that leave the stage by being dragged into its
+	// strip; stripAt is their drop slot in the layout the user saw.
+	stripApps   []string
+	stripAt     int
+	stripArrival winapi.Rect
 }
 
 // commit makes the model of the request's display what the switch asks for.
@@ -298,6 +314,31 @@ func (r *switchRequest) commit(now time.Time) {
 		r.d.model.Split(r.split)
 	}
 	r.d.model.Switch(r.next, now)
+	if len(r.stripApps) > 0 {
+		r.d.model.Insert(r.stripApps, r.stripAt)
+	}
+}
+
+// finishStripDrop transfers the temporary incoming-card placeholder into
+// the real card's arrival pose. The placeholder has held neighbouring cards
+// apart throughout the switch; clearing it now lets them animate into their
+// final slots as the new card flies in from the dropped window.
+func (a *App) finishStripDrop(r *switchRequest) {
+	if r == nil || len(r.stripApps) == 0 {
+		return
+	}
+	if !r.stripArrival.Empty() {
+		a.windows = a.cat.Windows()
+		if g := a.groupsOf(r.d); len(g) > 0 {
+			key := r.stripApps[0]
+			if slices.ContainsFunc(g, func(x *group) bool { return x.app == key }) {
+				r.d.card(key).arrive = r.stripArrival
+			}
+		}
+	}
+	if c := a.cardDrag; c != nil && c.to == r.d && c.key == r.stripApps[0] {
+		a.setCardDrag(nil)
+	}
 }
 
 // runQueued starts a switch asked for while one ran, if any: first that of

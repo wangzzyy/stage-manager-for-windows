@@ -20,6 +20,18 @@ func (a *App) switchStage(d *display, next []string, focus winapi.HWND, activate
 	a.start(&switchRequest{d: d, next: next, focus: focus, activate: activate, followed: followed})
 }
 
+// switchStageDrop also sends the explicitly dropped app to its card when
+// HideInactive is off: dropping into the strip is an intentional hide action.
+func (a *App) switchStageDrop(d *display, next []string, focus winapi.HWND, app string) {
+	a.start(&switchRequest{d: d, next: next, focus: focus, activate: true, forceDepart: []string{app}})
+}
+
+// staysOnStage reports whether app should remain visible on the stage for
+// this switch, including an explicit drag-to-strip request.
+func staysOnStage(in, hideInactive, forceDepart bool) bool {
+	return !forceDepart && (in || !hideInactive)
+}
+
 // start carries out a switch request, or, while another switch runs, has it
 // take over from that one.
 func (a *App) start(r *switchRequest) {
@@ -45,7 +57,8 @@ func (a *App) start(r *switchRequest) {
 	var departing, arriving []catalog.Window
 	for _, g := range groups {
 		in := slices.Contains(next, g.app)
-		stays := in || !a.settings.HideInactive
+		forceDepart := slices.Contains(r.forceDepart, g.app)
+		stays := staysOnStage(in, a.settings.HideInactive, forceDepart)
 		for _, w := range g.windows {
 			_, aloft := air[w.HWND]
 			switch {

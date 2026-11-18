@@ -134,6 +134,7 @@ type display struct {
 	// promotion, dropCursor advances with it until the flight layer takes over.
 	dropPoses  map[winapi.HWND]pose
 	dropCursor winapi.Point
+	dropOffset winapi.Point
 	dropHeld   bool
 	// inOverview is set while the overview shows the display's windows:
 	// the strip's cards are out there, and show nothing in the strip.

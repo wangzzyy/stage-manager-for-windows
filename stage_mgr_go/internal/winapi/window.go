@@ -391,26 +391,22 @@ func SetExStyleBits(h HWND, add, remove uint32) {
 }
 
 
-// BeginCaptionDrag hands an already-held left-button drag to the system's
-// native non-client caption mover. The caller must first place the window
-// so the current pointer is over the intended title-bar grab point.
+// BeginCaptionDrag synchronously hands an already-held left-button press
+// to the system's native non-client caption mover. SendMessage is deliberate:
+// PostMessage can be processed after the physical button is released, which
+// makes the window appear to keep moving after the user lets go.
 func BeginCaptionDrag(h HWND, p Point) bool {
-	if h == 0 || !IsWindow(h) {
+	if h == 0 || !IsWindow(h) || !IsLeftButtonDown() {
 		return false
 	}
 	const (
 		wmNCLButtonDown = 0x00A1
 		htCaption       = 2
 	)
-	if !IsLeftButtonDown() {
-		return false
-	}
-	procReleaseCapture.Call()
 	lParam := uintptr(uint16(p.X)) | uintptr(uint16(p.Y))<<16
-	r, _, _ := procPostMessageW.Call(uintptr(h), wmNCLButtonDown, htCaption, lParam)
-	return r != 0
+	procSendMessageW.Call(uintptr(h), wmNCLButtonDown, htCaption, lParam)
+	return true
 }
-
 
 // IsLeftButtonDown reports whether the physical left mouse button is held.
 func IsLeftButtonDown() bool {

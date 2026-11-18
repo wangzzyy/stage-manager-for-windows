@@ -35,4 +35,3 @@ func TestDropIntoStrip(t *testing.T) {
 		})
 	}
 }
-}

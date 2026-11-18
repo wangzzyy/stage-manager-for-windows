@@ -30,6 +30,15 @@ func (a *App) start(r *switchRequest) {
 	if a.busy {
 		// A click does not wait for the switch running to end: it takes
 		// over, and the windows in the air turn where they are, as on macOS.
+		// Replacing a queued window drop must also release its temporary
+		// incoming-card slot, unless the new request owns that same slot.
+		if old := a.queued[d]; old != nil && len(old.stripApps) > 0 {
+			c := a.cardDrag
+			if c != nil && c.to == d && c.key == old.stripApps[0] &&
+				(len(r.stripApps) == 0 || r.stripApps[0] != c.key || r.d != c.to) {
+				a.setCardDrag(nil)
+			}
+		}
 		a.queued[d] = r
 		a.flights.interrupt(d)
 		return

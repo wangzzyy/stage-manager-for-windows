@@ -1076,7 +1076,7 @@ func (l *layer) view(c *ui.Context) {
 			post(t.land)
 		}
 	}
-	e := flightEase(p)
+	e = flightEase(p)
 	fg := winapi.Foreground()
 	hole, cut := l.holeRect()
 	type still struct {

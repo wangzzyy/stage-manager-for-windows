@@ -188,6 +188,8 @@ type App struct {
 	drag *drag
 	// cardDrag is the card dragged out of a strip, if any (carddrag.go).
 	cardDrag *cardDrag
+	// cardTearoff animates a card's real window to the pointer before native caption dragging.
+	cardTearoff *cardTearoff
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
 	// peek is the shell's window for a peek at a taskbar thumbnail, while

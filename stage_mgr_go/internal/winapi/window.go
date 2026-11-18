@@ -389,3 +389,27 @@ func SetExStyleBits(h HWND, add, remove uint32) {
 	ex := (ExStyle(h) | add) &^ remove
 	procSetWindowLongPtrW.Call(uintptr(h), uintptr(int32ToUintptr(gwlExStyle)), uintptr(ex))
 }
+
+
+// BeginCaptionDrag synchronously hands an already-held left-button press
+// to the system's native non-client caption mover. SendMessage is deliberate:
+// PostMessage can be processed after the physical button is released, which
+// makes the window appear to keep moving after the user lets go.
+func BeginCaptionDrag(h HWND, p Point) bool {
+	if h == 0 || !IsWindow(h) || !IsLeftButtonDown() {
+		return false
+	}
+	const (
+		wmNCLButtonDown = 0x00A1
+		htCaption       = 2
+	)
+	lParam := uintptr(uint16(p.X)) | uintptr(uint16(p.Y))<<16
+	procSendMessageW.Call(uintptr(h), wmNCLButtonDown, htCaption, lParam)
+	return true
+}
+
+// IsLeftButtonDown reports whether the physical left mouse button is held.
+func IsLeftButtonDown() bool {
+	r, _, _ := procGetAsyncKeyState.Call(0x01)
+	return r&0x8000 != 0
+}

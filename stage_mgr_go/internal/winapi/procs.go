@@ -42,6 +42,8 @@ var (
 	procRedrawWindow             = user32.NewProc("RedrawWindow")
 	procUpdateWindow             = user32.NewProc("UpdateWindow")
 	procPostMessageW             = user32.NewProc("PostMessageW")
+	procSendMessageW             = user32.NewProc("SendMessageW")
+	procReleaseCapture           = user32.NewProc("ReleaseCapture")
 	procSendMessageTimeoutW      = user32.NewProc("SendMessageTimeoutW")
 	procGetClassLongPtrW         = user32.NewProc("GetClassLongPtrW")
 	procAttachThreadInput        = user32.NewProc("AttachThreadInput")

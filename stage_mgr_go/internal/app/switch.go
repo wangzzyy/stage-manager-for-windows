@@ -297,6 +297,9 @@ type switchRequest struct {
 	focus    winapi.HWND
 	activate bool
 	followed bool
+	// forceDepart makes an explicit drag-to-strip hide apps even when
+	// automatic hiding is disabled in settings.
+	forceDepart []string
 	// split is the app whose set breaks into sets of one app each as the
 	// stage changes (App.split), or "".
 	split string

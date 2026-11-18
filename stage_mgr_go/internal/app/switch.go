@@ -287,6 +287,10 @@ type switchRequest struct {
 	// split is the app whose set breaks into sets of one app each as the
 	// stage changes (App.split), or "".
 	split string
+	// stripApps are apps that leave the stage by being dragged into its
+	// strip; stripAt is their drop slot in the layout the user saw.
+	stripApps []string
+	stripAt   int
 }
 
 // commit makes the model of the request's display what the switch asks for.
@@ -298,6 +302,9 @@ func (r *switchRequest) commit(now time.Time) {
 		r.d.model.Split(r.split)
 	}
 	r.d.model.Switch(r.next, now)
+	if len(r.stripApps) > 0 {
+		r.d.model.Insert(r.stripApps, r.stripAt)
+	}
 }
 
 // runQueued starts a switch asked for while one ran, if any: first that of

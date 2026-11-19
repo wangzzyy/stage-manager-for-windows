@@ -567,7 +567,7 @@ func spotFor(home winapi.Rect) winapi.Point {
 // cannot remain visible after the flight layer takes over. A hung app keeps
 // the asynchronous path so it cannot hold up the stage manager.
 func moveForParking(h winapi.HWND, p winapi.Point) bool {
-	flags := moveFlags | winapi.SwpHideWindow
+	flags := uint32(moveFlags | winapi.SwpHideWindow)
 	if !winapi.IsHung(h) {
 		flags &^= winapi.SwpAsyncWindowPos
 	}

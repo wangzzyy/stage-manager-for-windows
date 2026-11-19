@@ -575,7 +575,7 @@ func move(h winapi.HWND, p winapi.Point) bool {
 }
 
 func moveImmediate(h winapi.HWND, p winapi.Point) bool {
-	flags := moveFlags &^ winapi.SwpAsyncWindowPos
+	flags := uint32(moveFlags &^ winapi.SwpAsyncWindowPos)
 	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, flags)
 }
 

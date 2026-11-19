@@ -15,6 +15,9 @@ import (
 type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
+	external bool
+	externalStartX, externalStartY float32
+	box ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
 	// it is dragged, and returning that it is on its way back.
@@ -476,6 +479,7 @@ func (s *strip) cardDrawOrder(order []int) []int {
 func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	a, d := s.a, s.d
 	st := d.card(g.key)
+	st.box = box
 	// A card that windows are flying into shows nothing until they land.
 	// It enters where it lands rather than sliding in, so that it is in
 	// place when they get there.
@@ -517,7 +521,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	dx, dy, held := el.Dragged()
 	if held {
 		s.drag(g, st, dx, dy)
-	} else if st.dragging || st.dx != 0 || st.dy != 0 {
+	} else if !st.external && (st.dragging || st.dx != 0 || st.dy != 0) {
 		s.letGo(g, st, box)
 	}
 	if el.Clicked() && !st.moved {

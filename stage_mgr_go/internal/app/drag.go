@@ -63,6 +63,7 @@ func (a *App) dragOver() {
 				g.converted = true
 				winapi.CancelMoveSize(g.h)
 				a.sendToStrip(target, w, g.from)
+				a.beginWindowCardDrag(target, key)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -74,6 +75,7 @@ func (a *App) dragOver() {
 				winapi.CancelMoveSize(g.h)
 				a.leave(g.home, w)
 				a.sendAcross(target, w, stage)
+				a.beginWindowCardDrag(target, key)
 				return
 			}
 		}

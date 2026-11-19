@@ -60,9 +60,14 @@ func (a *App) dragOver() {
 			w := a.windows[i]
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
+				// End the native move loop before sampling the frame. The
+				// sampled pose is the animation's true origin; no intermediate
+				// return to the drag-start rectangle is allowed.
+				if !winapi.CancelMoveSize(g.h) {
+					return
+				}
 				g.converted = true
 				dragPose := poseOf(winapi.FrameBounds(g.h))
-				winapi.CancelMoveSize(g.h)
 				if target.dropPoses == nil {
 					target.dropPoses = make(map[winapi.HWND]pose)
 				}
@@ -76,9 +81,15 @@ func (a *App) dragOver() {
 				if target != g.over {
 					stage = a.heading(target)
 				}
+				// Use the same direct handoff on cross-display drops.
+				if !winapi.CancelMoveSize(g.h) {
+					return
+				}
 				g.converted = true
 				dragPose := poseOf(winapi.FrameBounds(g.h))
-				winapi.CancelMoveSize(g.h)
+				if target.dropPoses == nil {
+					target.dropPoses = make(map[winapi.HWND]pose)
+				}
 				target.dropPoses[g.h] = dragPose
 				a.leave(g.home, w)
 				a.sendAcross(target, w, stage)

@@ -302,14 +302,9 @@ func (a *App) updateDraggedCard(cur winapi.Point) {
 	}
 	i := slices.IndexFunc(d.sets, func(set *set) bool { return set.key == g.cardKey })
 	if i < 0 || i >= len(d.layout.cards) {
-		// The switch has not committed the new card yet. Keep waiting while
-		// the button is held, but do not leave a stale drag after release.
-		if !winapi.LeftButtonDown() {
-			g.external = false
-			if a.drag == g {
-				a.drag = nil
-			}
-		}
+		// The switch has not committed the new card yet. Keep the handoff
+		// alive even if the user releases early; once the card appears, the
+		// first update will apply the full pointer displacement and drop it.
 		return
 	}
 	card := d.sets[i]
@@ -327,6 +322,14 @@ func (a *App) updateDraggedCard(cur winapi.Point) {
 			post(a.flights.standByAll)
 		}
 		a.aimCard(d, card, st)
+		// The card may not have existed for several pointer-poll ticks.
+		// Catch up from the original handoff point, including an early
+		// mouse-up, rather than starting at the old pointer position.
+		dx := float32(float64(cur.X-g.pointer.X) / s.scale)
+		dy := float32(float64(cur.Y-g.pointer.Y) / s.scale)
+		if dx != 0 || dy != 0 {
+			s.drag(card, st, dx, dy)
+		}
 	} else {
 		dx := float32(float64(cur.X-g.lastPointer.X) / s.scale)
 		dy := float32(float64(cur.Y-g.lastPointer.Y) / s.scale)

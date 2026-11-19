@@ -25,6 +25,7 @@ type drag struct {
 	since    time.Time
 	stage    []string
 	dwell    *time.Timer
+	converted bool // the window has already become a strip card while still being dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -41,7 +42,7 @@ func (a *App) startDrag(h winapi.HWND) {
 // and back out should the window leave again before it is let go.
 func (a *App) dragOver() {
 	g := a.drag
-	if !a.ready || g == nil {
+	if !a.ready || g == nil || g.converted {
 		return
 	}
 	// By its visible frame, as displayOf goes: a switch must not take the
@@ -50,6 +51,30 @@ func (a *App) dragOver() {
 	d := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(g.h)))
 	if d != g.at {
 		g.at, g.since = d, time.Now()
+	}
+	// Turn the dragged window into a real card as soon as the pointer enters
+	// a visible strip. The ordinary stage switch owns the capture, flight,
+	// parking and card creation; mouse-up must not run the drop a second time.
+	if target := a.stripUnder(winapi.Cursor()); target != nil {
+		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
+			w := a.windows[i]
+			key := a.groupKey(w)
+			if target == g.home && slices.Contains(a.heading(target), key) {
+				g.converted = true
+				a.sendToStrip(target, w, g.from)
+				return
+			}
+			if target != g.home && a.settings.HideInactive {
+				stage := g.stage
+				if target != g.over {
+					stage = a.heading(target)
+				}
+				g.converted = true
+				a.leave(g.home, w)
+				a.sendAcross(target, w, stage)
+				return
+			}
+		}
 	}
 	if d == g.over {
 		return
@@ -100,6 +125,12 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	a.drag = nil
+	if moved && g.converted {
+		// The stage switch already owns this window and its card. The end of
+		// the native move only ends the pointer gesture; it is not another drop.
+		a.refreshSoon()
+		return
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}

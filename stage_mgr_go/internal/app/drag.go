@@ -60,14 +60,15 @@ func (a *App) dragOver() {
 			w := a.windows[i]
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
-				// End the native move loop before sampling the frame. The
-				// sampled pose is the animation's true origin; no intermediate
-				// return to the drag-start rectangle is allowed.
+				// Capture the live dragged frame before cancelling the native
+				// move loop: WM_CANCELMODE can restore the window to its
+				// pre-drag position. The flight must start where the pointer
+				// actually left it.
+				dragPose := poseOf(winapi.FrameBounds(g.h))
 				if !winapi.CancelMoveSize(g.h) {
 					return
 				}
 				g.converted = true
-				dragPose := poseOf(winapi.FrameBounds(g.h))
 				if target.dropPoses == nil {
 					target.dropPoses = make(map[winapi.HWND]pose)
 				}
@@ -81,12 +82,13 @@ func (a *App) dragOver() {
 				if target != g.over {
 					stage = a.heading(target)
 				}
-				// Use the same direct handoff on cross-display drops.
+				// Capture the live dragged frame before cancelling the native
+				// move loop; cancellation can restore the pre-drag position.
+				dragPose := poseOf(winapi.FrameBounds(g.h))
 				if !winapi.CancelMoveSize(g.h) {
 					return
 				}
 				g.converted = true
-				dragPose := poseOf(winapi.FrameBounds(g.h))
 				if target.dropPoses == nil {
 					target.dropPoses = make(map[winapi.HWND]pose)
 				}

@@ -524,7 +524,12 @@ func (s *Service) parkOne(h, owner winapi.HWND, place func(r winapi.Rect) (home 
 		return false
 	}
 	home, spot := place(r)
-	if !move(h, spot) {
+	// A responsive window must be out of the way before the flight
+	// starts moving. An asynchronous position change can leave its live
+	// surface at the old location for several frames (or longer when the
+	// app is busy), showing through beside the still on the flight layer.
+	// Keep the non-blocking path for an app Windows already considers hung.
+	if !moveForParking(h, spot) {
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, Owner: owner, At: time.Now()}
@@ -557,6 +562,17 @@ func spotFor(home winapi.Rect) winapi.Point {
 		}
 	}
 	return candidates[0]
+}
+
+// moveForParking moves a live window synchronously so its old surface
+// cannot remain visible after the flight layer takes over. A hung app keeps
+// the asynchronous path so it cannot hold up the stage manager.
+func moveForParking(h winapi.HWND, p winapi.Point) bool {
+	flags := moveFlags
+	if !winapi.IsHung(h) {
+		flags &^= winapi.SwpAsyncWindowPos
+	}
+	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, flags)
 }
 
 // move takes a window to p, keeping its place in the z-order.

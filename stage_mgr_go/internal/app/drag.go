@@ -61,6 +61,7 @@ func (a *App) dragOver() {
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				g.converted = true
+				winapi.CancelMoveSize(g.h)
 				a.sendToStrip(target, w, g.from)
 				return
 			}
@@ -70,6 +71,7 @@ func (a *App) dragOver() {
 					stage = a.heading(target)
 				}
 				g.converted = true
+				winapi.CancelMoveSize(g.h)
 				a.leave(g.home, w)
 				a.sendAcross(target, w, stage)
 				return
@@ -245,8 +247,11 @@ func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 func (a *App) sendAcross(d *display, w catalog.Window, stage []string) {
 	debugf("%q dragged into the strip of %s", w.Title, d.mon.Device)
 	f := winapi.FitInto(w.Frame, d.mon.Handle)
-	winapi.SetWindowPos(w.HWND, 0, w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top, 0, 0,
-		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	x, y := w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top
+	winapi.SetWindowPos(w.HWND, 0, x, y, 0, 0, winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	// Record the new home before parking so the card returns to this display,
+	// and make the handover use synchronous parking to prevent drag-loop races.
+	a.dropHomes[w.HWND] = winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
 	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == a.groupKey(w) })
 	a.switchStage(d, next, 0, false, false)
 }

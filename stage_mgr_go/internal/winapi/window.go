@@ -278,6 +278,14 @@ func Redraw(h HWND) {
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }
 
+// CancelMoveSize asks Windows to end the native modal move/size loop for a window.
+// WM_CANCELMODE is handled by DefWindowProc and releases the move operation,
+// preventing a converted window from continuing to follow the pointer.
+func CancelMoveSize(h HWND) {
+	const wmCancelMode = 0x001F
+	procPostMessageW.Call(uintptr(h), wmCancelMode, 0, 0)
+}
+
 // Close asks a window to close, as its close button does.
 func Close(h HWND) {
 	const wmClose = 0x0010

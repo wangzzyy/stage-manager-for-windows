@@ -6,6 +6,7 @@ import (
 
 	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
+	"github.com/egoist/mygo/ui"
 )
 
 // dwell is how long a window dragged onto another display rests there
@@ -29,6 +30,13 @@ type drag struct {
 	// pointer is still held there. The move-size-end event must not create
 	// the same card a second time.
 	sent bool
+	// external keeps the pointer-driven card drag alive after the source
+	// window is parked and Windows stops reporting its move events.
+	external    bool
+	cardKey     string
+	cardDisplay *display
+	pointer     winapi.Point
+	lastPointer winapi.Point
 }
 
 // startDrag follows window h, which the user began to move.
@@ -68,6 +76,8 @@ func (a *App) dragOver() {
 			switch {
 			case strip == g.home && slices.Contains(a.heading(strip), a.groupKey(w)):
 				g.sent = true
+				g.external, g.cardKey, g.cardDisplay = true, a.groupKey(w), strip
+				g.pointer, g.lastPointer = winapi.Cursor(), winapi.Cursor()
 				if g.dwell != nil {
 					g.dwell.Stop()
 					g.dwell = nil
@@ -76,6 +86,8 @@ func (a *App) dragOver() {
 			case strip != g.home && a.settings.HideInactive:
 				stage := a.heading(strip)
 				g.sent = true
+				g.external, g.cardKey, g.cardDisplay = true, a.groupKey(w), strip
+				g.pointer, g.lastPointer = winapi.Cursor(), winapi.Cursor()
 				if g.dwell != nil {
 					g.dwell.Stop()
 					g.dwell = nil
@@ -137,11 +149,16 @@ func (a *App) windowMoved(h winapi.HWND) {
 	if g != nil && g.dwell != nil {
 		g.dwell.Stop()
 	}
-	a.drag = nil
 	if moved && g.sent {
-		// The strip card was already created while the mouse was held.
+		// The native move-size loop ends on mouse-up. Finish the card drag
+		// here too, in case the 16 ms pointer poll did not see the release.
+		if g.external {
+			a.updateDraggedCard(winapi.Cursor())
+		}
+		a.drag = nil
 		return
 	}
+	a.drag = nil
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}
@@ -260,4 +277,60 @@ func (a *App) sendAcross(d *display, w catalog.Window, stage []string) {
 		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == a.groupKey(w) })
 	a.switchStage(d, next, 0, false, false)
+}
+
+// updateDraggedCard transfers an in-progress native window drag to the
+// real strip card. It follows the global pointer, not location-change
+// events from the source window: parking that window must not end the drag.
+func (a *App) updateDraggedCard(cur winapi.Point) {
+	g := a.drag
+	if g == nil || !g.sent || !g.external || g.cardDisplay == nil {
+		return
+	}
+	d := g.cardDisplay
+	s := d.strip
+	if s == nil || s.scale <= 0 {
+		g.external = false
+		return
+	}
+	i := slices.IndexFunc(d.sets, func(set *set) bool { return set.key == g.cardKey })
+	if i < 0 || i >= len(d.layout.cards) {
+		// The switch has not committed the new card yet. Keep waiting while
+		// the button is held, but do not leave a stale drag after release.
+		if !winapi.LeftButtonDown() {
+			g.external = false
+		}
+		return
+	}
+	card := d.sets[i]
+	st := d.card(g.cardKey)
+	box := d.layout.cards[i]
+	if !st.external {
+		st.external, st.dragging, st.moved = true, true, true
+		x := float32(float64(g.pointer.X-s.rect.Left) / s.scale)
+		y := float32(float64(g.pointer.Y-s.rect.Top) / s.scale)
+		// Anchor the middle of the new card to the pointer at the instant
+		// the native window drag was handed over.
+		st.dx, st.dy = x-(box.X+box.W/2), y-(box.Y+box.H/2)
+		s.setDragging(true)
+		if a.flights != nil {
+			post(a.flights.standByAll)
+		}
+		a.aimCard(d, card, st)
+	} else {
+		dx := float32(float64(cur.X-g.lastPointer.X) / s.scale)
+		dy := float32(float64(cur.Y-g.lastPointer.Y) / s.scale)
+		if dx != 0 || dy != 0 {
+			s.drag(card, st, dx, dy)
+		}
+	}
+	g.lastPointer = cur
+	if !winapi.LeftButtonDown() {
+		// Reuse the ordinary card drop logic for sorting, joining the stage,
+		// and moving to another display's strip.
+		s.letGo(card, st, box)
+		st.external = false
+		g.external = false
+		s.win.Invalidate()
+	}
 }

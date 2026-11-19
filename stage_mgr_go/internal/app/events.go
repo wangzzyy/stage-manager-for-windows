@@ -318,6 +318,7 @@ func (a *App) poll() {
 	}
 	cur := winapi.Cursor()
 	now := time.Now()
+	a.updateDraggedCard(cur)
 	a.watchTaskbar(cur)
 	for _, d := range a.displays {
 		if d.strip != nil {

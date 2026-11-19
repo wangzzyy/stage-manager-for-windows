@@ -15,6 +15,7 @@ import (
 type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
+	external bool // the drag is driven by the app's global pointer poll
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
 	// it is dragged, and returning that it is on its way back.
@@ -517,7 +518,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	dx, dy, held := el.Dragged()
 	if held {
 		s.drag(g, st, dx, dy)
-	} else if st.dragging || st.dx != 0 || st.dy != 0 {
+	} else if !st.external && (st.dragging || st.dx != 0 || st.dy != 0) {
 		s.letGo(g, st, box)
 	}
 	if el.Clicked() && !st.moved {

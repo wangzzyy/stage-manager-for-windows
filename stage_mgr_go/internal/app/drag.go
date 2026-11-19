@@ -6,7 +6,6 @@ import (
 
 	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
-	"github.com/egoist/mygo/ui"
 )
 
 // dwell is how long a window dragged onto another display rests there

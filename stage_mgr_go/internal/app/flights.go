@@ -526,6 +526,11 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		}
 		casts := castsShadow(w.HWND)
 		fl := flight{still: st.fly, hwnd: w.HWND, from: poseOf(w.Frame), shade: ownShade(casts, winapi.HasActiveFrame(w.HWND)), casts: casts, holdsShadow: true, fromOp: 1, toOp: 1}
+		// A window handed from a native move into its card flies from the
+		// actual drop point, not the stale catalog frame from before the drag.
+		if p, ok := d.dropPoses[w.HWND]; ok {
+			fl.from = p
+		}
 		if target, ok := to[w.HWND]; ok {
 			fl.to = target
 		} else if p, ok := to[front[w.App]]; ok {

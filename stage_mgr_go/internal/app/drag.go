@@ -61,7 +61,9 @@ func (a *App) dragOver() {
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				g.converted = true
+				dragPose := poseOf(winapi.FrameBounds(g.h))
 				winapi.CancelMoveSize(g.h)
+				target.dropPoses[g.h] = dragPose
 				a.sendToStrip(target, w, g.from)
 				a.beginWindowCardDrag(target, key)
 				return
@@ -72,7 +74,9 @@ func (a *App) dragOver() {
 					stage = a.heading(target)
 				}
 				g.converted = true
+				dragPose := poseOf(winapi.FrameBounds(g.h))
 				winapi.CancelMoveSize(g.h)
+				target.dropPoses[g.h] = dragPose
 				a.leave(g.home, w)
 				a.sendAcross(target, w, stage)
 				a.beginWindowCardDrag(target, key)

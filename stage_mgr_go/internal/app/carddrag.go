@@ -19,9 +19,7 @@ func (a *App) beginWindowCardDrag(d *display, key string) {
 	st.dx, st.dy = 0, 0
 	st.externalStartX = float32(float64(cur.X-s.rect.Left) / s.scale)
 	st.externalStartY = float32(float64(cur.Y-s.rect.Top) / s.scale)
-	at := 0
-	if s.scale > 0 { at = d.layout.nearestSlot(st.externalStartY) }
-	a.setCardDrag(&cardDrag{from:d, key:key, aim:aimSort, to:d, at:at})
+	a.setCardDrag(&cardDrag{from:d, key:key, aim:aimSort, to:d})
 	s.setDragging(true)
 	s.win.Invalidate()
 }
@@ -32,8 +30,12 @@ func (s *strip) pollWindowCardDrag(cur winapi.Point) {
 		if !st.external { continue }
 		if winapi.LeftButtonDown() {
 			if s.scale > 0 {
-				st.dx = float32(float64(cur.X-s.rect.Left)/s.scale) - st.externalStartX
-				st.dy = float32(float64(cur.Y-s.rect.Top)/s.scale) - st.externalStartY
+				x := float32(float64(cur.X-s.rect.Left) / s.scale)
+				y := float32(float64(cur.Y-s.rect.Top) / s.scale)
+				// Keep the pointer's current position as the card's aim,
+				// rather than sorting from the card's old slot.
+				st.dx = x - (st.box.X + st.box.W/2)
+				st.dy = y - (st.box.Y + st.box.H/2)
 			}
 			if g := findSet(d.sets, key); g != nil { a.aimCard(d, g, st) }
 			s.win.Invalidate()

@@ -63,6 +63,9 @@ func (a *App) dragOver() {
 				g.converted = true
 				dragPose := poseOf(winapi.FrameBounds(g.h))
 				winapi.CancelMoveSize(g.h)
+				if target.dropPoses == nil {
+					target.dropPoses = make(map[winapi.HWND]pose)
+				}
 				target.dropPoses[g.h] = dragPose
 				a.sendToStrip(target, w, g.from)
 				a.beginWindowCardDrag(target, key)

@@ -149,10 +149,15 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	if moved && g.sent {
-		// The native move-size loop ends on mouse-up. Finish the card drag
-		// here too, in case the 16 ms pointer poll did not see the release.
+		// Parking the source window can end Windows' native move-size loop
+		// before the strip has committed the new card. Keep the drag alive
+		// while the button is held: the global pointer poll will pick it up
+		// as soon as the card exists, then finish it on mouse-up.
 		if g.external {
 			a.updateDraggedCard(winapi.Cursor())
+			if g.external && winapi.LeftButtonDown() {
+				return
+			}
 		}
 		a.drag = nil
 		return
@@ -290,6 +295,9 @@ func (a *App) updateDraggedCard(cur winapi.Point) {
 	s := d.strip
 	if s == nil || s.scale <= 0 {
 		g.external = false
+		if a.drag == g {
+			a.drag = nil
+		}
 		return
 	}
 	i := slices.IndexFunc(d.sets, func(set *set) bool { return set.key == g.cardKey })
@@ -298,6 +306,9 @@ func (a *App) updateDraggedCard(cur winapi.Point) {
 		// the button is held, but do not leave a stale drag after release.
 		if !winapi.LeftButtonDown() {
 			g.external = false
+			if a.drag == g {
+				a.drag = nil
+			}
 		}
 		return
 	}
@@ -330,6 +341,9 @@ func (a *App) updateDraggedCard(cur winapi.Point) {
 		s.letGo(card, st, box)
 		st.external = false
 		g.external = false
+		if a.drag == g {
+			a.drag = nil
+		}
 		s.win.Invalidate()
 	}
 }

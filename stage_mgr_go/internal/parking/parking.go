@@ -33,7 +33,7 @@ const (
 	// area: back on the desktop DWM sees a window without a frame and gives it
 	// neither rounded corners nor a shadow, until it is resized. Asked here,
 	// the app works it out for where the window is going.
-	homeFlags = moveFlags | winapi.SwpFrameChanged | winapi.SwpShowWindow
+	homeFlags = moveFlags | winapi.SwpFrameChanged
 	settle    = time.Second
 	// A window sent home that is not there after chaseAfter is sent again,
 	// up to chaseTries times, and then fitted onto the nearest display.
@@ -524,10 +524,8 @@ func (s *Service) parkOne(h, owner winapi.HWND, place func(r winapi.Rect) (home 
 		return false
 	}
 	home, spot := place(r)
-	// Hide the live window as it is parked. Moving it outside the virtual
-	// desktop alone can leave its old DWM surface visible at the drag origin
-	// while the flight layer shrinks its captured image. Showing it again is
-	// part of the home move (homeFlags). Keep the non-blocking path for hung apps.
+	// Move synchronously to avoid leaving the old window surface at the drag origin.
+	// Keep the non-blocking path for hung apps.
 	if !moveForParking(h, spot) {
 		return false
 	}
@@ -567,7 +565,7 @@ func spotFor(home winapi.Rect) winapi.Point {
 // cannot remain visible after the flight layer takes over. A hung app keeps
 // the asynchronous path so it cannot hold up the stage manager.
 func moveForParking(h winapi.HWND, p winapi.Point) bool {
-	flags := uint32(moveFlags | winapi.SwpHideWindow)
+	flags := uint32(moveFlags)
 	if !winapi.IsHung(h) {
 		flags &^= winapi.SwpAsyncWindowPos
 	}

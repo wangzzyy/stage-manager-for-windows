@@ -486,6 +486,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	right := s.right()
 	sign := turnSign(right)
 	motion := cardMotion
+	// A window converted from a native drag is already under the pointer.
+	// Do not run the card's normal enter/position transition while that
+	// external drag is active; it would look like a stage-switch animation.
+	if st.external {
+		motion = ui.ElementTransition{}
+	}
 	if landing {
 		motion.Enter = nil
 	} else if right {

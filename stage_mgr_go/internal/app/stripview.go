@@ -668,8 +668,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		e := flightEase(p)
 		toW, toH := float64(box.W)*s.scale, float64(box.H)*s.scale
 		if toW > 0 && toH > 0 {
-			startScale := math.Min(st.externalFrom.w/toW, st.externalFrom.h/toH)
-			startScale = min(max(startScale, 0.01), 1)
+			// The layout box is card-sized; enlarge it to the sampled window
+			// dimensions first, then animate down to its resting size.
+			startScale := math.Max(st.externalFrom.w/toW, st.externalFrom.h/toH)
+			startScale = math.Max(startScale, 0.01)
 			scale = float32(startScale + (1-startScale)*e)
 			fromX := st.externalFrom.x + st.externalFrom.w/2
 			fromY := st.externalFrom.y + st.externalFrom.h/2

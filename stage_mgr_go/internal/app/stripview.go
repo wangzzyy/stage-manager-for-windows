@@ -658,6 +658,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Transform the real card, not a duplicate on the flight layer. Its
 	// destination is recomputed from the current card box and pointer offset
 	// every frame, so moving the mouse during the shrink changes the endpoint.
+	// Reset any previous hover/click shake on the first visible handoff
+	// frame. The full-display landing image has no shake transform.
+	if !st.externalLayer && !st.externalPresented {
+		el.Jump("shake", 0)
+	}
 	shake := el.AnimateTo("shake", 0, shakeSpring)
 	// The full-display landing image has no shake transform. Keep the real
 	// card's handoff pose identical so a leftover shake cannot create a
@@ -694,28 +699,25 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			st.externalAnimating = false
 			st.externalFrom = pose{}
 			st.externalStarted = time.Time{}
-			// Reset any previous hover/click shake before exposing the real
-			// card. The overlay's final pose has no shake transform.
-			if st.externalLayer {
-				el.Jump("shake", 0)
-				st.externalLayer = false
-				// Do not let the full-display overlay disappear until this
-				// strip frame has been built with the real card visible.
-				post(func() {
-					st.externalPresented = true
-					if a.flights != nil {
-						if l := a.flights.layers[d.mon.Device]; l != nil {
-							l.win.Invalidate()
-						}
-					}
-				})
-			}
 		}
 	}
 	if st.externalLayer {
 		op = 0
 	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
+	// Once the flight layer has exposed the real card, acknowledge only
+	// after this strip frame has been built. The overlay waits for this
+	// signal before removing its final image.
+	if !st.externalLayer && !st.externalPresented && a.flights != nil {
+		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil {
+			post(func() {
+				if !st.externalLayer && !st.externalPresented && l.landing != nil {
+					st.externalPresented = true
+					l.win.Invalidate()
+				}
+			})
+		}
+	}
 
 	el.ContextMenu(func(m *ui.Menu) {
 		tr := a.tr()

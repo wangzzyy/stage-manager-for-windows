@@ -365,6 +365,8 @@ func (s *strip) jointFooter(c *ui.Context, el ui.Element, band, r ui.Rect, op, h
 	})
 }
 
+const dragIntoCardDuration = 1500 * time.Millisecond // deliberately slow while validating the live-card transform
+
 var (
 	// The press shows at once; the flash of a click fades as the overview
 	// opens.
@@ -662,7 +664,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		if st.externalStarted.IsZero() {
 			st.externalStarted = c.Now()
 		}
-		p := min(float64(c.Now().Sub(st.externalStarted))/float64(420*time.Millisecond), 1)
+		p := min(float64(c.Now().Sub(st.externalStarted))/float64(dragIntoCardDuration), 1)
 		e := flightEase(p)
 		toW, toH := float64(box.W)*s.scale, float64(box.H)*s.scale
 		if toW > 0 && toH > 0 {

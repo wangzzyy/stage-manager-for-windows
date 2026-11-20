@@ -259,6 +259,7 @@ type cardLanding struct {
 }
 
 type layer struct {
+	owner   *flights
 	landing *cardLanding
 	win     *mygo.Window
 	hwnd    winapi.HWND
@@ -299,7 +300,7 @@ func (f *flights) layer(d *display) *layer {
 	if l != nil {
 		return l
 	}
-	l = &layer{framed: f.a.paintStrips, name: d.mon.Device}
+	l = &layer{owner: f, framed: f.a.paintStrips, name: d.mon.Device}
 	pane := func(view func(*ui.Context)) (*mygo.Window, winapi.HWND) {
 		win := mygo.NewFlyout(mygo.FlyoutOptions{Tray: f.a.tray, Hidden: true, Width: 400, Height: 400, Content: ui.View(view)})
 		h := winapi.HWND(win.NativeHandle())
@@ -967,7 +968,9 @@ func (l *layer) view(c *ui.Context) {
 				st.externalStarted = time.Time{}
 				l.landing = nil
 				d.strip.win.Invalidate()
-				f.hideLater(l)
+				if l.owner != nil {
+					l.owner.hideLater(l)
+				}
 			}
 		}
 		return

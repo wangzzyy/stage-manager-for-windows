@@ -12,7 +12,6 @@ import (
 func (a *App) beginWindowCardDrag(d *display, key string) {
 	if d == nil || d.strip == nil { return }
 	s := d.strip
-	cur := winapi.Cursor()
 	st := d.card(key)
 	st.external, st.dragging, st.moved = true, true, true
 	st.dx, st.dy = 0, 0

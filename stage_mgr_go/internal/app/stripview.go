@@ -658,9 +658,17 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Transform the real card, not a duplicate on the flight layer. Its
 	// destination is recomputed from the current card box and pointer offset
 	// every frame, so moving the mouse during the shrink changes the endpoint.
+	// Only the card currently represented by the full-display landing
+	// overlay participates in its handoff; other cards keep their own shake.
+	var landingLayer *layer
+	if a.flights != nil {
+		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil && l.landing.d == d && l.landing.key == g.key {
+			landingLayer = l
+		}
+	}
 	// Reset any previous hover/click shake on the first visible handoff
 	// frame. The full-display landing image has no shake transform.
-	if !st.externalLayer && !st.externalPresented {
+	if landingLayer != nil && !st.externalLayer && !st.externalPresented {
 		el.Jump("shake", 0)
 	}
 	shake := el.AnimateTo("shake", 0, shakeSpring)
@@ -708,15 +716,14 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Once the flight layer has exposed the real card, acknowledge only
 	// after this strip frame has been built. The overlay waits for this
 	// signal before removing its final image.
-	if !st.externalLayer && !st.externalPresented && a.flights != nil {
-		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil {
-			post(func() {
-				if !st.externalLayer && !st.externalPresented && l.landing != nil {
-					st.externalPresented = true
-					l.win.Invalidate()
-				}
-			})
-		}
+	if landingLayer != nil && !st.externalLayer && !st.externalPresented {
+		post(func() {
+			if !st.externalLayer && !st.externalPresented && landingLayer.landing != nil &&
+				landingLayer.landing.d == d && landingLayer.landing.key == g.key {
+				st.externalPresented = true
+				landingLayer.win.Invalidate()
+			}
+		})
 	}
 
 	el.ContextMenu(func(m *ui.Menu) {

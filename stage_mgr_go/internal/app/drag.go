@@ -268,7 +268,10 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	winapi.ShowNoActivate(w.HWND)
 	from := poseOf(origin)
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		if still := a.media.still(w.HWND); still != nil && still.card != nil && a.flights != nil {
+		// The card animation must not depend on whether the capture produced
+		// a cached still. A missing still used to skip the animation entirely,
+		// leaving the card at its sidebar size on the first visible frame.
+		if a.flights != nil {
 			a.flights.dragIntoCard(d, w, from)
 		}
 		a.redraw()

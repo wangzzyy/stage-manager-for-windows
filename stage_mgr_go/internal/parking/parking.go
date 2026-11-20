@@ -280,6 +280,10 @@ func place(h winapi.HWND, p winapi.Point) {
 		return
 	}
 	land(h, p)
+	// Parking uses SWP_NOREDRAW to preserve the last composed frame while
+	// windows are off-screen. Invalidate on return so apps that discarded
+	// their surface while hidden repaint without waiting for pointer input.
+	winapi.Redraw(h)
 }
 
 // raising counts the calls to raise: the last one asked for is the order

@@ -260,8 +260,12 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
-	// Show only after the window is safely parked or moved back home.
+	// Keep the real window shown at its parking spot. Capture its contents
+	// after the native drag has ended, then refresh the card from that still.
 	winapi.ShowNoActivate(w.HWND)
+	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
+		a.redraw()
+	})
 	d.model.Switch(next, time.Now())
 	a.windows = a.cat.Windows()
 	a.refresh()

@@ -954,7 +954,9 @@ func (l *layer) view(c *ui.Context) {
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
 			e := flightEase(p)
 			toW, toH := float64(st.box.W)*d.strip.scale, float64(st.box.H)*d.strip.scale
-			toX := float64(d.strip.rect.Left) + float64(st.box.X+st.dx)*d.strip.scale
+			// Use the card's actual rendered offset, not the raw drag delta. The
+			// strip may constrain or ease the card differently near its outer edge.
+			toX := float64(d.strip.rect.Left) + float64(st.box.X+st.ox)*d.strip.scale
 			toY := float64(d.strip.rect.Top) + float64(st.box.Y+st.dy)*d.strip.scale
 			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
 			at := lerpPose(landing.from, to, e)

@@ -60,11 +60,12 @@ func (a *App) dragOver() {
 			w := a.windows[i]
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
-				// Capture the live dragged frame before cancelling the native
-				// move loop: WM_CANCELMODE can restore the window to its
-				// pre-drag position. The flight must start where the pointer
-				// actually left it.
-								if !winapi.CancelMoveSize(g.h) {
+				// Hide before cancelling the native move loop: WM_CANCELMODE
+				// can restore the real window to its pre-drag position. Keep it
+				// hidden until sendDraggedToStrip parks it off-screen.
+				winapi.Hide(g.h)
+				if !winapi.CancelMoveSize(g.h) {
+					winapi.ShowNoActivate(g.h)
 					return
 				}
 				g.converted = true
@@ -80,9 +81,12 @@ func (a *App) dragOver() {
 				if target != g.over {
 					stage = a.heading(target)
 				}
-				// Capture the live dragged frame before cancelling the native
-				// move loop; cancellation can restore the pre-drag position.
-								if !winapi.CancelMoveSize(g.h) {
+				// Hide before cancelling the native move loop: WM_CANCELMODE
+				// can restore the real window to its pre-drag position. Keep it
+				// hidden until sendDraggedToStrip parks it off-screen.
+				winapi.Hide(g.h)
+				if !winapi.CancelMoveSize(g.h) {
+					winapi.ShowNoActivate(g.h)
 					return
 				}
 				g.converted = true
@@ -256,6 +260,8 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
+	// Show only after the window is safely parked or moved back home.
+	winapi.ShowNoActivate(w.HWND)
 	d.model.Switch(next, time.Now())
 	a.windows = a.cat.Windows()
 	a.refresh()

@@ -14,19 +14,11 @@ func (a *App) beginWindowCardDrag(d *display, key string) {
 	s := d.strip
 	st := d.card(key)
 	st.external, st.dragging, st.moved = true, true, true
-	// Place the card at the pointer on its very first frame. Starting at
-	// zero makes the strip's catch-up spring animate it from its old slot.
-	if s.scale > 0 && st.box.W > 0 && st.box.H > 0 {
-		cur := winapi.Cursor()
-		x := float32(float64(cur.X-s.rect.Left) / s.scale)
-		y := float32(float64(cur.Y-s.rect.Top) / s.scale)
-		st.dx, st.dy = s.keepIn(st.box,
-			x-(st.box.X+st.box.W/2), y-(st.box.Y+st.box.H/2), 1.08)
-		st.ox, st.follow = st.dx, followIn
-	} else {
-		st.dx, st.dy = 0, 0
-		st.ox, st.follow = 0, followNone
-	}
+	// The stage's window has no card layout box yet. Defer pointer placement
+	// until strip.card has its first real box, before that card is drawn.
+	st.externalReady = false
+	st.dx, st.dy = 0, 0
+	st.ox, st.follow = 0, followNone
 	a.setCardDrag(&cardDrag{from:d, key:key, aim:aimSort, to:d})
 	s.setDragging(true)
 	s.win.Invalidate()
@@ -36,6 +28,10 @@ func (s *strip) pollWindowCardDrag(cur winapi.Point) {
 	a, d := s.a, s.d
 	for key, st := range d.cards {
 		if !st.external { continue }
+		if !st.externalReady {
+			s.win.Invalidate()
+			return
+		}
 		if winapi.LeftButtonDown() {
 			if s.scale > 0 {
 				x := float32(float64(cur.X-s.rect.Left) / s.scale)

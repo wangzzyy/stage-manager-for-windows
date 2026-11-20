@@ -16,6 +16,7 @@ type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
 	external bool
+	externalReady bool
 	box ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
@@ -479,6 +480,17 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	a, d := s.a, s.d
 	st := d.card(g.key)
 	st.box = box
+	// A newly converted stage window has no previous card box. Resolve its
+	// first position now, using the real layout box, before drawing anything.
+	if st.external && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
+		cur := winapi.Cursor()
+		x := float32(float64(cur.X-s.rect.Left) / s.scale)
+		y := float32(float64(cur.Y-s.rect.Top) / s.scale)
+		st.dx, st.dy = s.keepIn(box,
+			x-(box.X+box.W/2), y-(box.Y+box.H/2), 1.08)
+		st.ox, st.follow = st.dx, followIn
+		st.externalReady = true
+	}
 	// A card that windows are flying into shows nothing until they land.
 	// It enters where it lands rather than sliding in, so that it is in
 	// place when they get there.

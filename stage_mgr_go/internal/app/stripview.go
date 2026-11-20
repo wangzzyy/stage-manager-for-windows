@@ -16,6 +16,7 @@ type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
 	external          bool
+	externalLayer     bool
 	externalAnimating bool
 	externalReady     bool
 	externalFrom      pose
@@ -689,6 +690,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			st.externalFrom = pose{}
 			st.externalStarted = time.Time{}
 		}
+	}
+	if st.externalLayer {
+		op = 0
 	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 

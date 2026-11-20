@@ -64,17 +64,15 @@ func (a *App) dragOver() {
 				// move loop: WM_CANCELMODE can restore the window to its
 				// pre-drag position. The flight must start where the pointer
 				// actually left it.
-				dragPose := poseOf(winapi.FrameBounds(g.h))
-				if !winapi.CancelMoveSize(g.h) {
+								if !winapi.CancelMoveSize(g.h) {
 					return
 				}
 				g.converted = true
-				if target.dropPoses == nil {
-					target.dropPoses = make(map[winapi.HWND]pose)
-				}
-				target.dropPoses[g.h] = dragPose
-				a.sendToStrip(target, w, g.from)
+				// Start the card's external drag before the native move loop
+				// ends. The loop-end event may clear a.drag before the switch
+				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
+				a.sendToStrip(target, w, g.from)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -84,18 +82,15 @@ func (a *App) dragOver() {
 				}
 				// Capture the live dragged frame before cancelling the native
 				// move loop; cancellation can restore the pre-drag position.
-				dragPose := poseOf(winapi.FrameBounds(g.h))
-				if !winapi.CancelMoveSize(g.h) {
+								if !winapi.CancelMoveSize(g.h) {
 					return
 				}
 				g.converted = true
-				if target.dropPoses == nil {
-					target.dropPoses = make(map[winapi.HWND]pose)
-				}
-				target.dropPoses[g.h] = dragPose
+				// Preserve the pointer gesture independently of a.drag: the
+				// native move-size-end event can arrive before card creation.
+				a.beginWindowCardDrag(target, key)
 				a.leave(g.home, w)
 				a.sendAcross(target, w, stage)
-				a.beginWindowCardDrag(target, key)
 				return
 			}
 		}

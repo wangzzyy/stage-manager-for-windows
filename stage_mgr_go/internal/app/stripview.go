@@ -16,7 +16,6 @@ type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
 	external bool
-	externalStartX, externalStartY float32
 	box ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
@@ -487,18 +486,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	right := s.right()
 	sign := turnSign(right)
 	motion := cardMotion
-	if !st.arrive.Empty() {
-		// It comes in where its windows were let go, at their size.
-		// Enter motions move and scale about the card's middle.
-		r := st.arrive
-		st.arrive = winapi.Rect{}
-		x := float32(float64(r.Left-s.rect.Left)/s.scale) + float32(float64(r.W())/s.scale)/2
-		y := float32(float64(r.Top-s.rect.Top)/s.scale) + float32(float64(r.H())/s.scale)/2
-		motion.Enter = &ui.Motion{
-			X: x - (box.X + box.W/2), Y: y - (box.Y + box.H/2),
-			Opacity: 1, Scale: float32(float64(r.W())/s.scale) / box.W,
-		}
-	} else if landing {
+	if landing {
 		motion.Enter = nil
 	} else if right {
 		enter := *motion.Enter

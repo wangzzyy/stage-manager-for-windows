@@ -967,6 +967,10 @@ func (l *layer) view(c *ui.Context) {
 				st.externalAnimating = false
 				st.externalStarted = time.Time{}
 				l.landing = nil
+				// Clear the last full-display animation frame immediately.
+				// The layer stays alive briefly for reuse, so without this
+				// redraw its final card image remains frozen on screen.
+				l.win.Invalidate()
 				d.strip.win.Invalidate()
 				if l.owner != nil {
 					l.owner.hideLater(l)

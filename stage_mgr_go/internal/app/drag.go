@@ -72,7 +72,7 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendToStrip(target, w, g.from)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -90,7 +90,9 @@ func (a *App) dragOver() {
 				// native move-size-end event can arrive before card creation.
 				a.beginWindowCardDrag(target, key)
 				a.leave(g.home, w)
-				a.sendAcross(target, w, stage)
+				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
+				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home)
 				return
 			}
 		}
@@ -239,6 +241,24 @@ func (a *App) stripUnder(p winapi.Point) *display {
 		return nil
 	}
 	return d
+}
+
+// sendDraggedToStrip converts a native window drag directly into a card.
+// Unlike a stage switch, this handoff has no flight layer or window animation:
+// the real window is parked immediately and the strip is refreshed in place.
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home winapi.Rect) {
+	debugf("%q converted directly into a strip card", w.Title)
+	if a.settings.HideInactive {
+		if a.park.ParkImmediate(w.HWND) {
+			a.park.Rehome(w.HWND, home)
+		}
+	} else {
+		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	}
+	d.model.Switch(next, time.Now())
+	a.windows = a.cat.Windows()
+	a.refresh()
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

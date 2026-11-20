@@ -9,7 +9,6 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-
 func (a *App) beginWindowCardDrag(d *display, key string) {
 	if d == nil || d.strip == nil { return }
 	s := d.strip
@@ -17,8 +16,6 @@ func (a *App) beginWindowCardDrag(d *display, key string) {
 	st := d.card(key)
 	st.external, st.dragging, st.moved = true, true, true
 	st.dx, st.dy = 0, 0
-	st.externalStartX = float32(float64(cur.X-s.rect.Left) / s.scale)
-	st.externalStartY = float32(float64(cur.Y-s.rect.Top) / s.scale)
 	a.setCardDrag(&cardDrag{from:d, key:key, aim:aimSort, to:d})
 	s.setDragging(true)
 	s.win.Invalidate()

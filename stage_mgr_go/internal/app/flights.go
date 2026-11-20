@@ -965,10 +965,16 @@ func (l *layer) view(c *ui.Context) {
 			// Keep the overlay's exact final frame until the strip confirms
 			// that its real card has rendered the matching resting pose. The
 			// two UI windows do not necessarily present on the same frame.
-			if p < 1 || !st.externalPresented {
-				// Keep the exact final overlay frame until the strip has
-				// built a frame with the real card visible. Invalidate from
-				// that frame's post callback to avoid a cross-window race.
+			if p < 1 {
+				l.pace.frame(l.win)
+			} else if st.externalLayer {
+				// Reveal the real card and request its next frame. It will
+				// acknowledge from post() after building that visible frame.
+				st.externalLayer = false
+				st.externalPresented = false
+				d.strip.win.Invalidate()
+				l.pace.frame(l.win)
+			} else if !st.externalPresented {
 				l.pace.frame(l.win)
 			} else {
 				st.externalPresented = false

@@ -843,6 +843,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 	l.raise()
 	cs := d.card(f.a.groupKey(w))
 	cs.externalLayer = true
+	cs.externalPresented = false
 	cs.externalAnimating = false
 	cs.externalFrom = pose{}
 	cs.externalStarted = time.Time{}
@@ -964,9 +965,13 @@ func (l *layer) view(c *ui.Context) {
 			// Keep the overlay's exact final frame until the strip confirms
 			// that its real card has rendered the matching resting pose. The
 			// two UI windows do not necessarily present on the same frame.
-			if p < 1 || st.externalLayer {
+			if p < 1 || !st.externalPresented {
+				// Keep the exact final overlay frame until the strip has
+				// built a frame with the real card visible. Invalidate from
+				// that frame's post callback to avoid a cross-window race.
 				l.pace.frame(l.win)
 			} else {
+				st.externalPresented = false
 				l.landing = nil
 				// The strip has already presented the real card; now clear
 				// the overlay without exposing an intermediate frame.

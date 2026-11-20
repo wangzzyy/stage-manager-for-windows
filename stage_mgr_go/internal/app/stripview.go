@@ -366,8 +366,6 @@ func (s *strip) jointFooter(c *ui.Context, el ui.Element, band, r ui.Rect, op, h
 	})
 }
 
-const dragIntoCardDuration = 1500 * time.Millisecond // deliberately slow while validating the live-card transform
-
 var (
 	// The press shows at once; the flash of a click fades as the overview
 	// opens.

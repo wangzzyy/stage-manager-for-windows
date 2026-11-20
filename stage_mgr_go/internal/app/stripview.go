@@ -15,11 +15,12 @@ import (
 type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
-	external bool
-	externalReady bool
-	externalFrom pose
-	externalStarted time.Time
-	box ui.Rect
+	external          bool
+	externalAnimating bool
+	externalReady     bool
+	externalFrom      pose
+	externalStarted   time.Time
+	box                ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
 	// it is dragged, and returning that it is on its way back.

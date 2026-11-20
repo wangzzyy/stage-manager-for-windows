@@ -250,8 +250,8 @@ func (a *App) stripUnder(p winapi.Point) *display {
 }
 
 // sendDraggedToStrip converts a native window drag directly into a card.
-// Unlike a stage switch, this handoff has no flight layer or window animation:
-// the real window is parked immediately and the strip is refreshed in place.
+// The real window is parked immediately; its captured image then flies from
+// the live drag position into the card's measured layout position.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
 	debugf("%q converted directly into a strip card", w.Title)
 	if a.settings.HideInactive {

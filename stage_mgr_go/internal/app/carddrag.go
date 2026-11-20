@@ -13,7 +13,7 @@ func (a *App) beginWindowCardDrag(d *display, key string) {
 	if d == nil || d.strip == nil { return }
 	s := d.strip
 	st := d.card(key)
-	st.external, st.externalAnimating, st.dragging, st.moved = true, true, true, true
+	st.external, st.externalAnimating, st.dragging, st.moved = true, false, true, true
 	// The stage's window has no card layout box yet. Defer pointer placement
 	// until strip.card has its first real box, before that card is drawn.
 	st.externalReady = false
@@ -28,9 +28,6 @@ func (s *strip) pollWindowCardDrag(cur winapi.Point) {
 	a, d := s.a, s.d
 	for key, st := range d.cards {
 		if !st.external { continue }
-		if st.externalAnimating {
-			return
-		}
 		if !st.externalReady {
 			s.win.Invalidate()
 			return

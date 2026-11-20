@@ -17,6 +17,8 @@ type cardState struct {
 	dragging bool
 	external bool
 	externalReady bool
+	externalFrom pose
+	externalStarted time.Time
 	box ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
@@ -482,7 +484,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	st.box = box
 	// A newly converted stage window has no previous card box. Resolve its
 	// first position now, using the real layout box, before drawing anything.
-	if st.external && !st.externalAnimating && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
+	if st.external && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
 		cur := winapi.Cursor()
 		x := float32(float64(cur.X-s.rect.Left) / s.scale)
 		y := float32(float64(cur.Y-s.rect.Top) / s.scale)
@@ -623,7 +625,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// underneath; fading it in once the flight is gone would blink. The
 	// icons come in on the flight layer, above the flights.
 	shown, iconOp := float32(1), float32(1)
-	if landing || st.externalAnimating {
+	if landing {
 		shown, iconOp = 0, 0
 	}
 	op := float32(1)
@@ -650,8 +652,40 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if st.returning && el.Settled("dx") && el.Settled("dy") {
 		st.returning = false
 	}
-	// The shake runs along the strip's width, to and fro about where the card is.
-	el.Translate(ox+el.AnimateTo("shake", 0, shakeSpring), oy).Opacity(op)
+	// Transform the real card, not a duplicate on the flight layer. Its
+	// destination is recomputed from the current card box and pointer offset
+	// every frame, so moving the mouse during the shrink changes the endpoint.
+	shake := el.AnimateTo("shake", 0, shakeSpring)
+	translateX, translateY, scale := ox+shake, oy, float32(1)
+	if st.externalAnimating && st.externalReady && st.externalFrom.w > 0 && s.scale > 0 {
+		if st.externalStarted.IsZero() {
+			st.externalStarted = c.Now()
+		}
+		p := min(float64(c.Now().Sub(st.externalStarted))/float64(420*time.Millisecond), 1)
+		e := flightEase(p)
+		toW, toH := float64(box.W)*s.scale, float64(box.H)*s.scale
+		if toW > 0 && toH > 0 {
+			startScale := math.Min(st.externalFrom.w/toW, st.externalFrom.h/toH)
+			startScale = min(max(startScale, 0.01), 1)
+			scale = float32(startScale + (1-startScale)*e)
+			fromX := st.externalFrom.x + st.externalFrom.w/2
+			fromY := st.externalFrom.y + st.externalFrom.h/2
+			toX := float64(s.rect.Left) + float64(box.X+ox+box.W/2)*s.scale
+			toY := float64(s.rect.Top) + float64(box.Y+oy+box.H/2)*s.scale
+			centerX := fromX + (toX-fromX)*e
+			centerY := fromY + (toY-fromY)*e
+			translateX += float32((centerX-toX)/s.scale)
+			translateY += float32((centerY-toY)/s.scale)
+		}
+		if p < 1 {
+			c.AnimationFrame()
+		} else {
+			st.externalAnimating = false
+			st.externalFrom = pose{}
+			st.externalStarted = time.Time{}
+		}
+	}
+	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 
 	el.ContextMenu(func(m *ui.Menu) {
 		tr := a.tr()

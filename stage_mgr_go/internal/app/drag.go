@@ -263,22 +263,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
 	// Keep the real window shown at its parking spot. Capture its contents
-	// after the native drag has ended, then refresh the card from that still.
+	// after the native drag has ended; the real card itself animates from
+	// the sampled window frame once its layout box is available.
 	winapi.ShowNoActivate(w.HWND)
 	from := poseOf(origin)
-	st := d.card(a.groupKey(w))
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		if still := a.media.still(w.HWND); still != nil && still.fly != nil {
-			a.flights.dragIntoCard(d, w, still.fly, from, func() {
-				st.externalAnimating = false
-				st.externalReady = false
-				if d.strip != nil {
-					d.strip.win.Invalidate()
-				}
-			})
-		} else {
-			st.externalAnimating = false
-			st.externalReady = false
+		if still := a.media.still(w.HWND); still != nil && still.card != nil && a.flights != nil {
+			a.flights.dragIntoCard(d, w, from)
 		}
 		a.redraw()
 	})

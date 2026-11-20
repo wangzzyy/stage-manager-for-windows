@@ -60,6 +60,7 @@ func (a *App) dragOver() {
 			w := a.windows[i]
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
+				origin := winapi.FrameBounds(g.h)
 				// Hide before cancelling the native move loop: WM_CANCELMODE
 				// can restore the real window to its pre-drag position. Keep it
 				// hidden until sendDraggedToStrip parks it off-screen.
@@ -73,10 +74,11 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
+				origin := winapi.FrameBounds(g.h)
 				stage := g.stage
 				if target != g.over {
 					stage = a.heading(target)
@@ -96,7 +98,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin)
 				return
 			}
 		}
@@ -250,7 +252,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip converts a native window drag directly into a card.
 // Unlike a stage switch, this handoff has no flight layer or window animation:
 // the real window is parked immediately and the strip is refreshed in place.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home winapi.Rect) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
 	debugf("%q converted directly into a strip card", w.Title)
 	if a.settings.HideInactive {
 		if a.park.ParkImmediate(w.HWND) {
@@ -263,7 +265,21 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// Keep the real window shown at its parking spot. Capture its contents
 	// after the native drag has ended, then refresh the card from that still.
 	winapi.ShowNoActivate(w.HWND)
+	from := poseOf(origin)
+	st := d.card(a.groupKey(w))
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
+		if still := a.media.still(w.HWND); still != nil && still.fly != nil {
+			a.flights.dragIntoCard(d, w, still.fly, from, func() {
+				st.externalAnimating = false
+				st.externalReady = false
+				if d.strip != nil {
+					d.strip.win.Invalidate()
+				}
+			})
+		} else {
+			st.externalAnimating = false
+			st.externalReady = false
+		}
 		a.redraw()
 	})
 	d.model.Switch(next, time.Now())

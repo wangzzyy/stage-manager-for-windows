@@ -264,6 +264,9 @@ type layer struct {
 	trip    *trip
 	drag    []flight // held where their from is, under the pointer
 	dragGen int
+	dragLanding *flight
+	dragLandingStart time.Time
+	dragLandingDone func()
 	// framed runs after each frame the layer draws, for the strips below
 	// it to draw theirs (App.paintStrips).
 	framed func()
@@ -811,6 +814,30 @@ func (f *flights) standByAll() {
 // dragged shows the windows of a card being dragged out of display d's
 // strip where they are now: on d's layer, and on that of every other
 // display they reach, as they are dragged toward its strip.
+// dragIntoCard flies a captured window from its live drag position into the
+// card's current layout pose. The target is measured from the strip layout,
+// never from a fixed screen coordinate.
+func (f *flights) dragIntoCard(d *display, w catalog.Window, still *ui.Bitmap, from pose, done func()) {
+	if d == nil || d.strip == nil || still == nil {
+		if done != nil { done() }
+		return
+	}
+	to := f.cardPoses(d, []catalog.Window{w}, false)[w.HWND]
+	if to.w <= 0 || to.h <= 0 {
+		if done != nil { done() }
+		return
+	}
+	l := f.show(d)
+	if l.low { l.raise() }
+	l.dragLanding = &flight{still: still, hwnd: w.HWND, from: from, to: to, fromOp: 1, toOp: 1}
+	l.dragLandingStart = time.Time{}
+	l.dragLandingDone = done
+	l.win.Invalidate()
+}
+
+// dragged shows the windows of a card being dragged out of display d's
+// strip where they are now: on d's layer, and on that of every other
+// display they reach, as they are dragged toward its strip.
 func (f *flights) dragged(d *display, list []flight) {
 	reach := winapi.Rect{Left: math.MaxInt32, Top: math.MaxInt32, Right: math.MinInt32, Bottom: math.MinInt32}
 	for _, fl := range list {
@@ -899,6 +926,23 @@ func (l *layer) view(c *ui.Context) {
 	}
 	for i, f := range l.drag {
 		l.draw(c, i+len(l.list), f.still, f.from, 1, cardShade(float32(f.from.h/l.scale)), 0, 0)
+	}
+	if fl := l.dragLanding; fl != nil {
+		now := c.Now()
+		if l.dragLandingStart.IsZero() {
+			l.dragLandingStart = now
+		}
+		p := min(float64(now.Sub(l.dragLandingStart))/float64(420*time.Millisecond), 1)
+		at := fl.at(flightEase(p))
+		l.draw(c, -1000, fl.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)
+		if p < 1 {
+			l.pace.frame(l.win)
+		} else {
+			done := l.dragLandingDone
+			l.dragLanding, l.dragLandingDone = nil, nil
+			l.dragLandingStart = time.Time{}
+			if done != nil { post(done) }
+		}
 	}
 	if len(l.list) == 0 || l.trip == nil {
 		return

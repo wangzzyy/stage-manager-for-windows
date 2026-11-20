@@ -482,7 +482,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	st.box = box
 	// A newly converted stage window has no previous card box. Resolve its
 	// first position now, using the real layout box, before drawing anything.
-	if st.external && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
+	if st.external && !st.externalAnimating && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
 		cur := winapi.Cursor()
 		x := float32(float64(cur.X-s.rect.Left) / s.scale)
 		y := float32(float64(cur.Y-s.rect.Top) / s.scale)
@@ -623,7 +623,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// underneath; fading it in once the flight is gone would blink. The
 	// icons come in on the flight layer, above the flights.
 	shown, iconOp := float32(1), float32(1)
-	if landing {
+	if landing || st.externalAnimating {
 		shown, iconOp = 0, 0
 	}
 	op := float32(1)

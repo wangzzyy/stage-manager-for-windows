@@ -690,18 +690,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		if p < 1 {
 			c.AnimationFrame()
 		} else {
-			// This is the handoff frame: show the real card at rest first.
-			// The full-display overlay observes externalLayer on its next
-			// frame and only then removes its final image.
 			st.externalAnimating = false
 			st.externalFrom = pose{}
 			st.externalStarted = time.Time{}
-			st.externalLayer = false
-			if a.flights != nil {
-				if l := a.flights.layers[s.d.mon.Device]; l != nil {
-					l.win.Invalidate()
-				}
-			}
 		}
 	}
 	if st.externalLayer {

@@ -658,6 +658,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// destination is recomputed from the current card box and pointer offset
 	// every frame, so moving the mouse during the shrink changes the endpoint.
 	shake := el.AnimateTo("shake", 0, shakeSpring)
+	// The full-display landing image has no shake transform. Keep the real
+	// card's handoff pose identical so a leftover shake cannot create a
+	// one-pixel horizontal jump when the overlay disappears.
+	if st.externalAnimating || st.externalLayer {
+		shake = 0
+	}
 	translateX, translateY, scale := ox+shake, oy, float32(1)
 	if st.externalAnimating && st.externalReady && st.externalFrom.w > 0 && s.scale > 0 {
 		if st.externalStarted.IsZero() {

@@ -961,19 +961,16 @@ func (l *layer) view(c *ui.Context) {
 			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
 			at := lerpPose(landing.from, to, e)
 			l.draw(c, -9001, landing.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)
-			if p < 1 {
+			// Keep the overlay's exact final frame until the strip confirms
+			// that its real card has rendered the matching resting pose. The
+			// two UI windows do not necessarily present on the same frame.
+			if p < 1 || st.externalLayer {
 				l.pace.frame(l.win)
 			} else {
-				st.externalLayer = false
-				st.externalFrom = pose{}
-				st.externalAnimating = false
-				st.externalStarted = time.Time{}
 				l.landing = nil
-				// Clear the last full-display animation frame immediately.
-				// The layer stays alive briefly for reuse, so without this
-				// redraw its final card image remains frozen on screen.
+				// The strip has already presented the real card; now clear
+				// the overlay without exposing an intermediate frame.
 				l.win.Invalidate()
-				d.strip.win.Invalidate()
 				if l.owner != nil {
 					l.owner.hideLater(l)
 				}

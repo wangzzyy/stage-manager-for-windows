@@ -17,6 +17,7 @@ type cardState struct {
 	dragging bool
 	external          bool
 	externalLayer     bool
+	externalPresented bool // the strip has built a visible resting card frame
 	externalAnimating bool
 	externalReady     bool
 	externalFrom      pose
@@ -693,6 +694,22 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			st.externalAnimating = false
 			st.externalFrom = pose{}
 			st.externalStarted = time.Time{}
+			// Reset any previous hover/click shake before exposing the real
+			// card. The overlay's final pose has no shake transform.
+			if st.externalLayer {
+				el.Jump("shake", 0)
+				st.externalLayer = false
+				// Do not let the full-display overlay disappear until this
+				// strip frame has been built with the real card visible.
+				post(func() {
+					st.externalPresented = true
+					if a.flights != nil {
+						if l := a.flights.layers[d.mon.Device]; l != nil {
+							l.win.Invalidate()
+						}
+					}
+				})
+			}
 		}
 	}
 	if st.externalLayer {

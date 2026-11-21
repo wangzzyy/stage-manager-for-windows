@@ -241,9 +241,9 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // The real window is parked immediately; its captured image then flies from
 // the live drag position into the card's measured layout position.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
-	// The sampled frame can lag the native move loop during a fast drag.
-	// The capture's bounds are measured from the same pixels as the still,
-	// so use them as the flight origin once capture succeeds.
+	// Capture returns an image whose rectangle is local to the bitmap
+	// (normally starting at 0,0), not its screen position. Keep the screen
+	// frame sampled by dragOver as the flight origin.
 	from := poseOf(origin)
 
 	// Create the card before drawing its landing animation. Refreshing while
@@ -262,12 +262,6 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	}
 	img := winapi.Capture(w.HWND, height)
 	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
-		from = poseOf(winapi.Rect{
-			Left:   int32(img.Rect.Min.X),
-			Top:    int32(img.Rect.Min.Y),
-			Right:  int32(img.Rect.Max.X),
-			Bottom: int32(img.Rect.Max.Y),
-		})
 		card := img
 		if img.Rect.Dy() > cardStillHeight {
 			card = shrink(img, cardStillHeight)

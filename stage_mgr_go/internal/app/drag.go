@@ -259,7 +259,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		height = stillHeight(w.HWND, a.media.light)
 	}
 	img := winapi.Capture(w.HWND, height)
-	if img != nil {
+	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
 		card := img
 		if img.Rect.Dy() > cardStillHeight {
 			card = shrink(img, cardStillHeight)
@@ -270,7 +270,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// Put a real first frame on screen before hiding the real window. This
 	// makes the visual handoff continuous even though cancelling the native
 	// move loop can reset the window's position.
-	if img != nil && a.flights != nil {
+	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 && a.flights != nil {
 		a.flights.dragIntoCard(d, w, from)
 		if l := a.flights.layers[d.mon.Device]; l != nil {
 			winapi.PaintNow(l.hwnd)

@@ -262,7 +262,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	}
 	img := winapi.Capture(w.HWND, height)
 	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
-		from = poseOf(img.Rect)
+		from = poseOf(winapi.Rect{Left: img.Rect.Min.X, Top: img.Rect.Min.Y, Right: img.Rect.Max.X, Bottom: img.Rect.Max.Y})
 		card := img
 		if img.Rect.Dy() > cardStillHeight {
 			card = shrink(img, cardStillHeight)

@@ -842,7 +842,6 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 	}
 	st := f.a.media.still(w.HWND)
 	if st == nil || st.fly == nil {
-		debugf("drag into card: no captured still for %v", w.HWND)
 		return
 	}
 	l := f.show(d, func(l *layer) {

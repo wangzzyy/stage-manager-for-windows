@@ -355,6 +355,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	} else if inside || onList {
 		s.holding = true
 	}
+	s.pollWindowCardDrag(cur)
 	// While it shows, the window takes the pointer over its whole band, not
 	// only over a card: this poll runs every 16 ms, and a press that comes
 	// in the tick the pointer reaches the strip would otherwise go to the

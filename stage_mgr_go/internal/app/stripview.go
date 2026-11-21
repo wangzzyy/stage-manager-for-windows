@@ -15,6 +15,14 @@ import (
 type cardState struct {
 	dx, dy   float32 // how far it is dragged
 	dragging bool
+	external          bool
+	externalLayer     bool
+	externalPresented bool // the strip has built a visible resting card frame
+	externalAnimating bool
+	externalReady     bool
+	externalFrom      pose
+	externalStarted   time.Time
+	box                ui.Rect
 	moved    bool // the press became a drag, so it is no click
 	// poses are where the card's windows show on the flight layer while
 	// it is dragged, and returning that it is on its way back.
@@ -476,6 +484,18 @@ func (s *strip) cardDrawOrder(order []int) []int {
 func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	a, d := s.a, s.d
 	st := d.card(g.key)
+	st.box = box
+	// A newly converted stage window has no previous card box. Resolve its
+	// first position now, using the real layout box, before drawing anything.
+	if st.external && !st.externalReady && s.scale > 0 && box.W > 0 && box.H > 0 {
+		cur := winapi.Cursor()
+		x := float32(float64(cur.X-s.rect.Left) / s.scale)
+		y := float32(float64(cur.Y-s.rect.Top) / s.scale)
+		st.dx, st.dy = s.keepIn(box,
+			x-(box.X+box.W/2), y-(box.Y+box.H/2), 1.08)
+		st.ox, st.follow = st.dx, followIn
+		st.externalReady = true
+	}
 	// A card that windows are flying into shows nothing until they land.
 	// It enters where it lands rather than sliding in, so that it is in
 	// place when they get there.
@@ -483,18 +503,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	right := s.right()
 	sign := turnSign(right)
 	motion := cardMotion
-	if !st.arrive.Empty() {
-		// It comes in where its windows were let go, at their size.
-		// Enter motions move and scale about the card's middle.
-		r := st.arrive
-		st.arrive = winapi.Rect{}
-		x := float32(float64(r.Left-s.rect.Left)/s.scale) + float32(float64(r.W())/s.scale)/2
-		y := float32(float64(r.Top-s.rect.Top)/s.scale) + float32(float64(r.H())/s.scale)/2
-		motion.Enter = &ui.Motion{
-			X: x - (box.X + box.W/2), Y: y - (box.Y + box.H/2),
-			Opacity: 1, Scale: float32(float64(r.W())/s.scale) / box.W,
-		}
-	} else if landing {
+	// A window converted from a native drag is already under the pointer.
+	// Do not run the card's normal enter/position transition while that
+	// external drag is active; it would look like a stage-switch animation.
+	if st.external {
+		motion = ui.ElementTransition{}
+	}
+	if landing {
 		motion.Enter = nil
 	} else if right {
 		enter := *motion.Enter
@@ -517,7 +532,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	dx, dy, held := el.Dragged()
 	if held {
 		s.drag(g, st, dx, dy)
-	} else if st.dragging || st.dx != 0 || st.dy != 0 {
+	} else if !st.external && (st.dragging || st.dx != 0 || st.dy != 0) {
 		s.letGo(g, st, box)
 	}
 	if el.Clicked() && !st.moved {
@@ -640,8 +655,76 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if st.returning && el.Settled("dx") && el.Settled("dy") {
 		st.returning = false
 	}
-	// The shake runs along the strip's width, to and fro about where the card is.
-	el.Translate(ox+el.AnimateTo("shake", 0, shakeSpring), oy).Opacity(op)
+	// Transform the real card, not a duplicate on the flight layer. Its
+	// destination is recomputed from the current card box and pointer offset
+	// every frame, so moving the mouse during the shrink changes the endpoint.
+	// Only the card currently represented by the full-display landing
+	// overlay participates in its handoff; other cards keep their own shake.
+	var landingLayer *layer
+	if a.flights != nil {
+		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil && l.landing.d == d && l.landing.key == g.key {
+			landingLayer = l
+		}
+	}
+	// Reset any previous hover/click shake on the first visible handoff
+	// frame. The full-display landing image has no shake transform.
+	if landingLayer != nil && !st.externalLayer && !st.externalPresented {
+		el.Jump("shake", 0)
+	}
+	shake := el.AnimateTo("shake", 0, shakeSpring)
+	// The full-display landing image has no shake transform. Keep the real
+	// card's handoff pose identical so a leftover shake cannot create a
+	// one-pixel horizontal jump when the overlay disappears.
+	if st.externalAnimating || st.externalLayer {
+		shake = 0
+	}
+	translateX, translateY, scale := ox+shake, oy, float32(1)
+	if st.externalAnimating && st.externalReady && st.externalFrom.w > 0 && s.scale > 0 {
+		if st.externalStarted.IsZero() {
+			st.externalStarted = c.Now()
+		}
+		p := min(float64(c.Now().Sub(st.externalStarted))/float64(dragIntoCardDuration), 1)
+		e := flightEase(p)
+		toW, toH := float64(box.W)*s.scale, float64(box.H)*s.scale
+		if toW > 0 && toH > 0 {
+			// The layout box is card-sized; enlarge it to the sampled window
+			// dimensions first, then animate down to its resting size.
+			startScale := math.Max(st.externalFrom.w/toW, st.externalFrom.h/toH)
+			startScale = math.Max(startScale, 0.01)
+			scale = float32(startScale + (1-startScale)*e)
+			fromX := st.externalFrom.x + st.externalFrom.w/2
+			fromY := st.externalFrom.y + st.externalFrom.h/2
+			toX := float64(s.rect.Left) + float64(box.X+ox+box.W/2)*s.scale
+			toY := float64(s.rect.Top) + float64(box.Y+oy+box.H/2)*s.scale
+			centerX := fromX + (toX-fromX)*e
+			centerY := fromY + (toY-fromY)*e
+			translateX += float32((centerX-toX)/s.scale)
+			translateY += float32((centerY-toY)/s.scale)
+		}
+		if p < 1 {
+			c.AnimationFrame()
+		} else {
+			st.externalAnimating = false
+			st.externalFrom = pose{}
+			st.externalStarted = time.Time{}
+		}
+	}
+	if st.externalLayer {
+		op = 0
+	}
+	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
+	// Once the flight layer has exposed the real card, acknowledge only
+	// after this strip frame has been built. The overlay waits for this
+	// signal before removing its final image.
+	if landingLayer != nil && !st.externalLayer && !st.externalPresented {
+		post(func() {
+			if !st.externalLayer && !st.externalPresented && landingLayer.landing != nil &&
+				landingLayer.landing.d == d && landingLayer.landing.key == g.key {
+				st.externalPresented = true
+				landingLayer.win.Invalidate()
+			}
+		})
+	}
 
 	el.ContextMenu(func(m *ui.Menu) {
 		tr := a.tr()

@@ -399,7 +399,7 @@ func (a *App) syncDisplays() {
 	for _, m := range mons {
 		d := a.displayByDevice(m.Device)
 		if d == nil {
-			d = &display{cards: map[string]*cardState{}, landing: map[string]bool{}}
+			d = &display{cards: map[string]*cardState{}, landing: map[string]bool{}, dropPoses: map[winapi.HWND]pose{}}
 		}
 		d.mon = m
 		next = append(next, d)

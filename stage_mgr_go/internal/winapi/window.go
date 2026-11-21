@@ -278,6 +278,22 @@ func Redraw(h HWND) {
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }
 
+// CancelMoveSize synchronously ends Windows' native modal move/size loop.
+// Posting WM_CANCELMODE is racy: the modal loop may process another pointer
+// update after the caller has sampled the window's animation origin.
+func CancelMoveSize(h HWND) bool {
+	const (
+		wmCancelMode = 0x001F
+		smtoAbortIfHung = 0x0002
+		timeoutMS = 200
+	)
+	proc := syscall.NewLazyDLL("user32.dll").NewProc("SendMessageTimeoutW")
+	var result uintptr
+	r, _, _ := proc.Call(uintptr(h), wmCancelMode, 0, 0,
+		smtoAbortIfHung, timeoutMS, uintptr(unsafe.Pointer(&result)))
+	return r != 0
+}
+
 // Close asks a window to close, as its close button does.
 func Close(h HWND) {
 	const wmClose = 0x0010

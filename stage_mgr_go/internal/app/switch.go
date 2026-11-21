@@ -194,7 +194,11 @@ type handover struct {
 // arrival.
 func (h *handover) takeOff() {
 	for _, w := range h.departing {
-		h.a.park.Park(w.HWND)
+		if _, draggedHome := h.a.dropHomes[w.HWND]; draggedHome {
+			h.a.park.ParkImmediate(w.HWND)
+		} else {
+			h.a.park.Park(w.HWND)
+		}
 		// A window dragged into the strip comes back where the drag began.
 		if r, ok := h.a.dropHomes[w.HWND]; ok {
 			h.a.park.Rehome(w.HWND, r)

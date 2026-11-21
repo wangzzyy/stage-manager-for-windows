@@ -250,7 +250,17 @@ func lerpPose(a, b pose, e float64) pose {
 // and the windows of a card dragged out of the strip, which the strip's own
 // window could not show beyond its edge. Another such window right under
 // it, under, shows the shadows apps draw in windows of their own.
+type cardLanding struct {
+	d       *display
+	key     string
+	still   *ui.Bitmap
+	from    pose
+	started time.Time
+}
+
 type layer struct {
+	owner   *flights
+	landing *cardLanding
 	win     *mygo.Window
 	hwnd    winapi.HWND
 	under   *mygo.Window
@@ -290,7 +300,7 @@ func (f *flights) layer(d *display) *layer {
 	if l != nil {
 		return l
 	}
-	l = &layer{framed: f.a.paintStrips, name: d.mon.Device}
+	l = &layer{owner: f, framed: f.a.paintStrips, name: d.mon.Device}
 	pane := func(view func(*ui.Context)) (*mygo.Window, winapi.HWND) {
 		win := mygo.NewFlyout(mygo.FlyoutOptions{Tray: f.a.tray, Hidden: true, Width: 400, Height: 400, Content: ui.View(view)})
 		h := winapi.HWND(win.NativeHandle())
@@ -526,6 +536,11 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		}
 		casts := castsShadow(w.HWND)
 		fl := flight{still: st.fly, hwnd: w.HWND, from: poseOf(w.Frame), shade: ownShade(casts, winapi.HasActiveFrame(w.HWND)), casts: casts, holdsShadow: true, fromOp: 1, toOp: 1}
+		// A window handed from a native move into its card flies from the
+		// actual drop point, not the stale catalog frame from before the drag.
+		if p, ok := d.dropPoses[w.HWND]; ok {
+			fl.from = p
+		}
 		if target, ok := to[w.HWND]; ok {
 			fl.to = target
 		} else if p, ok := to[front[w.App]]; ok {
@@ -739,20 +754,30 @@ func (f *flights) collapse(d *display, p pose) pose {
 
 // show puts a display's layer over the whole display: the flights go into
 // and come out of the strip, which a fixed strip keeps out of the work area.
-func (f *flights) show(d *display) *layer {
+func (f *flights) show(d *display, prepare ...func(*layer)) *layer {
 	l := f.layer(d)
-	if l.shown {
-		return l
+	wasShown := l.shown
+	if !wasShown {
+		area := winapi.MonitorInfo(d.mon.Handle).Monitor
+		// One pixel short of the display, so that Windows never takes the
+		// layer for an app in full screen.
+		area.Bottom--
+		l.rect, l.scale, l.shown, l.low = area, d.mon.Scale(), true, false
 	}
-	area := winapi.MonitorInfo(d.mon.Handle).Monitor
-	// One pixel short of the display, so that Windows never takes the
-	// layer for an app in full screen.
-	area.Bottom--
-	l.rect, l.scale, l.shown, l.low = area, d.mon.Scale(), true, false
-	l.win.ShowInactive()
-	l.under.ShowInactive()
-	winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
-	winapi.SetWindowPos(l.uhwnd, l.hwnd, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
+	// Set up the content before showing a previously hidden layer. Showing
+	// it first can present a transparent frame before the caller invalidates
+	// it with the content it meant to show.
+	for _, fn := range prepare {
+		if fn != nil {
+			fn(l)
+		}
+	}
+	if !wasShown {
+		l.win.ShowInactive()
+		l.under.ShowInactive()
+		winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, l.rect.Left, l.rect.Top, l.rect.W(), l.rect.H(), winapi.SwpNoActivate)
+		winapi.SetWindowPos(l.uhwnd, l.hwnd, l.rect.Left, l.rect.Top, l.rect.W(), l.rect.H(), winapi.SwpNoActivate)
+	}
 	return l
 }
 
@@ -768,7 +793,7 @@ const layerLinger = 2 * time.Second
 // the card may come back over its display.
 func (f *flights) hideLater(l *layer) {
 	after(layerLinger, func() {
-		if l.list != nil || l.drag != nil || !l.shown {
+		if l.list != nil || l.drag != nil || l.landing != nil || !l.shown {
 			return
 		}
 		if f.a.cardDrag != nil {
@@ -803,6 +828,43 @@ func (f *flights) standByAll() {
 	}
 }
 
+// dragged shows the windows of a card being dragged out of display d's
+// strip where they are now: on d's layer, and on that of every other
+// display they reach, as they are dragged toward its strip.
+// dragIntoCard flies a captured window from its live drag position into the
+// card's current layout pose. The target is measured from the strip layout,
+// never from a fixed screen coordinate.
+const dragIntoCardDuration = 1500 * time.Millisecond
+
+func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
+	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
+		return
+	}
+	st := f.a.media.still(w.HWND)
+	if st == nil || st.fly == nil {
+		debugf("drag into card: no captured still for %v", w.HWND)
+		return
+	}
+	l := f.show(d, func(l *layer) {
+		// Install the landing before the layer is first shown. Otherwise its
+		// first presented frame can be transparent, followed by the image only
+		// after Invalidate, which looks like a one-frame flash.
+		cs := d.card(f.a.groupKey(w))
+		cs.externalLayer = true
+		cs.externalPresented = false
+		cs.externalAnimating = false
+		cs.externalFrom = pose{}
+		cs.externalStarted = time.Time{}
+		l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
+	})
+	// Keep the flight beneath the strip for the entire shrink. The
+	// sidebar's real cards must remain the topmost layer; otherwise the
+	// animated image crosses over neighbouring cards and flashes as it
+	// competes with their own redraws.
+	l.lower(d.strip.hwnd)
+	l.win.Invalidate()
+	l.pace.frame(l.win)
+}
 // dragged shows the windows of a card being dragged out of display d's
 // strip where they are now: on d's layer, and on that of every other
 // display they reach, as they are dragged toward its strip.
@@ -894,6 +956,52 @@ func (l *layer) view(c *ui.Context) {
 	}
 	for i, f := range l.drag {
 		l.draw(c, i+len(l.list), f.still, f.from, 1, cardShade(float32(f.from.h/l.scale)), 0, 0)
+	}
+	// Draw the window-to-card shrink on the full-display layer. The real
+	// strip card is hidden until the final frame, avoiding client-area
+	// clipping and a double image during the handoff.
+	if landing := l.landing; landing != nil {
+		d, st := landing.d, landing.d.card(landing.key)
+		if d.strip != nil && d.strip.scale > 0 && st.box.W > 0 && st.box.H > 0 {
+			if landing.started.IsZero() {
+				landing.started = c.Now()
+			}
+			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
+			e := flightEase(p)
+			toW, toH := float64(st.box.W)*d.strip.scale, float64(st.box.H)*d.strip.scale
+			// Use the card's actual rendered offset, not the raw drag delta. The
+			// strip may constrain or ease the card differently near its outer edge.
+			toX := float64(d.strip.rect.Left) + float64(st.box.X+st.ox)*d.strip.scale
+			toY := float64(d.strip.rect.Top) + float64(st.box.Y+st.dy)*d.strip.scale
+			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
+			at := lerpPose(landing.from, to, e)
+			l.draw(c, -9001, landing.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)
+			// Keep the overlay's exact final frame until the strip confirms
+			// that its real card has rendered the matching resting pose. The
+			// two UI windows do not necessarily present on the same frame.
+			if p < 1 {
+				l.pace.frame(l.win)
+			} else if st.externalLayer {
+				// Reveal the real card and request its next frame. It will
+				// acknowledge from post() after building that visible frame.
+				st.externalLayer = false
+				st.externalPresented = false
+				d.strip.win.Invalidate()
+				l.pace.frame(l.win)
+			} else if !st.externalPresented {
+				l.pace.frame(l.win)
+			} else {
+				st.externalPresented = false
+				l.landing = nil
+				// The strip has already presented the real card; now clear
+				// the overlay without exposing an intermediate frame.
+				l.win.Invalidate()
+				if l.owner != nil {
+					l.owner.hideLater(l)
+				}
+			}
+		}
+		return
 	}
 	if len(l.list) == 0 || l.trip == nil {
 		return

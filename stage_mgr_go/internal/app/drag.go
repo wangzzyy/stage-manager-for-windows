@@ -241,7 +241,6 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // The real window is parked immediately; its captured image then flies from
 // the live drag position into the card's measured layout position.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
-	debugf("%q converted directly into a strip card", w.Title)
 	from := poseOf(origin)
 
 	// Create the card before drawing its landing animation. Refreshing while

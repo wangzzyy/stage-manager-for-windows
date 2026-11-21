@@ -857,11 +857,11 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 		cs.externalStarted = time.Time{}
 		l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
 	})
-	// The strip normally sits above the flight layer. For this handoff the
-	// full-display layer must cover the strip too, otherwise its card-sized
-	// client area clips the window-sized starting frame.
-	d.strip.raiseAboveFlight(l.hwnd)
-	l.raise()
+	// Keep the flight beneath the strip for the entire shrink. The
+	// sidebar's real cards must remain the topmost layer; otherwise the
+	// animated image crosses over neighbouring cards and flashes as it
+	// competes with their own redraws.
+	l.lower(d.strip.hwnd)
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 }

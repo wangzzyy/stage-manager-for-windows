@@ -61,12 +61,12 @@ func (a *App) dragOver() {
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				origin := winapi.FrameBounds(g.h)
-				// Hide before cancelling the native move loop: WM_CANCELMODE
-				// can restore the real window to its pre-drag position. Keep it
-				// hidden until sendDraggedToStrip parks it off-screen.
-				winapi.Hide(g.h)
+				// End the native move loop before handing the window to the
+				// card drag. Do not hide it here: the capture and first flight
+				// frame are asynchronous, and hiding now leaves a blank interval.
+				// sendDraggedToStrip immediately restores the sampled final frame
+				// after cancellation, while the real window stays visible.
 				if !winapi.CancelMoveSize(g.h) {
-					winapi.ShowNoActivate(g.h)
 					return
 				}
 				g.converted = true
@@ -83,12 +83,12 @@ func (a *App) dragOver() {
 				if target != g.over {
 					stage = a.heading(target)
 				}
-				// Hide before cancelling the native move loop: WM_CANCELMODE
-				// can restore the real window to its pre-drag position. Keep it
-				// hidden until sendDraggedToStrip parks it off-screen.
-				winapi.Hide(g.h)
+				// End the native move loop before handing the window to the
+				// card drag. Do not hide it here: the capture and first flight
+				// frame are asynchronous, and hiding now leaves a blank interval.
+				// sendDraggedToStrip immediately restores the sampled final frame
+				// after cancellation, while the real window stays visible.
 				if !winapi.CancelMoveSize(g.h) {
-					winapi.ShowNoActivate(g.h)
 					return
 				}
 				g.converted = true

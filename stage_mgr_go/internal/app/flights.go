@@ -754,20 +754,29 @@ func (f *flights) collapse(d *display, p pose) pose {
 
 // show puts a display's layer over the whole display: the flights go into
 // and come out of the strip, which a fixed strip keeps out of the work area.
-func (f *flights) show(d *display) *layer {
+func (f *flights) show(d *display, prepare ...func(*layer)) *layer {
 	l := f.layer(d)
-	if l.shown {
-		return l
+	if !l.shown {
+		area := winapi.MonitorInfo(d.mon.Handle).Monitor
+		// One pixel short of the display, so that Windows never takes the
+		// layer for an app in full screen.
+		area.Bottom--
+		l.rect, l.scale, l.shown, l.low = area, d.mon.Scale(), true, false
 	}
-	area := winapi.MonitorInfo(d.mon.Handle).Monitor
-	// One pixel short of the display, so that Windows never takes the
-	// layer for an app in full screen.
-	area.Bottom--
-	l.rect, l.scale, l.shown, l.low = area, d.mon.Scale(), true, false
-	l.win.ShowInactive()
-	l.under.ShowInactive()
-	winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
-	winapi.SetWindowPos(l.uhwnd, l.hwnd, area.Left, area.Top, area.W(), area.H(), winapi.SwpNoActivate)
+	// Set up the content before showing a previously hidden layer. Showing
+	// it first can present a transparent frame before the caller invalidates
+	// it with the content it meant to show.
+	for _, fn := range prepare {
+		if fn != nil {
+			fn(l)
+		}
+	}
+	if !winapi.IsWindowVisible(l.hwnd) {
+		l.win.ShowInactive()
+		l.under.ShowInactive()
+		winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, l.rect.Left, l.rect.Top, l.rect.W(), l.rect.H(), winapi.SwpNoActivate)
+		winapi.SetWindowPos(l.uhwnd, l.hwnd, l.rect.Left, l.rect.Top, l.rect.W(), l.rect.H(), winapi.SwpNoActivate)
+	}
 	return l
 }
 
@@ -835,19 +844,23 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 		debugf("drag into card: no captured still for %v", w.HWND)
 		return
 	}
-	l := f.show(d)
+	l := f.show(d, func(l *layer) {
+		// Install the landing before the layer is first shown. Otherwise its
+		// first presented frame can be transparent, followed by the image only
+		// after Invalidate, which looks like a one-frame flash.
+		cs := d.card(f.a.groupKey(w))
+		cs.externalLayer = true
+		cs.externalPresented = false
+		cs.externalAnimating = false
+		cs.externalFrom = pose{}
+		cs.externalStarted = time.Time{}
+		l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
+	})
 	// The strip normally sits above the flight layer. For this handoff the
 	// full-display layer must cover the strip too, otherwise its card-sized
 	// client area clips the window-sized starting frame.
 	d.strip.raiseAboveFlight(l.hwnd)
 	l.raise()
-	cs := d.card(f.a.groupKey(w))
-	cs.externalLayer = true
-	cs.externalPresented = false
-	cs.externalAnimating = false
-	cs.externalFrom = pose{}
-	cs.externalStarted = time.Time{}
-	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 }

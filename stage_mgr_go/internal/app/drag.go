@@ -261,6 +261,12 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	winapi.ShowNoActivate(w.HWND)
 	from := poseOf(origin)
+	// Initialise the flight layer during the capture interval, not when the
+	// animation is already on screen. Its first GPU surface allocation can
+	// otherwise leave the first visible animation frame partially composed.
+	if a.flights != nil {
+		a.flights.standBy(d)
+	}
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
 		// Start the shrink animation while the real window remains visible.
 		if a.flights != nil {

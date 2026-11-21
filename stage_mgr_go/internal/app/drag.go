@@ -291,18 +291,23 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	}
 	winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
 		winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	winapi.ShowNoActivate(w.HWND)
+	if a.settings.HideInactive {
+		// The flight image now owns the visible window. Park the real window
+		// before showing it again: restoring it on the desktop after cancelling
+		// the native move loop makes it flash at the drag position.
+		if a.park.ParkImmediate(w.HWND) {
+			a.park.Rehome(w.HWND, home)
+			// Keep the window's visible state while it waits off-screen.
+			winapi.ShowNoActivate(w.HWND)
+		} else {
+			// Do not strand a window hidden if parking could not be completed.
+			winapi.ShowNoActivate(w.HWND)
+		}
+	} else {
+		winapi.ShowNoActivate(w.HWND)
+	}
 
 	a.redraw()
-	if a.settings.HideInactive {
-		// Keep the real window at the final drag frame beneath the flight
-		// until the animation has had time to establish the card handoff.
-		after(time.Second, func() {
-			if a.park.ParkImmediate(w.HWND) {
-				a.park.Rehome(w.HWND, home)
-			}
-		})
-	}
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

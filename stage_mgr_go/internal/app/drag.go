@@ -266,6 +266,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// otherwise leave the first visible animation frame partially composed.
 	if a.flights != nil {
 		a.flights.standBy(d)
+		if l := a.flights.layers[d.mon.Device]; l != nil && d.strip != nil {
+			// Warm the surface without putting even the empty overlay above
+			// the sidebar while the capture is in progress.
+			l.lower(d.strip.hwnd)
+		}
 	}
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
 		// Start the shrink animation while the real window remains visible.

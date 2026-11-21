@@ -756,7 +756,8 @@ func (f *flights) collapse(d *display, p pose) pose {
 // and come out of the strip, which a fixed strip keeps out of the work area.
 func (f *flights) show(d *display, prepare ...func(*layer)) *layer {
 	l := f.layer(d)
-	if !l.shown {
+	wasShown := l.shown
+	if !wasShown {
 		area := winapi.MonitorInfo(d.mon.Handle).Monitor
 		// One pixel short of the display, so that Windows never takes the
 		// layer for an app in full screen.
@@ -771,7 +772,7 @@ func (f *flights) show(d *display, prepare ...func(*layer)) *layer {
 			fn(l)
 		}
 	}
-	if !winapi.IsWindowVisible(l.hwnd) {
+	if !wasShown {
 		l.win.ShowInactive()
 		l.under.ShowInactive()
 		winapi.SetWindowPos(l.hwnd, winapi.HwndTopmost, l.rect.Left, l.rect.Top, l.rect.W(), l.rect.H(), winapi.SwpNoActivate)

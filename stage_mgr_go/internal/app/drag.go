@@ -254,27 +254,29 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // the live drag position into the card's measured layout position.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
 	debugf("%q converted directly into a strip card", w.Title)
-	if a.settings.HideInactive {
-		if a.park.ParkImmediate(w.HWND) {
-			a.park.Rehome(w.HWND, home)
-		}
-	} else {
-		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
-			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	}
-	// Keep the real window shown at its parking spot. Capture its contents
-	// after the native drag has ended; the real card itself animates from
-	// the sampled window frame once its layout box is available.
+	// Keep the real window at the final drag frame for this experiment.
+	// The native move loop was cancelled after it was hidden, so put it back
+	// at the sampled final frame before showing it again.
+	winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
+		winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	winapi.ShowNoActivate(w.HWND)
 	from := poseOf(origin)
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		// The card animation must not depend on whether the capture produced
-		// a cached still. A missing still used to skip the animation entirely,
-		// leaving the card at its sidebar size on the first visible frame.
+		// Start the shrink animation while the real window remains visible.
 		if a.flights != nil {
 			a.flights.dragIntoCard(d, w, from)
 		}
 		a.redraw()
+		if a.settings.HideInactive {
+			// Experimental handoff: leave the real window at the final drag
+			// frame for one second after the animation is kicked off, then park
+			// and rehome it. This intentionally allows overlap with the flight.
+			after(time.Second, func() {
+				if a.park.ParkImmediate(w.HWND) {
+					a.park.Rehome(w.HWND, home)
+				}
+			})
+		}
 	})
 	d.model.Switch(next, time.Now())
 	a.windows = a.cat.Windows()

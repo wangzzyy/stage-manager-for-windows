@@ -457,6 +457,13 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 		for j, r := range f.a.stack(set, card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				shown := lifted(card, r, lift, right)
+				if live && st != nil {
+					// The card itself is translated after its lift/scale.
+					// Include that exact animated offset so the landing
+					// follows the card rather than its resting layout box.
+					shown.X += st.ox
+					shown.Y += st.oy
+				}
 				x, y, w, ht := s.toScreen(shown)
 				windowOriginY := float32((float64(pivotY)-float64(shown.Y))/float64(max(shown.H, 1)))
 				out[h] = pose{

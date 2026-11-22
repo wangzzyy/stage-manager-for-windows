@@ -187,7 +187,7 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
-	s.cardThumbsAllowed = s.shown && !d.inOverview && !a.busy && s.cardDragIdle() && math.Abs(float64(x)) < 0.01
+	s.cardThumbsAllowed = false
 	s.cardThumbSeen = make(map[winapi.HWND]bool)
 	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
 	out := float32(0)
@@ -205,6 +205,7 @@ func (s *strip) view(c *ui.Context) {
 		x, stopped = root.Jump("reveal", out), true
 	}
 	root.Translate(x, 0)
+	s.cardThumbsAllowed = s.shown && !d.inOverview && !a.busy && a.cardDrag == nil && !s.dragging && math.Abs(float64(x)) < 0.01
 	s.away = !s.shown && !stopped && root.Settled("reveal")
 	root.HandleInput(func(ev ui.InputEvent) bool {
 		if ev.Kind != ui.InputScroll {
@@ -707,9 +708,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				for i := len(stack) - 1; i >= 0; i-- {
-					live := s.cardThumbsAllowed && len(g.windows) == 1 && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && math.Abs(float64(tilt)) < 0.01 && math.Abs(float64(lift-1)) < 0.001 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
+					useDWM := s.cardThumbsAllowed && len(g.windows) == 1 && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && math.Abs(float64(tilt)) < 0.01 && math.Abs(float64(lift-1)) < 0.001 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
 					at := ui.Rect{X: box.X + ox + stack[i].X, Y: box.Y + oy + stack[i].Y, W: stack[i].W, H: stack[i].H}
-					s.windowStill(c, g, i, stack[i], gray, at, live)
+					s.windowStill(c, g, i, stack[i], gray, at, useDWM)
 				}
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's

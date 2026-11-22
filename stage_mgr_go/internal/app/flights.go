@@ -958,38 +958,37 @@ func (l *layer) view(c *ui.Context) {
 			}
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
 			e := flightEase(p)
-			// Land on the dragged window's actual slot in the card, not on
-			// the outer card box. Keep the captured window's aspect ratio: the
-			// card may have a very different shape from the real window.
-			g := findSet(d.sets, landing.key)
-			if g == nil {
+			// Use the same projected slot geometry as the strip card itself.
+			// This includes its lift, tilt, perspective and exact window slot;
+			// independently rebuilding a rectangle here makes the overlay
+			// finish at a subtly different size/position from the real card.
+			var to pose
+			if targets := f.cardPoses(d, []catalog.Window{w}, true); targets != nil {
+				to = targets[landing.hwnd]
+			}
+			if to.w <= 0 || to.h <= 0 {
+				// The strip may not have completed its first layout yet.
+				// Keep the landing alive and try again on the next frame.
+				l.pace.frame(l.win)
 				return
 			}
-			index := slices.IndexFunc(g.windows, func(w catalog.Window) bool { return w.HWND == landing.hwnd })
-			if index < 0 {
-				return
-			}
-			stack := d.strip.a.stack(g, ui.Rect{W: st.box.W, H: st.box.H}, d.strip.right())
-			if index >= len(stack) {
-				return
-			}
-			slot := stack[index]
-			slot.X += st.box.X + st.ox
-			slot.Y += st.box.Y + st.dy
-			toX, toY, toW, toH := d.strip.toScreen(slot)
+			// windowStill contains the bitmap in its slot without cropping.
+			// Match that same contained rectangle, while preserving the
+			// transformed card's pivot and perspective.
 			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
+				pivotY := to.y + to.originY*to.h
 				aspect := float64(iw) / float64(ih)
-				if toW/toH > aspect {
-					fitW := toH * aspect
-					toX += (toW - fitW) / 2
-					toW = fitW
+				if to.w/to.h > aspect {
+					fitW := to.h * aspect
+					to.x += (to.w - fitW) / 2
+					to.w = fitW
 				} else {
-					fitH := toW / aspect
-					toY += (toH - fitH) / 2
-					toH = fitH
+					fitH := to.w / aspect
+					to.y += (to.h - fitH) / 2
+					to.h = fitH
 				}
+				to.originY = float32((pivotY - to.y) / to.h)
 			}
-			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
 			at := lerpPose(landing.from, to, e)
 			l.draw(c, -9001, landing.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)
 			// This is the first complete overlay frame at the window's old

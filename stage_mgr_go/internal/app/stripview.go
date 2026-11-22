@@ -787,7 +787,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				for i := len(stack) - 1; i >= 0; i-- {
-					s.windowStill(c, g, i, stack[i], gray)
+					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
+					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's
@@ -980,15 +981,30 @@ type grayOver struct{ h winapi.HWND }
 // none, a frosted pane with its app's icon. Gray, from 0 to 1, is how far
 // the still goes gray: the built-in grayscale is all or nothing, so a gray
 // copy of it is drawn over it, that much opaque.
-func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32) {
+func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32, preserveAspect bool) {
 	w := g.windows[i]
 	radius := max(r.H*0.045, 3)
 	if st := s.a.media.still(w.HWND); st != nil {
-		ui.Image(c.Key(w.HWND), st.card).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).
-			Fit(ui.FillBox).Radius(radius).Shadow(0, r.H*0.05, r.H*0.16, 0, shadowSoft)
+		x, y, width, height := r.X, r.Y, r.W, r.H
+		if preserveAspect {
+			if iw, ih := st.card.Size(); iw > 0 && ih > 0 {
+				scale := min(float64(r.W)/float64(iw), float64(r.H)/float64(ih))
+				width, height = float32(float64(iw)*scale), float32(float64(ih)*scale)
+				x += (r.W - width) / 2
+				y += (r.H - height) / 2
+			}
+		}
+		img := ui.Image(c.Key(w.HWND), st.card).Absolute().Left(x).Top(y).Size(width, height).
+			Radius(radius).Shadow(0, r.H*0.05, r.H*0.16, 0, shadowSoft)
+		if !preserveAspect {
+			img.Fit(ui.FillBox)
+		}
 		if gray > 0.005 {
-			ui.Image(c.Key(grayOver{w.HWND}), st.card).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).
-				Fit(ui.FillBox).Radius(radius).Grayscale().Opacity(gray)
+			grayImg := ui.Image(c.Key(grayOver{w.HWND}), st.card).Absolute().Left(x).Top(y).Size(width, height).
+				Radius(radius).Grayscale().Opacity(gray)
+			if !preserveAspect {
+				grayImg.Fit(ui.FillBox)
+			}
 		}
 		return
 	}

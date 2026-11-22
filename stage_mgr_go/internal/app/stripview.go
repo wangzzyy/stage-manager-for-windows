@@ -187,6 +187,8 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
+	s.cardThumbsAllowed = s.shown && !d.inOverview && !a.busy && s.cardDragIdle() && math.Abs(float64(x)) < 0.01
+	s.cardThumbSeen = make(map[winapi.HWND]bool)
 	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
 	out := float32(0)
 	if !s.shown {
@@ -236,6 +238,7 @@ func (s *strip) view(c *ui.Context) {
 		list = s.lineupView(c, line, staged, x)
 	})
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
+	s.placeCardThumbs()
 }
 
 // footer draws the panel at the bottom of the strip that opens the
@@ -704,7 +707,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				for i := len(stack) - 1; i >= 0; i-- {
-					s.windowStill(c, g, i, stack[i], gray)
+					live := s.cardThumbsAllowed && len(g.windows) == 1 && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && math.Abs(float64(tilt)) < 0.01 && math.Abs(float64(lift-1)) < 0.001 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
+					at := ui.Rect{X: box.X + ox + stack[i].X, Y: box.Y + oy + stack[i].Y, W: stack[i].W, H: stack[i].H}
+					s.windowStill(c, g, i, stack[i], gray, at, live)
 				}
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's

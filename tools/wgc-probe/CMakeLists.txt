@@ -9,4 +9,4 @@ target_compile_definitions(wgc-probe PRIVATE
   WINVER=0x0A00
   _WIN32_WINNT=0x0A00
 )
-target_link_libraries(wgc-probe PRIVATE d3d11)
+target_link_libraries(wgc-probe PRIVATE d3d11 runtimeobject)

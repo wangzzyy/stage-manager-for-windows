@@ -73,6 +73,7 @@ type media struct {
 	stills   map[winapi.HWND]*still
 	pending  map[winapi.HWND]bool
 	tried    map[winapi.HWND]time.Time
+	liveTried map[winapi.HWND]time.Time
 	icons    map[string]*ui.Bitmap // by app
 	sem      chan struct{}
 	flyBytes int // what all the flight pictures take, against budget
@@ -90,6 +91,7 @@ func newMedia() *media {
 		stills:  map[winapi.HWND]*still{},
 		pending: map[winapi.HWND]bool{},
 		tried:   map[winapi.HWND]time.Time{},
+		liveTried: map[winapi.HWND]time.Time{},
 		icons:   map[string]*ui.Bitmap{},
 		// A few at a time: each asks an app to draw itself.
 		sem: make(chan struct{}, 3),
@@ -111,6 +113,18 @@ func (m *media) apply(s settings.Settings) {
 }
 
 func (m *media) still(h winapi.HWND) *still { return m.stills[h] }
+
+// refreshLive periodically captures a parked window into the same bitmap
+// used by the card renderer. Unlike a DWM thumbnail, this bitmap is rendered
+// by MyGo and therefore inherits the card's perspective and clipping.
+func (m *media) refreshLive(h winapi.HWND, done func()) {
+	now := time.Now()
+	if m.pending[h] || now.Sub(m.liveTried[h]) < 250*time.Millisecond {
+		return
+	}
+	m.liveTried[h] = now
+	m.capture([]winapi.HWND{h}, false, 750*time.Millisecond, done)
+}
 
 // preview takes the stills of the windows of a card the pointer rests on,
 // at the size the windows show: a switch may follow, and a flight is only
@@ -296,6 +310,11 @@ func (m *media) forget(alive map[winapi.HWND]bool) {
 	for h := range m.tried {
 		if !alive[h] {
 			delete(m.tried, h)
+		}
+	}
+	for h := range m.liveTried {
+		if !alive[h] {
+			delete(m.liveTried, h)
 		}
 	}
 }

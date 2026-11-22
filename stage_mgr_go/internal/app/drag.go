@@ -277,14 +277,21 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// ended and the window has been parked. Do not route it through its
 		// home position: that intermediate on-screen frame is the one-frame
 		// flash visible immediately before the shrink animation.
+		// Hiding the HWND before ending Windows' native move loop prevents
+		// WM_CANCELMODE and the loop teardown from presenting the real window
+		// at its drag-start position. ParkImmediateAt shows it only after it
+		// has moved off-screen, preserving its normal visible state.
+		if a.settings.HideInactive {
+			winapi.Hide(w.HWND)
+		}
 		if !winapi.CancelMoveSize(w.HWND) {
 			debugf("drag conversion: could not cancel move-size for %x", w.HWND)
+			if a.settings.HideInactive {
+				winapi.ShowNoActivate(w.HWND)
+			}
 			return
 		}
 		if a.settings.HideInactive {
-			// Park directly from the position left by WM_CANCELMODE while
-			// recording the intended home. Moving to home first lets DWM
-			// compose the real window at the old location for one frame.
 			parked := a.park.IsParked(w.HWND)
 			if !parked {
 				parked = a.park.ParkImmediateAt(w.HWND, home)
@@ -292,7 +299,8 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			if parked {
 				a.park.Rehome(w.HWND, home)
 			} else if !a.park.IsParked(w.HWND) {
-				// Preserve the old safe fallback if parking cannot be done.
+				// Restore visibility if parking failed, then use the safe fallback.
+				winapi.ShowNoActivate(w.HWND)
 				winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 					winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 				debugf("drag conversion: could not park %x; leaving it visible", w.HWND)

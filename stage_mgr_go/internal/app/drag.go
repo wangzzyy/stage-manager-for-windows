@@ -312,21 +312,35 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
-	if st := a.media.still(w.HWND); st != nil && st.fly != nil {
-		if !startFlight() {
-			debugf("drag into card: animation could not start; keeping real window visible")
+	// Capture the window as DWM has actually composed it while it is still
+	// visible and at the native drag position. Explorer and some accelerated
+	// windows can return a blank/white PrintWindow image at mouse-up even
+	// though their on-screen frame is perfectly drawable.
+	go func() {
+		img := winapi.CaptureScreen(origin)
+		if img == nil {
+			// Screen capture can fail on a display transition. Fall back to
+			// asking the app to draw itself, as the ordinary capture path does.
+			a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
+				if !startFlight() {
+					debugf("drag into card: capture produced no drawable animation; keeping real window visible")
+				}
+				a.redraw()
+			})
+			return
 		}
-		return
-	}
-	// A window without a cached still is the uncommon fallback. Capture it
-	// asynchronously; keep the real HWND visible until a drawable flight
-	// has actually been installed and its first frame has been composed.
-	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		if !startFlight() {
-			debugf("drag into card: capture produced no drawable animation; keeping real window visible")
+		card := img
+		if img.Rect.Dy() > cardStillHeight {
+			card = shrink(img, cardStillHeight)
 		}
-		a.redraw()
-	})
+		post(func() {
+			a.media.take([]shot{{h: w.HWND, img: img, card: card}})
+			if !startFlight() {
+				debugf("drag into card: screen capture produced no drawable animation; keeping real window visible")
+			}
+			a.redraw()
+		})
+	}()
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

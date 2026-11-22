@@ -321,11 +321,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if img == nil {
 			// Screen capture can fail on a display transition. Fall back to
 			// asking the app to draw itself, as the ordinary capture path does.
-			a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-				if !startFlight() {
-					debugf("drag into card: capture produced no drawable animation; keeping real window visible")
-				}
-				a.redraw()
+			post(func() {
+				a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
+					if !startFlight() {
+						debugf("drag into card: capture produced no drawable animation; keeping real window visible")
+					}
+					a.redraw()
+				})
 			})
 			return
 		}

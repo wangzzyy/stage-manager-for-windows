@@ -446,8 +446,9 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 	l := layoutStrip(len(d.sets), d.viewW, d.viewH, d.scroll, float32(f.a.settings.Spacing), f.a.panel(), s.lineupFor(d.viewW, d.viewH).extent, float32(f.a.settings.CardsAt), right)
 	rest, _ := cardTilts(f.a.settings.Tilt)
 	for i, set := range d.sets {
+		st := d.cards[set.key]
 		tilt, lift := rest, float32(1)
-		if st := d.cards[set.key]; live && st != nil && st.lift > 0 {
+		if live && st != nil && st.lift > 0 {
 			tilt, lift = st.tilt, st.lift
 		}
 		card := l.cards[i]

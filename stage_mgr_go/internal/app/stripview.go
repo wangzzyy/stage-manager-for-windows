@@ -704,7 +704,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				for i := len(stack) - 1; i >= 0; i-- {
-					useLive := s.shown && !d.inOverview && !a.busy && a.cardDrag == nil && !s.dragging && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
+					useLive := s.shown && !d.inOverview && !g.staged && op > 0.05
 					s.windowStill(c, g, i, stack[i], gray, useLive)
 				}
 				// While the pointer is on the card, a button on the top right

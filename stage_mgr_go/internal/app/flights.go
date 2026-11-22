@@ -255,8 +255,6 @@ type cardLanding struct {
 	key     string
 	still   *ui.Bitmap
 	from    pose
-	cover   pose
-	covering bool
 	started time.Time
 }
 
@@ -839,7 +837,7 @@ func (f *flights) standByAll() {
 // never from a fixed screen coordinate.
 const dragIntoCardDuration = 420 * time.Millisecond
 
-func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, home winapi.Rect) {
+func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
 		return
 	}
@@ -857,11 +855,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, home win
 		cs.externalAnimating = false
 		cs.externalFrom = pose{}
 		cs.externalStarted = time.Time{}
-		landing := &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
-		if f.a.settings.HideInactive && winapi.MonitorFromRect(home) == d.mon.Handle {
-			landing.cover, landing.covering = poseOf(home), true
-		}
-		l.landing = landing
+		l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
 	})
 	// The strip card is deliberately transparent while this overlay owns
 	// the handoff (externalLayer). The animation therefore must be above the
@@ -973,13 +967,10 @@ func (l *layer) view(c *ui.Context) {
 	for i, f := range l.drag {
 		l.draw(c, i+len(l.list), f.still, f.from, 1, cardShade(float32(f.from.h/l.scale)), 0, 0)
 	}
-	// Draw the window-to-card shrink on the full-display layer. A temporary
-	// captured cover masks the HWND's drag-start position while cancellation
-	// restores it, preventing that restored frame from leaking through.
+	// Draw the window-to-card shrink on the full-display layer. The real
+	// strip card is hidden until the final frame, avoiding client-area
+	// clipping and a double image during the handoff.
 	if landing := l.landing; landing != nil {
-		if landing.covering {
-			l.draw(c, -9002, landing.still, landing.cover, 1, cardShade(float32(landing.cover.h/l.scale)), 0, 0)
-		}
 		d, st := landing.d, landing.d.card(landing.key)
 		if d.strip != nil && d.strip.scale > 0 && st.box.W > 0 && st.box.H > 0 {
 			if landing.started.IsZero() {

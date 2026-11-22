@@ -285,6 +285,7 @@ type layer struct {
 	name   string
 	frames frameStats
 	pace   pacer
+	presented func() // called after the first frame containing the landing has been built
 }
 
 // flights runs the flights of switches, on a layer per display.
@@ -936,6 +937,16 @@ func (f *flights) clearDrag(d *display, delay time.Duration) {
 func lerp(a, b, t float64) float64 { return a + (b-a)*t }
 
 func (l *layer) view(c *ui.Context) {
+	// A caller may be waiting to hide the real window until this view has
+	// actually built a frame containing the landing image. Posting from a
+	// defer runs after every draw path, including the landing branch's return.
+	defer func() {
+		if l.presented != nil {
+			fn := l.presented
+			l.presented = nil
+			post(fn)
+		}
+	}()
 	c.Root().Background(ui.Transparent)
 	if l.framed != nil {
 		// Posted, it runs once this frame is done.

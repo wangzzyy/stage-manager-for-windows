@@ -70,11 +70,11 @@ type still struct {
 // media holds the pictures the strips show: stills of windows and icons of
 // apps. It lives on the main thread; captures run on goroutines.
 type media struct {
-	stills   map[winapi.HWND]*still
-	pending  map[winapi.HWND]bool
-	tried    map[winapi.HWND]time.Time
+	stills    map[winapi.HWND]*still
+	pending   map[winapi.HWND]bool
+	tried     map[winapi.HWND]time.Time
 	liveTried map[winapi.HWND]time.Time
-	icons    map[string]*ui.Bitmap // by app
+	icons     map[string]*ui.Bitmap // by app
 	sem      chan struct{}
 	flyBytes int // what all the flight pictures take, against budget
 	budget   int
@@ -88,11 +88,11 @@ type media struct {
 
 func newMedia() *media {
 	m := &media{
-		stills:  map[winapi.HWND]*still{},
-		pending: map[winapi.HWND]bool{},
-		tried:   map[winapi.HWND]time.Time{},
+		stills:    map[winapi.HWND]*still{},
+		pending:   map[winapi.HWND]bool{},
+		tried:     map[winapi.HWND]time.Time{},
 		liveTried: map[winapi.HWND]time.Time{},
-		icons:   map[string]*ui.Bitmap{},
+		icons:     map[string]*ui.Bitmap{},
 		// A few at a time: each asks an app to draw itself.
 		sem: make(chan struct{}, 3),
 	}

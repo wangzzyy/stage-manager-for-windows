@@ -247,12 +247,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
 	handoff := func() {
+		// The overlay view has built its first frame. Wait until DWM has
+		// composed that frame before hiding the real HWND; otherwise the
+		// hide can be visible one or more frames before the overlay.
+		winapi.DwmFlush()
 		winapi.Hide(w.HWND)
-		if !winapi.CancelMoveSize(w.HWND) {
-			debugf("could not cancel native move loop for %v", w.HWND)
-			winapi.ShowNoActivate(w.HWND)
-			return
-		}
 		if a.settings.HideInactive {
 			if a.park.ParkImmediate(w.HWND) {
 				a.park.Rehome(w.HWND, home)
@@ -272,17 +271,21 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	a.windows = a.cat.Windows()
 	a.refresh()
 
+	startFlight := func() bool {
+		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
+	}
 	if st := a.media.still(w.HWND); st != nil && st.fly != nil {
-		if a.flights != nil {
-			a.flights.dragIntoCard(d, w, from, handoff)
+		if !startFlight() {
+			debugf("drag into card: animation could not start; keeping real window visible")
 		}
 		return
 	}
 	// A window without a cached still is the uncommon fallback. Capture it
-	// asynchronously; do not impose this wait on windows with a usable still.
+	// asynchronously; keep the real HWND visible until a drawable flight
+	// has actually been installed and its first frame has been composed.
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		if a.flights != nil {
-			a.flights.dragIntoCard(d, w, from, handoff)
+		if !startFlight() {
+			debugf("drag into card: capture produced no drawable animation; keeping real window visible")
 		}
 		a.redraw()
 	})

@@ -317,7 +317,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// windows can return a blank/white PrintWindow image at mouse-up even
 	// though their on-screen frame is perfectly drawable.
 	go func() {
-		img := winapi.CaptureScreen(origin)
+		// Read the frame bounds as late as possible: the native move loop
+			// may still be following the pointer while the screen image is taken.
+		captureRect := winapi.FrameBounds(w.HWND)
+		if captureRect.Empty() {
+			captureRect = origin
+		}
+		img := winapi.CaptureScreen(captureRect)
 		if img == nil {
 			// Screen capture can fail on a display transition. Fall back to
 			// asking the app to draw itself, as the ordinary capture path does.
@@ -336,6 +342,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			card = shrink(img, cardStillHeight)
 		}
 		post(func() {
+			from = poseOf(captureRect)
 			a.media.take([]shot{{h: w.HWND, img: img, card: card}})
 			if !startFlight() {
 				debugf("drag into card: screen capture produced no drawable animation; keeping real window visible")

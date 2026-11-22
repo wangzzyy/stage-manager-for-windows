@@ -312,44 +312,16 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
-	// Capture the window as DWM has actually composed it while it is still
-	// visible and at the native drag position. Explorer and some accelerated
-	// windows can return a blank/white PrintWindow image at mouse-up even
-	// though their on-screen frame is perfectly drawable.
-	go func() {
-		// Read the frame bounds as late as possible: the native move loop
-			// may still be following the pointer while the screen image is taken.
-		captureRect := winapi.FrameBounds(w.HWND)
-		if captureRect.Empty() {
-			captureRect = origin
+	// Capture only the dragged HWND. A desktop BitBlt is not a window
+	// capture: it includes whichever windows happen to overlap its rectangle.
+	// Use the window's PrintWindow capture path and let its timeout keep a
+	// hung application from holding up the handoff.
+	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
+		if !startFlight() {
+			debugf("drag into card: capture produced no drawable animation; keeping real window visible")
 		}
-		img := winapi.CaptureScreen(captureRect)
-		if img == nil {
-			// Screen capture can fail on a display transition. Fall back to
-			// asking the app to draw itself, as the ordinary capture path does.
-			post(func() {
-				a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-					if !startFlight() {
-						debugf("drag into card: capture produced no drawable animation; keeping real window visible")
-					}
-					a.redraw()
-				})
-			})
-			return
-		}
-		card := img
-		if img.Rect.Dy() > cardStillHeight {
-			card = shrink(img, cardStillHeight)
-		}
-		post(func() {
-			from = poseOf(captureRect)
-			a.media.take([]shot{{h: w.HWND, img: img, card: card}})
-			if !startFlight() {
-				debugf("drag into card: screen capture produced no drawable animation; keeping real window visible")
-			}
-			a.redraw()
-		})
-	}()
+		a.redraw()
+	})
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

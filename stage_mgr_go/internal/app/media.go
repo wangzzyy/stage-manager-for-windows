@@ -127,7 +127,7 @@ func (m *media) preview(ws []catalog.Window) {
 		}
 		hs = append(hs, w.HWND)
 	}
-	m.capture(hs, true, 2*time.Second, nil)
+	m.capture(hs, true, true, 2*time.Second, nil)
 }
 
 // shot is a capture on its way to the main thread: the picture the window
@@ -145,7 +145,7 @@ type shot struct {
 // strip. A full capture is the size the window shows at, for a flight into
 // the stage; the others are a card's size, which a window flying out shrinks
 // into and a flight back in grows from.
-func (m *media) capture(hs []winapi.HWND, full bool, timeout time.Duration, done func()) {
+func (m *media) capture(hs []winapi.HWND, full, preserveCard bool, timeout time.Duration, done func()) {
 	if len(hs) == 0 {
 		if done != nil {
 			done()
@@ -199,20 +199,20 @@ func (m *media) capture(hs []winapi.HWND, full bool, timeout time.Duration, done
 		}
 		first := drain()
 		post(func() {
-			m.take(first)
+			m.take(first, preserveCard)
 			if done != nil {
 				done()
 			}
 		})
 		<-finished
 		if late := drain(); len(late) > 0 {
-			post(func() { m.take(late) })
+			post(func() { m.take(late, preserveCard) })
 		}
 	}()
 }
 
 // take keeps captured pictures as bitmaps. Main thread.
-func (m *media) take(shots []shot) {
+func (m *media) take(shots []shot, preserveCard bool) {
 	for _, s := range shots {
 		delete(m.pending, s.h)
 		if s.img == nil {
@@ -230,7 +230,12 @@ func (m *media) take(shots []shot) {
 		if st.fly == st.card {
 			st.fly = nil
 		}
-		put(&st.card, s.card)
+		// Hover previews may fail for Explorer even when its earlier drag
+		// capture produced a usable card image. Keep that known-good image;
+		// the new full-size still can still serve a later flight.
+		if !preserveCard || st.card == nil {
+			put(&st.card, s.card)
+		}
 		if s.card == s.img {
 			st.fly = st.card
 		} else {

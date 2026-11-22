@@ -835,7 +835,14 @@ func (f *flights) standByAll() {
 // dragIntoCard flies a captured window from its live drag position into the
 // card's current layout pose. The target is measured from the strip layout,
 // never from a fixed screen coordinate.
-const dragIntoCardDuration = 1500 * time.Millisecond
+const dragIntoCardDuration = 420 * time.Millisecond
+
+// dragIntoCardEase eases smoothly into and out of the shrink, without the
+// initial velocity of flightEase that makes the first movement look abrupt.
+func dragIntoCardEase(p float64) float64 {
+	p = min(max(p, 0), 1)
+	return p * p * p * (p*(p*6-15) + 10)
+}
 
 func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
@@ -977,7 +984,10 @@ func (l *layer) view(c *ui.Context) {
 				landing.started = c.Now()
 			}
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
-			e := flightEase(p)
+			// Use a zero-velocity-at-both-ends curve for this direct shrink.
+			// flightEase has a non-zero launch velocity, which reads as a jump
+			// when the captured window first takes over from the live window.
+			e := dragIntoCardEase(p)
 			toW, toH := float64(st.box.W)*d.strip.scale, float64(st.box.H)*d.strip.scale
 			// Use the card's actual rendered offset, not the raw drag delta. The
 			// strip may constrain or ease the card differently near its outer edge.

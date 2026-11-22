@@ -278,13 +278,18 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.Hide(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
 			// A failed cancellation must not strand the real window hidden.
-			winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
-				winapi.SwpNoZOrder|winapi.SwpNoActivate)
+			// The animation origin is the visible frame (FrameBounds), not the
+			// HWND's WindowRect. Restore the original position without
+			// overwriting its non-client-aware size.
+			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 			winapi.ShowNoActivate(w.HWND)
 			return
 		}
-		winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
-			winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		// Use the original WindowRect position, while preserving the HWND's
+		// actual size. origin is only the sampled visible frame for the flight.
+		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		if a.settings.HideInactive {
 			// The regular refresh path may already have parked this window.
 			parked := a.park.IsParked(w.HWND)

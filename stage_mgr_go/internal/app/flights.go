@@ -828,14 +828,14 @@ func (f *flights) standByAll() {
 // never from a fixed screen coordinate.
 const dragIntoCardDuration = 1500 * time.Millisecond
 
-func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff func()) {
+func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff func()) bool {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
-		return
+		return false
 	}
 	st := f.a.media.still(w.HWND)
 	if st == nil || st.fly == nil {
 		debugf("drag into card: no captured still for %v", w.HWND)
-		return
+		return false
 	}
 	l := f.show(d)
 	// The strip normally sits above the flight layer. For this handoff the
@@ -852,6 +852,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff 
 	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from, handoff: handoff}
 	l.win.Invalidate()
 	l.pace.frame(l.win)
+	return true
 }
 // dragged shows the windows of a card being dragged out of display d's
 // strip where they are now: on d's layer, and on that of every other

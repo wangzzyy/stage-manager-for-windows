@@ -313,7 +313,7 @@ func (a *App) openOverviewOn(d *display) {
 		}
 	}
 	gen := o.gen
-	a.media.capture(shoot, true, 250*time.Millisecond, func() {
+	a.media.capture(shoot, true, false, 250*time.Millisecond, func() {
 		if o.gen == gen && o.d == d {
 			o.begin(ws)
 		}

@@ -146,7 +146,7 @@ func (a *App) onForeground(h winapi.HWND) {
 	// all, the switch takes the still.
 	if prev := a.fg.prev; prev != 0 && prev != h && a.isListed(prev) && !a.park.IsParked(prev) && !sameProcess(prev, h) {
 		if s := a.media.still(prev); s == nil || time.Since(s.at) > 1500*time.Millisecond {
-			a.media.capture([]winapi.HWND{prev}, false, time.Second, a.redraw)
+			a.media.capture([]winapi.HWND{prev}, false, false, time.Second, a.redraw)
 		}
 	}
 	a.fg.prev = catalog.RootOwner(h)

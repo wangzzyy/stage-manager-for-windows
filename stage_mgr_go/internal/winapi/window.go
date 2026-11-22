@@ -5,6 +5,7 @@ package winapi
 import (
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -278,20 +279,63 @@ func Redraw(h HWND) {
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }
 
-// CancelMoveSize synchronously ends Windows' native modal move/size loop.
-// Posting WM_CANCELMODE is racy: the modal loop may process another pointer
-// update after the caller has sampled the window's animation origin.
+type guiThreadInfo struct {
+	Size      uint32
+	Flags     uint32
+	Active    HWND
+	Focus     HWND
+	Capture   HWND
+	MenuOwner HWND
+	MoveSize  HWND
+	Caret     HWND
+	CaretRect Rect
+}
+
+// CancelMoveSize asks Windows to end its native modal move/size loop and
+// waits until the owning GUI thread confirms that the loop has actually
+// ended. WM_CANCELMODE can return before the modal loop has unwound; moving
+// the window immediately after SendMessageTimeout then races with the loop
+// restoring its starting rectangle.
 func CancelMoveSize(h HWND) bool {
 	const (
-		wmCancelMode = 0x001F
-		smtoAbortIfHung = 0x0002
-		timeoutMS = 200
+		wmCancelMode    = 0x001F
+		smtoAbortIfHung  = 0x0002
+		timeoutMS       = 200
+		settleTimeout   = 500 * time.Millisecond
 	)
+	_, tid := ProcessID(h)
+	if tid == 0 {
+		return false
+	}
+	getInfo := syscall.NewLazyDLL("user32.dll").NewProc("GetGUIThreadInfo")
+	info := guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+	if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r == 0 {
+		return false
+	}
+	// The move may have ended between the WinEvent notification and this
+	// call. In that case there is nothing left to cancel.
+	if info.MoveSize != h {
+		return true
+	}
 	proc := syscall.NewLazyDLL("user32.dll").NewProc("SendMessageTimeoutW")
 	var result uintptr
 	r, _, _ := proc.Call(uintptr(h), wmCancelMode, 0, 0,
 		smtoAbortIfHung, timeoutMS, uintptr(unsafe.Pointer(&result)))
-	return r != 0
+	if r == 0 {
+		return false
+	}
+	deadline := time.Now().Add(settleTimeout)
+	for time.Now().Before(deadline) {
+		info = guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+		if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r == 0 {
+			return false
+		}
+		if info.MoveSize != h {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false
 }
 
 // Close asks a window to close, as its close button does.

@@ -21,10 +21,10 @@ type drag struct {
 	home *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
-	at, over *display
-	since    time.Time
-	stage    []string
-	dwell    *time.Timer
+	at, over  *display
+	since     time.Time
+	stage     []string
+	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
 }
 
@@ -273,30 +273,35 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// first frame and DWM has composed it. PaintNow only processes WM_PAINT;
 	// it cannot prove that this newly shown window has produced a visible frame.
 	finish := func() {
-		// The flight covers the real HWND. Keep it visible while ending the
-		// native move loop and parking it: Hide/Show can discard the composed
-		// surface in Explorer and apps that paint asynchronously, leaving a
-		// white thumbnail or a partially transparent window when restored.
+		// Keep the real HWND covered by the flight until the drag loop has
+		// ended and the window has been parked. Do not route it through its
+		// home position: that intermediate on-screen frame is the one-frame
+		// flash visible immediately before the shrink animation.
 		if !winapi.CancelMoveSize(w.HWND) {
 			debugf("drag conversion: could not cancel move-size for %x", w.HWND)
 			return
 		}
-		// CancelMoveSize may reset the window position. Restore the original
-		// WindowRect origin without changing its actual size.
-		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
-			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		if a.settings.HideInactive {
-			// Use the ordinary stage-switch handoff: park the covered window
-			// without Hide/Show or an explicit repaint of its surface.
+			// Park directly from the position left by WM_CANCELMODE while
+			// recording the intended home. Moving to home first lets DWM
+			// compose the real window at the old location for one frame.
 			parked := a.park.IsParked(w.HWND)
 			if !parked {
-				parked = a.park.ParkImmediate(w.HWND)
+				parked = a.park.ParkImmediateAt(w.HWND, home)
 			}
 			if parked {
 				a.park.Rehome(w.HWND, home)
-			} else {
+			} else if !a.park.IsParked(w.HWND) {
+				// Preserve the old safe fallback if parking cannot be done.
+				winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+					winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 				debugf("drag conversion: could not park %x; leaving it visible", w.HWND)
 			}
+		} else {
+			// When inactive windows are not hidden, the intended home is
+			// also their final visible position, so restore it after the drag.
+			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
 		a.redraw()
 	}

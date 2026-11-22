@@ -88,15 +88,24 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 		}
 		a.noteClosed(h)
 	case winapi.EventObjectHide:
-		if a.handoffHidden[h] {
+		if until, ok := a.handoffHidden[h]; ok {
+			if time.Now().Before(until) {
+				// WinEvent notifications can be queued and delivered after the
+				// matching SHOW. Keep suppressing both sides of this handoff
+				// pair for the whole grace period; consuming HIDE or SHOW once
+				// makes a late HIDE look like a genuine close.
+				return
+			}
 			delete(a.handoffHidden, h)
-			return
 		}
 		a.noteClosed(h)
 	case winapi.EventObjectShow:
-		// A handoff window is shown again only after it has been moved to
-		// its parked spot (or restored to its intended home on failure).
-		delete(a.handoffHidden, h)
+		if until, ok := a.handoffHidden[h]; ok {
+			if time.Now().Before(until) {
+				return
+			}
+			delete(a.handoffHidden, h)
+		}
 	case winapi.EventSystemMoveSizeEnd:
 		a.windowMoved(h)
 	case winapi.EventObjectLocationChange:

@@ -28,8 +28,15 @@ func (s *strip) showCardThumb(h winapi.HWND, at ui.Rect) bool {
 	}
 	th := s.cardThumbs[h]
 	if th == nil {
+		if s.cardThumbFailed[h] {
+			return false
+		}
 		t, ok := winapi.RegisterThumbnail(s.hwnd, h)
 		if !ok {
+			if s.cardThumbFailed == nil {
+				s.cardThumbFailed = make(map[winapi.HWND]bool)
+			}
+			s.cardThumbFailed[h] = true
 			return false
 		}
 		th = &cardThumb{t: t}
@@ -76,6 +83,7 @@ func (s *strip) placeCardThumbs() {
 		if !winapi.IsWindow(h) {
 			th.t.Unregister()
 			delete(s.cardThumbs, h)
+			delete(s.cardThumbFailed, h)
 		}
 	}
 }
@@ -86,4 +94,5 @@ func (s *strip) dropCardThumbs() {
 		th.t.Unregister()
 		delete(s.cardThumbs, h)
 	}
+	clear(s.cardThumbFailed)
 }

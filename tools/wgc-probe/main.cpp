@@ -10,9 +10,12 @@
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <winrt/base.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cwchar>
+#include <iterator>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>

@@ -247,27 +247,49 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
 	handoff := func() {
-		// The overlay has built its first frame. Wait until DWM has
-		// composed it, then sample the live window rectangle immediately
-		// before ending the native move loop. Windows may restore the
-		// loop's starting rectangle as it exits, so never sample its home
-		// after cancellation.
+		// The overlay has built its first frame. Cloak the real HWND before
+		// ending the native move loop: WM_CANCELMODE may make Windows restore
+		// the loop's starting rectangle, and merely waiting for the loop to
+		// unwind cannot prevent that rectangle from being presented.
+		wasCloaked := winapi.IsCloaked(w.HWND)
+		if !wasCloaked && !winapi.SetCloaked(w.HWND, true) {
+			debugf("drag into card: DWM could not cloak real window %v; keeping it visible", w.HWND)
+			return
+		}
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
+			if !wasCloaked {
+				winapi.SetCloaked(w.HWND, false)
+				winapi.DwmFlush()
+			}
 			debugf("drag into card: could not end native move loop for %v; keeping real window visible", w.HWND)
 			return
 		}
+		parked := false
 		if a.settings.HideInactive {
-			if a.park.ParkImmediateFrom(w.HWND, parkFrom) {
+			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
+			if parked {
 				a.park.Rehome(w.HWND, home)
-			} else {
-				debugf("drag into card: could not park real window %v; leaving it visible", w.HWND)
 			}
-		} else {
+		}
+		if !parked {
+			// If parking is disabled or failed, put the window at its intended
+			// home while it is still cloaked. It must never be revealed at the
+			// native move loop's stale starting rectangle.
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 			winapi.ShowNoActivate(w.HWND)
+		}
+		if !wasCloaked {
+			if !winapi.SetCloaked(w.HWND, false) {
+				debugf("drag into card: DWM could not uncloak real window %v", w.HWND)
+			} else {
+				winapi.DwmFlush()
+			}
+		}
+		if a.settings.HideInactive && !parked {
+			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
 		}
 	}
 	// Switch the model first so refresh lays out the destination card. The

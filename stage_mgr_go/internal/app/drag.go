@@ -276,6 +276,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		a.flights.dragIntoCard(d, w, from)
 		if l := a.flights.layers[d.mon.Device]; l != nil {
 			winapi.PaintNow(l.hwnd)
+			// UpdateWindow/ PaintNow only processes WM_PAINT; it does not
+			// guarantee that DWM has composed the new layered-window frame.
+			// Wait for a composition pass before hiding the real window, or
+			// the old window can disappear one frame before the flight appears.
+			winapi.DwmFlush()
 		}
 	}
 

@@ -62,7 +62,7 @@ func (a *App) dragOver() {
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				origin := winapi.FrameBounds(g.h)
 				// Keep the real window visible until the flight layer has drawn
-				// its first frame over it. The handoff callback then hides it
+				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
 				g.converted = true
 				// Start the card's external drag before the native move loop
@@ -79,7 +79,7 @@ func (a *App) dragOver() {
 					stage = a.heading(target)
 				}
 				// Keep the real window visible until the flight layer has drawn
-				// its first frame over it. The handoff callback then hides it
+				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
 				g.converted = true
 				// Preserve the pointer gesture independently of a.drag: the

@@ -962,6 +962,14 @@ func (l *layer) view(c *ui.Context) {
 		d, st := landing.d, landing.d.card(landing.key)
 		if d.strip != nil && d.strip.scale > 0 && st.box.W > 0 && st.box.H > 0 {
 			if landing.started.IsZero() {
+				// The native move loop keeps moving the real HWND while the
+				// window-specific screenshot is captured. Sample its frame
+				// only when the first overlay frame is actually built; using
+				// the earlier strip-entry position makes the still flash at
+				// the window's stale drag position before the handoff.
+				if live := winapi.FrameBounds(landing.hwnd); !live.Empty() {
+					landing.from = poseOf(live)
+				}
 				landing.started = c.Now()
 			}
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)

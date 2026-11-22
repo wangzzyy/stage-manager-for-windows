@@ -22,7 +22,7 @@ func (s *Service) ParkImmediateAt(h winapi.HWND, home winapi.Rect) bool {
 	placeAt := func(winapi.Rect) (winapi.Rect, winapi.Point) {
 		return home, spotFor(home)
 	}
-	if !s.parkOneUsing(h, 0, placeAt, moveImmediate) {
+	if !s.parkOneUsing(h, 0, placeAt, moveImmediateShown) {
 		return false
 	}
 
@@ -39,7 +39,7 @@ func (s *Service) ParkImmediateAt(h winapi.HWND, home winapi.Rect) bool {
 	}
 	for _, owned := range catalog.OwnedWindows(h) {
 		if !s.IsParked(owned) {
-			s.parkOneUsing(owned, h, along, moveImmediate)
+			s.parkOneUsing(owned, h, along, moveImmediateShown)
 		}
 	}
 	s.save()

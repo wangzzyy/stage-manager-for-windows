@@ -903,9 +903,12 @@ type grayOver struct{ h winapi.HWND }
 // none, a frosted pane with its app's icon. Gray, from 0 to 1, is how far
 // the still goes gray: the built-in grayscale is all or nothing, so a gray
 // copy of it is drawn over it, that much opaque.
-func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32) {
+func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32, liveAt ui.Rect, useDWM bool) {
 	w := g.windows[i]
 	radius := max(r.H*0.045, 3)
+	if useDWM && s.showCardThumb(w.HWND, liveAt) {
+		return
+	}
 	if st := s.a.media.still(w.HWND); st != nil {
 		ui.Image(c.Key(w.HWND), st.card).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).
 			Fit(ui.FillBox).Radius(radius).Shadow(0, r.H*0.05, r.H*0.16, 0, shadowSoft)

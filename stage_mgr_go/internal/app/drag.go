@@ -261,19 +261,19 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		height = stillHeight(w.HWND, a.media.light)
 	}
 	img := winapi.Capture(w.HWND, height)
-	// PrintWindow can take long enough for a fast native drag to move the
-	// HWND well beyond the rectangle sampled by dragOver. The captured
-	// pixels are position-independent, so anchor the flight to the window's
-	// latest frame after capture rather than to that stale earlier sample.
 	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
-		if latest := winapi.FrameBounds(w.HWND); !latest.Empty() {
-			from = poseOf(latest)
-		}
 		card := img
 		if img.Rect.Dy() > cardStillHeight {
 			card = shrink(img, cardStillHeight)
 		}
 		a.media.take([]shot{{h: w.HWND, img: img, card: card}})
+		// PrintWindow and shrinking can take long enough for a fast native
+		// drag to move the HWND well beyond the rectangle sampled by dragOver.
+		// The captured pixels are position-independent, so anchor the flight
+		// to the latest frame only after all capture preparation is complete.
+		if latest := winapi.FrameBounds(w.HWND); !latest.Empty() {
+			from = poseOf(latest)
+		}
 	}
 
 	// Finish the native drag only after the landing layer has built its

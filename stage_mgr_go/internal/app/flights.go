@@ -976,7 +976,7 @@ func (l *layer) view(c *ui.Context) {
 			// Match that same contained rectangle, while preserving the
 			// transformed card's pivot and perspective.
 			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
-				pivotY := to.y + to.originY*to.h
+				pivotY := to.y + float64(to.originY)*to.h
 				aspect := float64(iw) / float64(ih)
 				if to.w/to.h > aspect {
 					fitW := to.h * aspect

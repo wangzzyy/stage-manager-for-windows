@@ -300,17 +300,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		a.redraw()
 	}
 	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 && a.flights != nil {
-		a.flights.dragIntoCard(d, w, from, home)
+		a.flights.dragIntoCard(d, w, from)
 		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil {
 			// view() invokes this only after drawing the landing image. DwmFlush
 			// then waits for that frame's composition before the handoff.
 			l.presented = func() {
 				winapi.DwmFlush()
 				finish()
-				if a.park.IsParked(w.HWND) && l.landing != nil {
-					l.landing.covering = false
-					l.win.Invalidate()
-				}
 			}
 			return
 		}

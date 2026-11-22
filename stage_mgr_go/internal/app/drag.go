@@ -251,19 +251,18 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// ending the native move loop: WM_CANCELMODE may make Windows restore
 		// the loop's starting rectangle, and merely waiting for the loop to
 		// unwind cannot prevent that rectangle from being presented.
-		wasCloaked := winapi.IsCloaked(w.HWND)
-		if !wasCloaked && !winapi.SetCloaked(w.HWND, true) {
-			debugf("drag into card: DWM could not cloak real window %v; keeping it visible", w.HWND)
-			return
-		}
+		// DWMWA_CLOAK can report success without actually suppressing the
+		// dragged HWND on some app/window combinations. Hide the real HWND
+		// explicitly for the short handoff, and ignore its corresponding
+		// WinEvent hide/show so it is not mistaken for an app closing.
+		a.handoffHidden[w.HWND] = true
+		winapi.Hide(w.HWND)
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
-			if !wasCloaked {
-				winapi.SetCloaked(w.HWND, false)
-				winapi.DwmFlush()
-			}
-			debugf("drag into card: could not end native move loop for %v; keeping real window visible", w.HWND)
+			winapi.ShowNoActivate(w.HWND)
+			winapi.DwmFlush()
+			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
 			return
 		}
 		parked := false
@@ -275,19 +274,15 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		}
 		if !parked {
 			// If parking is disabled or failed, put the window at its intended
-			// home while it is still cloaked. It must never be revealed at the
-			// native move loop's stale starting rectangle.
+			// home before making it visible again; never expose the stale
+			// starting rectangle restored by the native move loop.
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-			winapi.ShowNoActivate(w.HWND)
 		}
-		if !wasCloaked {
-			if !winapi.SetCloaked(w.HWND, false) {
-				debugf("drag into card: DWM could not uncloak real window %v", w.HWND)
-			} else {
-				winapi.DwmFlush()
-			}
-		}
+		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
+		// keeps enumeration and later restoration working as usual.
+		winapi.ShowNoActivate(w.HWND)
+		winapi.DwmFlush()
 		if a.settings.HideInactive && !parked {
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
 		}

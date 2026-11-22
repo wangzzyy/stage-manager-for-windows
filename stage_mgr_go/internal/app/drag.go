@@ -255,8 +255,21 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// dragged HWND on some app/window combinations. Hide the real HWND
 		// explicitly for the short handoff, and ignore its corresponding
 		// WinEvent hide/show so it is not mistaken for an app closing.
+		if a.handoffHidden == nil {
+			a.handoffHidden = make(map[winapi.HWND]bool)
+		}
 		a.handoffHidden[w.HWND] = true
 		winapi.Hide(w.HWND)
+		if winapi.IsWindowVisible(w.HWND) {
+			winapi.SetWindowPos(w.HWND, 0, 0, 0, 0, 0,
+				winapi.SwpHideWindow|winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		}
+		if winapi.IsWindowVisible(w.HWND) {
+			winapi.ShowNoActivate(w.HWND)
+			delete(a.handoffHidden, w.HWND)
+			debugf("drag into card: could not hide real window %v; aborting handoff", w.HWND)
+			return
+		}
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {

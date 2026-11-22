@@ -273,37 +273,30 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// first frame and DWM has composed it. PaintNow only processes WM_PAINT;
 	// it cannot prove that this newly shown window has produced a visible frame.
 	finish := func() {
-		// Hide only after the flight frame is presented. CancelMoveSize can
-		// restore the original window position; it is hidden during that reset.
-		winapi.Hide(w.HWND)
+		// The flight covers the real HWND. Keep it visible while ending the
+		// native move loop and parking it: Hide/Show can discard the composed
+		// surface in Explorer and apps that paint asynchronously, leaving a
+		// white thumbnail or a partially transparent window when restored.
 		if !winapi.CancelMoveSize(w.HWND) {
-			// A failed cancellation must not strand the real window hidden.
-			// The animation origin is the visible frame (FrameBounds), not the
-			// HWND's WindowRect. Restore the original position without
-			// overwriting its non-client-aware size.
-			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
-				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
-			winapi.ShowNoActivate(w.HWND)
+			debugf("drag conversion: could not cancel move-size for %x", w.HWND)
 			return
 		}
-		// Use the original WindowRect position, while preserving the HWND's
-		// actual size. origin is only the sampled visible frame for the flight.
+		// CancelMoveSize may reset the window position. Restore the original
+		// WindowRect origin without changing its actual size.
 		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		if a.settings.HideInactive {
-			// The regular refresh path may already have parked this window.
+			// Use the ordinary stage-switch handoff: park the covered window
+			// without Hide/Show or an explicit repaint of its surface.
 			parked := a.park.IsParked(w.HWND)
 			if !parked {
 				parked = a.park.ParkImmediate(w.HWND)
 			}
 			if parked {
 				a.park.Rehome(w.HWND, home)
-				winapi.ShowNoActivate(w.HWND)
 			} else {
-				debugf("drag conversion: could not park %x; keeping it hidden", w.HWND)
+				debugf("drag conversion: could not park %x; leaving it visible", w.HWND)
 			}
-		} else {
-			winapi.ShowNoActivate(w.HWND)
 		}
 		a.redraw()
 	}

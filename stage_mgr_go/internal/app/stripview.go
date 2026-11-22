@@ -187,7 +187,7 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
-		root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
+	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
 	out := float32(0)
 	if !s.shown {
 		// A floating strip slides out over its display's edge.

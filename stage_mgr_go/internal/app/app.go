@@ -613,13 +613,13 @@ func (a *App) initStage() {
 			rest = append(rest, w.HWND)
 		}
 	}
-	a.media.capture(leaving, false, 1500*time.Millisecond, func() {
+	a.media.capture(leaving, false, false, 1500*time.Millisecond, func() {
 		for _, h := range leaving {
 			a.park.Park(h)
 		}
 		a.ready = true
 		a.refresh()
-		a.media.capture(rest, false, 5*time.Second, a.redraw)
+		a.media.capture(rest, false, false, 5*time.Second, a.redraw)
 	})
 }
 
@@ -711,7 +711,7 @@ func (a *App) refresh() {
 		debugf("display %s stage=%v strip=%d covered=%v", d.mon.Device, d.model.Stage(), len(d.sets), d.covered)
 	}
 	if len(want) > 0 {
-		a.media.capture(want, false, 3*time.Second, a.redraw)
+		a.media.capture(want, false, false, 3*time.Second, a.redraw)
 	}
 	a.redraw()
 	a.refill()
@@ -785,7 +785,7 @@ func (a *App) parkStrays(d *display, groups []*group, now time.Time) {
 	if len(strays) == 0 {
 		return
 	}
-	a.media.capture(strays, false, time.Second, func() {
+	a.media.capture(strays, false, false, time.Second, func() {
 		for _, h := range strays {
 			if fg := catalog.RootOwner(winapi.Foreground()); fg != h {
 				a.park.Park(h)

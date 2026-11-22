@@ -1,0 +1,25 @@
+name: wgc-probe
+
+on:
+  pull_request:
+    paths:
+      - "tools/wgc-probe/**"
+      - ".github/workflows/wgc-probe.yml"
+  push:
+    branches: [feat/live-card-gpu-capture]
+    paths:
+      - "tools/wgc-probe/**"
+      - ".github/workflows/wgc-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake -S tools/wgc-probe -B build/wgc-probe -A x64
+      - name: Build
+        run: cmake --build build/wgc-probe --config Release

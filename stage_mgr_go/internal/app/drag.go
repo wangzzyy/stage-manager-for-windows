@@ -247,14 +247,21 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
 	handoff := func() {
-		// The overlay view has built its first frame. Wait until DWM has
-		// composed that frame before hiding the real HWND; otherwise the
-		// hide can be visible one or more frames before the overlay.
+		// The overlay has built its first frame. Wait until DWM has
+		// composed it, then end the native move loop and move the real
+		// window away. Do not call ShowWindow(SW_HIDE): besides hiding the
+		// window, that sends a hide notification which some apps interpret
+		// as a close/exit request and our own event hook records as closed.
 		winapi.DwmFlush()
-		winapi.Hide(w.HWND)
+		if !winapi.CancelMoveSize(w.HWND) {
+			debugf("drag into card: could not end native move loop for %v; keeping real window visible", w.HWND)
+			return
+		}
 		if a.settings.HideInactive {
 			if a.park.ParkImmediate(w.HWND) {
 				a.park.Rehome(w.HWND, home)
+			} else {
+				debugf("drag into card: could not park real window %v; leaving it visible", w.HWND)
 			}
 		} else {
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,

@@ -262,6 +262,9 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
+	// The window was hidden before cancelling the native move loop. Show it
+	// again at its parked/home position; the card image covers the handoff.
+	winapi.ShowNoActivate(w.HWND)
 	// Switch the model first so refresh lays out the destination card. The
 	// window's last stage still is already available in the common case; use
 	// it immediately rather than waiting for a fresh capture before showing

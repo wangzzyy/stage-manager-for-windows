@@ -285,10 +285,13 @@ func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 // Redraw asks a window to repaint everything, frame and children included,
 // without erasing what it shows first.
 func Redraw(h HWND) {
-	const rdwInvalidate, rdwNoErase, rdwAllChildren, rdwFrame = 0x1, 0x20, 0x80, 0x400
-	procRedrawWindow.Call(uintptr(h), 0, 0, rdwInvalidate|rdwNoErase|rdwAllChildren|rdwFrame)
+	// A window returning from the drag handoff may have discarded its
+	// redirected surface while hidden. Erase and paint invalidated regions
+	// immediately, rather than waiting for pointer movement or resize.
+	const rdwInvalidate, rdwErase, rdwAllChildren, rdwFrame, rdwUpdateNow = 0x1, 0x4, 0x80, 0x400, 0x100
+	procRedrawWindow.Call(uintptr(h), 0, 0, rdwInvalidate|rdwErase|rdwAllChildren|rdwFrame|rdwUpdateNow)
+	procDwmFlush.Call()
 }
-
 // PaintNow has a window of this thread paint at once, if it asked to be
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }

@@ -23,3 +23,9 @@ jobs:
         run: cmake -S tools/wgc-probe -B build/wgc-probe -A x64
       - name: Build
         run: cmake --build build/wgc-probe --config Release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wgc-probe-windows-x64
+          path: build/wgc-probe/Release/wgc-probe.exe
+          if-no-files-found: error
+          retention-days: 14

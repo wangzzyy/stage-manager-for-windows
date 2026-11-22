@@ -52,6 +52,7 @@ const (
 
 	dwmwaNCRenderingEnabled       = 1
 	dwmwaExtendedFrameBounds      = 9
+	dwmwaCloak                    = 13
 	dwmwaCloaked                  = 14
 	dwmwaTransitionsForceDisabled = 3
 
@@ -163,6 +164,19 @@ func CastsFrameShadow(h HWND) bool {
 	defer procDeleteObject.Call(rgn)
 	kind, _, _ := procGetWindowRgn.Call(uintptr(h), rgn)
 	return kind == rgnError
+}
+
+// SetCloaked asks DWM to temporarily omit a window from composition.
+// Unlike SW_HIDE, this does not change the Win32 visibility state or emit
+// EVENT_OBJECT_HIDE, which applications and our own window hooks may treat
+// as a close/minimize transition.
+func SetCloaked(h HWND, cloaked bool) bool {
+	var v int32
+	if cloaked {
+		v = 1
+	}
+	hr, _, _ := procDwmSetWindowAttribute.Call(uintptr(h), dwmwaCloak, uintptr(unsafe.Pointer(&v)), 4)
+	return hr == 0
 }
 
 // IsCloaked reports whether DWM hides the window, as it hides windows of

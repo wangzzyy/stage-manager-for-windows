@@ -51,6 +51,7 @@ const (
 
 	dwmwaNCRenderingEnabled       = 1
 	dwmwaExtendedFrameBounds      = 9
+	dwmwaCloak                    = 13
 	dwmwaCloaked                  = 14
 	dwmwaTransitionsForceDisabled = 3
 
@@ -180,6 +181,18 @@ func SetTransitionsDisabled(h HWND, disabled bool) {
 		v = 1
 	}
 	procDwmSetWindowAttribute.Call(uintptr(h), dwmwaTransitionsForceDisabled, uintptr(unsafe.Pointer(&v)), 4)
+}
+
+// SetCloaked temporarily removes a window from DWM composition without
+// changing its Win32 visibility state. Unlike SW_HIDE, this preserves the
+// window's show state while a native move loop is being cancelled.
+func SetCloaked(h HWND, cloaked bool) bool {
+	var v int32
+	if cloaked {
+		v = 1
+	}
+	hr, _, _ := procDwmSetWindowAttribute.Call(uintptr(h), dwmwaCloak, uintptr(unsafe.Pointer(&v)), 4)
+	return hr == 0
 }
 
 // SetDwmAttribute sets a 32-bit DWM window attribute.

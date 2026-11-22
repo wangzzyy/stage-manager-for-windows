@@ -262,23 +262,29 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 			winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	}
-	// Keep the real window shown at its parking spot. Capture its contents
-	// after the native drag has ended; the real card itself animates from
-	// the sampled window frame once its layout box is available.
-	winapi.ShowNoActivate(w.HWND)
+	// Switch the model first so refresh lays out the destination card. The
+	// window's last stage still is already available in the common case; use
+	// it immediately rather than waiting for a fresh capture before showing
+	// the handoff animation.
 	from := poseOf(origin)
+	d.model.Switch(next, time.Now())
+	a.windows = a.cat.Windows()
+	a.refresh()
+
+	if st := a.media.still(w.HWND); st != nil && st.fly != nil {
+		if a.flights != nil {
+			a.flights.dragIntoCard(d, w, from)
+		}
+		return
+	}
+	// A window without a cached still is the uncommon fallback. Capture it
+	// asynchronously; do not impose this wait on windows with a usable still.
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
-		// The card animation must not depend on whether the capture produced
-		// a cached still. A missing still used to skip the animation entirely,
-		// leaving the card at its sidebar size on the first visible frame.
 		if a.flights != nil {
 			a.flights.dragIntoCard(d, w, from)
 		}
 		a.redraw()
 	})
-	d.model.Switch(next, time.Now())
-	a.windows = a.cat.Windows()
-	a.refresh()
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

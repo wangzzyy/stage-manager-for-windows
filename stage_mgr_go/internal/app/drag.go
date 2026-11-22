@@ -292,16 +292,22 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
 		winapi.SwpNoZOrder|winapi.SwpNoActivate)
 	if a.settings.HideInactive {
-		// The flight image now owns the visible window. Park the real window
-		// before showing it again: restoring it on the desktop after cancelling
-		// the native move loop makes it flash at the drag position.
-		if a.park.ParkImmediate(w.HWND) {
+		// The regular refresh path may already have parked this window.
+		// Treat that as success: ParkImmediate deliberately returns false
+		// for an already-parked handle.
+		parked := a.park.IsParked(w.HWND)
+		if !parked {
+			parked = a.park.ParkImmediate(w.HWND)
+		}
+		if parked {
 			a.park.Rehome(w.HWND, home)
 			// Keep the window's visible state while it waits off-screen.
 			winapi.ShowNoActivate(w.HWND)
 		} else {
-			// Do not strand a window hidden if parking could not be completed.
-			winapi.ShowNoActivate(w.HWND)
+			// Never reveal the real window at the drag position as a fallback:
+			// the flight image owns the visible handoff. Leave it hidden rather
+			// than reintroduce the one-frame flash this path is meant to avoid.
+			debugf("drag conversion: could not park %x; keeping it hidden", w.HWND)
 		}
 	} else {
 		winapi.ShowNoActivate(w.HWND)

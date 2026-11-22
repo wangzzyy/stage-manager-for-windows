@@ -83,6 +83,10 @@ func (s *strip) placeCardThumbs() {
 		if !winapi.IsWindow(h) {
 			th.t.Unregister()
 			delete(s.cardThumbs, h)
+		}
+	}
+	for h := range s.cardThumbFailed {
+		if !winapi.IsWindow(h) {
 			delete(s.cardThumbFailed, h)
 		}
 	}

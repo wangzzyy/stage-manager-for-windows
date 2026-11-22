@@ -583,13 +583,6 @@ func moveImmediate(h winapi.HWND, p winapi.Point) bool {
 	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, flags)
 }
 
-// moveImmediateShown synchronously parks a temporarily hidden window and
-// restores its visible state only once it is off the desktop.
-func moveImmediateShown(h winapi.HWND, p winapi.Point) bool {
-	flags := uint32(moveFlags &^ winapi.SwpAsyncWindowPos) | winapi.SwpShowWindow
-	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, flags)
-}
-
 // land is move for a window coming back onto the desktop (homeFlags).
 func land(h winapi.HWND, p winapi.Point) bool {
 	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, homeFlags)

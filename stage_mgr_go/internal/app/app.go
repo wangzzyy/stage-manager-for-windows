@@ -773,6 +773,14 @@ func (a *App) parkStrays(d *display, groups []*group, now time.Time) {
 			continue
 		}
 		for _, w := range g.windows {
+			// A native window being converted into a card is parked by
+			// sendDraggedToStrip after its flight frame is presented. Do not
+			// schedule the ordinary asynchronous stray capture/park here:
+			// it can win the race, make ParkImmediate report "already parked",
+			// and cause the drag handoff to show the real window again.
+			if a.drag != nil && a.drag.converted && a.drag.h == w.HWND {
+				continue
+			}
 			if !a.hidden(w) && !w.Foreground && now.Sub(a.seen[w.HWND]) > 1500*time.Millisecond {
 				strays = append(strays, w.HWND)
 			}

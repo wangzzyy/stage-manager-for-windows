@@ -253,6 +253,7 @@ func lerpPose(a, b pose, e float64) pose {
 type cardLanding struct {
 	d       *display
 	key     string
+	hwnd    winapi.HWND
 	still   *ui.Bitmap
 	from    pose
 	started       time.Time
@@ -849,7 +850,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff 
 	cs.externalAnimating = false
 	cs.externalFrom = pose{}
 	cs.externalStarted = time.Time{}
-	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from, handoff: handoff}
+	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), hwnd: w.HWND, still: st.fly, from: from, handoff: handoff}
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 	return true
@@ -957,11 +958,37 @@ func (l *layer) view(c *ui.Context) {
 			}
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
 			e := flightEase(p)
-			toW, toH := float64(st.box.W)*d.strip.scale, float64(st.box.H)*d.strip.scale
-			// Use the card's actual rendered offset, not the raw drag delta. The
-			// strip may constrain or ease the card differently near its outer edge.
-			toX := float64(d.strip.rect.Left) + float64(st.box.X+st.ox)*d.strip.scale
-			toY := float64(d.strip.rect.Top) + float64(st.box.Y+st.dy)*d.strip.scale
+			// Land on the dragged window's actual slot in the card, not on
+			// the outer card box. Keep the captured window's aspect ratio: the
+			// card may have a very different shape from the real window.
+			g := findSet(d.sets, landing.key)
+			if g == nil {
+				return
+			}
+			index := slices.IndexFunc(g.windows, func(w catalog.Window) bool { return w.HWND == landing.hwnd })
+			if index < 0 {
+				return
+			}
+			stack := d.strip.a.stack(g, ui.Rect{W: st.box.W, H: st.box.H}, d.strip.right())
+			if index >= len(stack) {
+				return
+			}
+			slot := stack[index]
+			slot.X += st.box.X + st.ox
+			slot.Y += st.box.Y + st.dy
+			toX, toY, toW, toH := d.strip.toScreen(slot)
+			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
+				aspect := float64(iw) / float64(ih)
+				if toW/toH > aspect {
+					fitW := toH * aspect
+					toX += (toW - fitW) / 2
+					toW = fitW
+				} else {
+					fitH := toW / aspect
+					toY += (toH - fitH) / 2
+					toH = fitH
+				}
+			}
 			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
 			at := lerpPose(landing.from, to, e)
 			l.draw(c, -9001, landing.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)

@@ -190,6 +190,9 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
+	// handoffHidden marks windows temporarily hidden while a native drag is
+	// being converted into a card; their WinEvent hide/show is not a close.
+	handoffHidden map[winapi.HWND]bool
 	// peek is the shell's window for a peek at a taskbar thumbnail, while
 	// it shows one, and taskbar where the pointer was last over a taskbar.
 	peek    winapi.HWND

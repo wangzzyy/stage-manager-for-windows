@@ -273,22 +273,12 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// first frame and DWM has composed it. PaintNow only processes WM_PAINT;
 	// it cannot prove that this newly shown window has produced a visible frame.
 	finish := func() {
-		// Keep the real HWND covered by the flight until the drag loop has
-		// ended and the window has been parked. Do not route it through its
-		// home position: that intermediate on-screen frame is the one-frame
-		// flash visible immediately before the shrink animation.
-		// Hiding the HWND before ending Windows' native move loop prevents
-		// WM_CANCELMODE and the loop teardown from presenting the real window
-		// at its drag-start position. ParkImmediateAt shows it only after it
-		// has moved off-screen, preserving its normal visible state.
-		if a.settings.HideInactive {
-			winapi.Hide(w.HWND)
-		}
+		// Do not hide/show the real HWND during this handoff. Some apps
+		// (notably Explorer and GPU-rendered windows) lose thumbnail or
+		// composition state across SW_HIDE/SW_SHOW. End the native drag and
+		// synchronously park the HWND without changing its visibility.
 		if !winapi.CancelMoveSize(w.HWND) {
 			debugf("drag conversion: could not cancel move-size for %x", w.HWND)
-			if a.settings.HideInactive {
-				winapi.ShowNoActivate(w.HWND)
-			}
 			return
 		}
 		if a.settings.HideInactive {
@@ -299,15 +289,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			if parked {
 				a.park.Rehome(w.HWND, home)
 			} else if !a.park.IsParked(w.HWND) {
-				// Restore visibility if parking failed, then use the safe fallback.
-				winapi.ShowNoActivate(w.HWND)
 				winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 					winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 				debugf("drag conversion: could not park %x; leaving it visible", w.HWND)
 			}
 		} else {
-			// When inactive windows are not hidden, the intended home is
-			// also their final visible position, so restore it after the drag.
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}

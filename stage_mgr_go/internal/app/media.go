@@ -119,7 +119,7 @@ func (m *media) still(h winapi.HWND) *still { return m.stills[h] }
 // by MyGo and therefore inherits the card's perspective and clipping.
 func (m *media) refreshLive(h winapi.HWND, done func()) {
 	now := time.Now()
-	if m.pending[h] || now.Sub(m.liveTried[h]) < 250*time.Millisecond {
+	if m.pending[h] || now.Sub(m.liveTried[h]) < 50*time.Millisecond {
 		return
 	}
 	m.liveTried[h] = now

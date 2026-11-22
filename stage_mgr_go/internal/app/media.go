@@ -148,9 +148,10 @@ func (m *media) preview(ws []catalog.Window) {
 // shows and the smaller one its card draws, which is the same picture while
 // the window is a card's size.
 type shot struct {
-	h    winapi.HWND
-	img  *image.RGBA
-	card *image.RGBA
+	h           winapi.HWND
+	img         *image.RGBA
+	card        *image.RGBA
+	preserveFly bool
 }
 
 // capture takes stills of windows on goroutines and calls done on the main
@@ -160,16 +161,16 @@ type shot struct {
 // the stage; the others are a card's size, which a window flying out shrinks
 // into and a flight back in grows from.
 func (m *media) capture(hs []winapi.HWND, full bool, timeout time.Duration, done func()) {
-	m.captureSized(hs, full || m.full, timeout, done)
+	m.captureSized(hs, full || m.full, false, timeout, done)
 }
 
 // captureCard refreshes a card preview without creating a full-resolution
 // flight image. Live refreshes only need the bitmap shown in the strip.
 func (m *media) captureCard(hs []winapi.HWND, timeout time.Duration, done func()) {
-	m.captureSized(hs, false, timeout, done)
+	m.captureSized(hs, false, true, timeout, done)
 }
 
-func (m *media) captureSized(hs []winapi.HWND, full bool, timeout time.Duration, done func()) {
+func (m *media) captureSized(hs []winapi.HWND, full, preserveFly bool, timeout time.Duration, done func()) {
 	if len(hs) == 0 {
 		if done != nil {
 			done()
@@ -202,7 +203,7 @@ func (m *media) captureSized(hs []winapi.HWND, full bool, timeout time.Duration,
 				card = shrink(img, cardStillHeight)
 			}
 			mu.Lock()
-			got = append(got, shot{h, img, card})
+			got = append(got, shot{h: h, img: img, card: card, preserveFly: preserveFly})
 			mu.Unlock()
 		}()
 	}
@@ -245,6 +246,13 @@ func (m *media) take(shots []shot) {
 		if st == nil {
 			st = &still{}
 			m.stills[s.h] = st
+		}
+		if s.preserveFly {
+			// A live card refresh must not replace the higher-resolution
+			// image already prepared for a flight to the stage.
+			put(&st.card, s.card)
+			st.at = time.Now()
+			continue
 		}
 		m.flyBytes -= st.flyBytes
 		st.flyBytes = 0

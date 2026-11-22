@@ -255,7 +255,9 @@ type cardLanding struct {
 	key     string
 	still   *ui.Bitmap
 	from    pose
-	started time.Time
+	started       time.Time
+	handoff       func()
+	handoffPosted bool
 }
 
 type layer struct {
@@ -826,7 +828,7 @@ func (f *flights) standByAll() {
 // never from a fixed screen coordinate.
 const dragIntoCardDuration = 1500 * time.Millisecond
 
-func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
+func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff func()) {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
 		return
 	}
@@ -847,7 +849,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 	cs.externalAnimating = false
 	cs.externalFrom = pose{}
 	cs.externalStarted = time.Time{}
-	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
+	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from, handoff: handoff}
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 }
@@ -962,6 +964,14 @@ func (l *layer) view(c *ui.Context) {
 			to := pose{x: toX, y: toY, w: toW, h: toH, originY: 0.5, perspective: cardPerspective}
 			at := lerpPose(landing.from, to, e)
 			l.draw(c, -9001, landing.still, at, 1, cardShade(float32(at.h/l.scale)), 0, 0)
+			// This is the first complete overlay frame at the window's old
+			// position. Only after it has been built may the native window
+			// disappear; post runs after this frame, not when Invalidate is
+			// merely requested.
+			if landing.handoff != nil && !landing.handoffPosted {
+				landing.handoffPosted = true
+				post(landing.handoff)
+			}
 			// Keep the overlay's exact final frame until the strip confirms
 			// that its real card has rendered the matching resting pose. The
 			// two UI windows do not necessarily present on the same frame.

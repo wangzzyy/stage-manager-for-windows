@@ -963,7 +963,7 @@ func (l *layer) view(c *ui.Context) {
 			// independently rebuilding a rectangle here makes the overlay
 			// finish at a subtly different size/position from the real card.
 			var to pose
-			if targets := f.cardPoses(d, []catalog.Window{w}, true); targets != nil {
+			if targets := l.owner.cardPoses(d, []catalog.Window{{HWND: landing.hwnd}}, true); targets != nil {
 				to = targets[landing.hwnd]
 			}
 			if to.w <= 0 || to.h <= 0 {

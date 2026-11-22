@@ -316,7 +316,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// capture: it includes whichever windows happen to overlap its rectangle.
 	// Use the window's PrintWindow capture path and let its timeout keep a
 	// hung application from holding up the handoff.
-	a.media.capture([]winapi.HWND{w.HWND}, true, 300*time.Millisecond, func() {
+	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
 		if !startFlight() {
 			debugf("drag into card: capture produced no drawable animation; keeping real window visible")
 		}

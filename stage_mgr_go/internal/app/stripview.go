@@ -31,7 +31,7 @@ type cardState struct {
 	// ox is how far across the card showed moved in the last frame, and
 	// follow how it followed the pointer then: not at all, kept in the
 	// strip, or out of it.
-	ox     float32
+	ox, oy float32
 	follow follow
 	// tilt and lift are how the card's windows showed in the last frame,
 	// for windows flying out of it to start from.
@@ -211,6 +211,7 @@ func (s *strip) view(c *ui.Context) {
 		x, stopped = root.Jump("reveal", out), true
 	}
 	root.Translate(x, 0)
+	s.viewOffsetX = x
 	s.away = !s.shown && !stopped && root.Settled("reveal")
 	root.HandleInput(func(ev ui.InputEvent) bool {
 		if ev.Kind != ui.InputScroll {
@@ -624,6 +625,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		ox, oy = el.AnimateTo("dx", 0, ui.Smooth), el.AnimateTo("dy", 0, ui.Smooth)
 	}
 	st.ox = ox
+	st.oy = oy
 	// The flight covers the card as it lands, so the card shows at once
 	// underneath; fading it in once the flight is gone would blink. The
 	// icons come in on the flight layer, above the flights.

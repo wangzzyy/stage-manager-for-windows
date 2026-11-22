@@ -280,11 +280,24 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// first frame and DWM has composed it. PaintNow only processes WM_PAINT;
 	// it cannot prove that this newly shown window has produced a visible frame.
 	finish := func() {
-		// Do not hide/show the real HWND during this handoff. Some apps
-		// (notably Explorer and GPU-rendered windows) lose thumbnail or
-		// composition state across SW_HIDE/SW_SHOW. End the native drag and
-		// synchronously park the HWND without changing its visibility.
+		// Cloak the HWND in DWM before ending the native modal move loop.
+		// WM_CANCELMODE can restore the drag-start rectangle; without a
+		// composition barrier that rollback may be visible for one frame
+		// before the synchronous parking move takes effect. DWM cloaking
+		// leaves the HWND visible to Win32 (unlike SW_HIDE), so its show and
+		// thumbnail state are not toggled during the handoff.
+		cloaked := winapi.SetCloaked(w.HWND, true)
+		if cloaked {
+			// Do not cancel the move loop until DWM has committed the cloak.
+			winapi.DwmFlush()
+		} else {
+			debugf("drag conversion: could not cloak %x before cancelling move-size", w.HWND)
+		}
 		if !winapi.CancelMoveSize(w.HWND) {
+			if cloaked {
+				winapi.SetCloaked(w.HWND, false)
+				winapi.DwmFlush()
+			}
 			debugf("drag conversion: could not cancel move-size for %x", w.HWND)
 			return
 		}
@@ -303,6 +316,17 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		} else {
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		}
+		if cloaked {
+			// Commit the new off-screen/home position before allowing DWM to
+			// compose the window again. A parked window stays cloaked only for
+			// this short handoff; it is not left cloaked while in the strip.
+			winapi.DwmFlush()
+			if !winapi.SetCloaked(w.HWND, false) {
+				debugf("drag conversion: could not uncloak %x after parking", w.HWND)
+			} else {
+				winapi.DwmFlush()
+			}
 		}
 		a.redraw()
 	}

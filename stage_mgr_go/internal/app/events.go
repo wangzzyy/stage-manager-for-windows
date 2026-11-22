@@ -86,6 +86,7 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 			a.peekEnd()
 			return
 		}
+		delete(a.handoffHidden, h)
 		a.noteClosed(h)
 	case winapi.EventObjectHide:
 		if until, ok := a.handoffHidden[h]; ok {

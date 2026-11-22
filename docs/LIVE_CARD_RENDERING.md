@@ -84,7 +84,7 @@ Use **Windows Graphics Capture (WGC) + a GPU-resident shared texture + the exist
 
 ## Suggested implementation sequence
 
-1. Build a Windows-only WGC capture probe for one HWND. Log frame-arrival timestamps, content size, and failures while the HWND is parked; no UI integration yet.
+1. Build and run the Windows-only WGC probe in `tools/wgc-probe`. It lists top-level windows, lets the user select a parked HWND, and reports per-second frame counts and content size. Compare the same HWND while parked and on-stage; no UI integration yet.
 2. Add the smallest public MyGo API needed to publish a native shared BGRA surface, reusing the existing D3D11 renderer import and keyed-mutex path.
 3. Add a per-visible-card capture manager with bounded sessions and deterministic cleanup.
 4. Wire the live image into the existing card window layer, leaving all current transforms intact.

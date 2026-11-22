@@ -64,6 +64,7 @@ type strip struct {
 	// near it, 0 to 1. The poll measures it everywhere on the display,
 	// where the strip lets the pointer through and so hears nothing of it.
 	near float32
+	viewOffsetX float32 // current horizontal slide of the strip's root, in DIPs
 	// joined is whether the corner button below the strip joins its
 	// panel into one button (corner.go), and footHover and footPress
 	// whether the pointer is over the panel and its button down on it,
@@ -485,7 +486,7 @@ func (s *strip) cardBand() winapi.Rect {
 
 // toScreen converts a rectangle in DIPs of the strip window to pixels.
 func (s *strip) toScreen(r ui.Rect) (x, y, w, h float64) {
-	return float64(s.rect.Left) + float64(r.X)*s.scale, float64(s.rect.Top) + float64(r.Y)*s.scale,
+	return float64(s.rect.Left) + float64(r.X+s.viewOffsetX)*s.scale, float64(s.rect.Top) + float64(r.Y)*s.scale,
 		float64(r.W) * s.scale, float64(r.H) * s.scale
 }
 

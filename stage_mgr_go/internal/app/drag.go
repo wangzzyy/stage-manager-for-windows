@@ -282,7 +282,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// asynchronously; do not impose this wait on windows with a usable still.
 	a.media.capture([]winapi.HWND{w.HWND}, false, 300*time.Millisecond, func() {
 		if a.flights != nil {
-			a.flights.dragIntoCard(d, w, from)
+			a.flights.dragIntoCard(d, w, from, handoff)
 		}
 		a.redraw()
 	})

@@ -856,11 +856,11 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose) {
 		cs.externalStarted = time.Time{}
 		l.landing = &cardLanding{d: d, key: f.a.groupKey(w), still: st.fly, from: from}
 	})
-	// Keep the flight beneath the strip for the entire shrink. The
-	// sidebar's real cards must remain the topmost layer; otherwise the
-	// animated image crosses over neighbouring cards and flashes as it
-	// competes with their own redraws.
-	l.lower(d.strip.hwnd)
+	// The strip card is deliberately transparent while this overlay owns
+	// the handoff (externalLayer). The animation therefore must be above the
+	// strip; placing it underneath leaves both the real card and the flight
+	// invisible for the duration of the shrink.
+	l.raise()
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 }

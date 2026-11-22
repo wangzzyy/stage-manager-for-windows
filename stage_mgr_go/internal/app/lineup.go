@@ -521,6 +521,7 @@ func fadeColor(el ui.Element, key string, c ui.Color) ui.Color {
 
 // dropThumbs lets go of every picture of the list, as the strip closes.
 func (s *strip) dropThumbs() {
+	s.dropCardThumbs()
 	if s.line.wake != nil {
 		s.line.wake.Stop()
 		s.line.wake = nil

@@ -119,11 +119,11 @@ func (m *media) still(h winapi.HWND) *still { return m.stills[h] }
 // by MyGo and therefore inherits the card's perspective and clipping.
 func (m *media) refreshLive(h winapi.HWND, done func()) {
 	now := time.Now()
-	if m.pending[h] || now.Sub(m.liveTried[h]) < 50*time.Millisecond {
+	if m.pending[h] || now.Sub(m.liveTried[h]) < 150*time.Millisecond {
 		return
 	}
 	m.liveTried[h] = now
-	m.capture([]winapi.HWND{h}, false, 750*time.Millisecond, done)
+	m.captureCard([]winapi.HWND{h}, 750*time.Millisecond, done)
 }
 
 // preview takes the stills of the windows of a card the pointer rests on,
@@ -160,6 +160,16 @@ type shot struct {
 // the stage; the others are a card's size, which a window flying out shrinks
 // into and a flight back in grows from.
 func (m *media) capture(hs []winapi.HWND, full bool, timeout time.Duration, done func()) {
+	m.captureSized(hs, full || m.full, timeout, done)
+}
+
+// captureCard refreshes a card preview without creating a full-resolution
+// flight image. Live refreshes only need the bitmap shown in the strip.
+func (m *media) captureCard(hs []winapi.HWND, timeout time.Duration, done func()) {
+	m.captureSized(hs, false, timeout, done)
+}
+
+func (m *media) captureSized(hs []winapi.HWND, full bool, timeout time.Duration, done func()) {
 	if len(hs) == 0 {
 		if done != nil {
 			done()
@@ -167,7 +177,6 @@ func (m *media) capture(hs []winapi.HWND, full bool, timeout time.Duration, done
 		return
 	}
 	// Read here: the goroutines must not touch the media.
-	full = full || m.full
 	light := m.light
 	// Some apps flash when asked to draw themselves: a capture nobody
 	// expected is worth seeing in the log.

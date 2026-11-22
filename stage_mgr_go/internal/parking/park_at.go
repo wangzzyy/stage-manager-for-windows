@@ -22,7 +22,7 @@ func (s *Service) ParkImmediateAt(h winapi.HWND, home winapi.Rect) bool {
 	placeAt := func(winapi.Rect) (winapi.Rect, winapi.Point) {
 		return home, spotFor(home)
 	}
-	if !s.parkOneUsing(h, 0, placeAt, moveImmediateShown) {
+	if !s.parkOneUsing(h, 0, placeAt, moveImmediate) {
 		return false
 	}
 

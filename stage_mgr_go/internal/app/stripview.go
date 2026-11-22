@@ -187,9 +187,7 @@ func (s *strip) view(c *ui.Context) {
 		shown = layoutStrip(n, w, h, d.scroll, gap, p, line.extent, at, right)
 	}
 
-	s.cardThumbsAllowed = false
-	s.cardThumbSeen = make(map[winapi.HWND]bool)
-	root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
+		root := ui.Box(c).Absolute().Left(0).Top(0).Size(w, h)
 	out := float32(0)
 	if !s.shown {
 		// A floating strip slides out over its display's edge.
@@ -205,7 +203,6 @@ func (s *strip) view(c *ui.Context) {
 		x, stopped = root.Jump("reveal", out), true
 	}
 	root.Translate(x, 0)
-	s.cardThumbsAllowed = s.shown && !d.inOverview && !a.busy && a.cardDrag == nil && !s.dragging && math.Abs(float64(x)) < 0.01
 	s.away = !s.shown && !stopped && root.Settled("reveal")
 	root.HandleInput(func(ev ui.InputEvent) bool {
 		if ev.Kind != ui.InputScroll {
@@ -239,7 +236,6 @@ func (s *strip) view(c *ui.Context) {
 		list = s.lineupView(c, line, staged, x)
 	})
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
-	s.placeCardThumbs()
 }
 
 // footer draws the panel at the bottom of the strip that opens the
@@ -708,9 +704,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				for i := len(stack) - 1; i >= 0; i-- {
-					useDWM := s.cardThumbsAllowed && len(g.windows) == 1 && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && math.Abs(float64(tilt)) < 0.01 && math.Abs(float64(lift-1)) < 0.001 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
-					at := ui.Rect{X: box.X + ox + stack[i].X, Y: box.Y + oy + stack[i].Y, W: stack[i].W, H: stack[i].H}
-					s.windowStill(c, g, i, stack[i], gray, at, useDWM)
+					useLive := s.shown && !d.inOverview && !a.busy && a.cardDrag == nil && !s.dragging && !g.staged && !landing && !live && !st.dragging && !held && !st.returning && op > 0.99 && el.Settled("tilt") && el.Settled("lift") && el.Settled("dx") && el.Settled("dy")
+					s.windowStill(c, g, i, stack[i], gray, useLive)
 				}
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's
@@ -903,11 +898,11 @@ type grayOver struct{ h winapi.HWND }
 // none, a frosted pane with its app's icon. Gray, from 0 to 1, is how far
 // the still goes gray: the built-in grayscale is all or nothing, so a gray
 // copy of it is drawn over it, that much opaque.
-func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32, liveAt ui.Rect, useDWM bool) {
+func (s *strip) windowStill(c *ui.Context, g *set, i int, r ui.Rect, gray float32, useLive bool) {
 	w := g.windows[i]
 	radius := max(r.H*0.045, 3)
-	if useDWM && s.showCardThumb(w.HWND, liveAt) {
-		return
+	if useLive {
+		s.a.media.refreshLive(w.HWND, s.a.redraw)
 	}
 	if st := s.a.media.still(w.HWND); st != nil {
 		ui.Image(c.Key(w.HWND), st.card).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).

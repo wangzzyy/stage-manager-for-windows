@@ -96,6 +96,39 @@ func (s *Service) Park(h winapi.HWND) bool { return s.park(h, move) }
 // the real window visible at its former position after the card has landed.
 func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmediate) }
 
+// ParkImmediateFrom parks synchronously using the window rectangle sampled
+// before a native move loop is cancelled. That loop can restore its starting
+// rectangle as it exits; sampling WindowRect afterwards would then both add
+// latency before moving the window and record the wrong place as its home.
+func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
+	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
+		from.Empty() || !winapi.OnAnyMonitor(from) {
+		return false
+	}
+	home := onDesktop(from)
+	spot := spotFor(home)
+	if !moveImmediate(h, spot) {
+		return false
+	}
+	s.parked[h] = parked{Home: home, Spot: spot, At: time.Now()}
+	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), from, home, spot, 0)
+	dx, dy := spot.X-from.Left, spot.Y-from.Top
+	shiftX, shiftY := home.Left-from.Left, home.Top-from.Top
+	along := func(r winapi.Rect) (winapi.Rect, winapi.Point) {
+		if at := r.Offset(dx, dy); !winapi.OnAnyMonitor(at) {
+			return r.Offset(shiftX, shiftY), winapi.Point{X: at.Left, Y: at.Top}
+		}
+		return alone(r)
+	}
+	for _, o := range catalog.OwnedWindows(h) {
+		if !s.IsParked(o) {
+			s.parkOneUsing(o, h, along, moveImmediate)
+		}
+	}
+	s.save()
+	return true
+}
+
 func (s *Service) park(h winapi.HWND, mover func(winapi.HWND, winapi.Point) bool) bool {
 	if s.IsParked(h) {
 		return false

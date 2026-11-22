@@ -269,57 +269,53 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		a.media.take([]shot{{h: w.HWND, img: img, card: card}})
 	}
 
-	// Put a real first frame on screen before hiding the real window. This
-	// makes the visual handoff continuous even though cancelling the native
-	// move loop can reset the window's position.
-	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 && a.flights != nil {
-		a.flights.dragIntoCard(d, w, from)
-		if l := a.flights.layers[d.mon.Device]; l != nil {
-			winapi.PaintNow(l.hwnd)
-			// UpdateWindow/ PaintNow only processes WM_PAINT; it does not
-			// guarantee that DWM has composed the new layered-window frame.
-			// Wait for a composition pass before hiding the real window, or
-			// the old window can disappear one frame before the flight appears.
-			winapi.DwmFlush()
+	// Finish the native drag only after the landing layer has built its
+	// first frame and DWM has composed it. PaintNow only processes WM_PAINT;
+	// it cannot prove that this newly shown window has produced a visible frame.
+	finish := func() {
+		// Hide only after the flight frame is presented. CancelMoveSize can
+		// restore the original window position; it is hidden during that reset.
+		winapi.Hide(w.HWND)
+		if !winapi.CancelMoveSize(w.HWND) {
+			// A failed cancellation must not strand the real window hidden.
+			winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
+				winapi.SwpNoZOrder|winapi.SwpNoActivate)
+			winapi.ShowNoActivate(w.HWND)
+			return
 		}
-	}
-
-	// Hide only after the flight frame is presented. CancelMoveSize can
-	// restore the original window position; it is hidden during that reset.
-	winapi.Hide(w.HWND)
-	if !winapi.CancelMoveSize(w.HWND) {
-		// A failed cancellation must not strand the real window hidden.
 		winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
 			winapi.SwpNoZOrder|winapi.SwpNoActivate)
-		winapi.ShowNoActivate(w.HWND)
-		return
-	}
-	winapi.SetWindowPos(w.HWND, 0, origin.Left, origin.Top, origin.W(), origin.H(),
-		winapi.SwpNoZOrder|winapi.SwpNoActivate)
-	if a.settings.HideInactive {
-		// The regular refresh path may already have parked this window.
-		// Treat that as success: ParkImmediate deliberately returns false
-		// for an already-parked handle.
-		parked := a.park.IsParked(w.HWND)
-		if !parked {
-			parked = a.park.ParkImmediate(w.HWND)
-		}
-		if parked {
-			a.park.Rehome(w.HWND, home)
-			// Keep the window's visible state while it waits off-screen.
-			winapi.ShowNoActivate(w.HWND)
+		if a.settings.HideInactive {
+			// The regular refresh path may already have parked this window.
+			parked := a.park.IsParked(w.HWND)
+			if !parked {
+				parked = a.park.ParkImmediate(w.HWND)
+			}
+			if parked {
+				a.park.Rehome(w.HWND, home)
+				winapi.ShowNoActivate(w.HWND)
+			} else {
+				debugf("drag conversion: could not park %x; keeping it hidden", w.HWND)
+			}
 		} else {
-			// Never reveal the real window at the drag position as a fallback:
-			// the flight image owns the visible handoff. Leave it hidden rather
-			// than reintroduce the one-frame flash this path is meant to avoid.
-			debugf("drag conversion: could not park %x; keeping it hidden", w.HWND)
+			winapi.ShowNoActivate(w.HWND)
 		}
-	} else {
-		winapi.ShowNoActivate(w.HWND)
+		a.redraw()
 	}
-
-	a.redraw()
-}
+	if img != nil && img.Rect.Dx() > 0 && img.Rect.Dy() > 0 && a.flights != nil {
+		a.flights.dragIntoCard(d, w, from)
+		if l := a.flights.layers[d.mon.Device]; l != nil && l.landing != nil {
+			// view() invokes this only after drawing the landing image. DwmFlush
+			// then waits for that frame's composition before the handoff.
+			l.presented = func() {
+				winapi.DwmFlush()
+				finish()
+			}
+			return
+		}
+	}
+	// Without a usable captured image there is no overlay frame to await.
+	finish()
 
 // sendToStrip takes the app of a window dragged into a display's strip off
 // the stage, into a card of its own; the others stay. The window goes back

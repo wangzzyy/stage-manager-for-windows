@@ -4,7 +4,7 @@ This small Windows-only diagnostic captures one top-level HWND with Windows Grap
 
 ## Build
 
-Requires Visual Studio 2022 C++ tools and a Windows 10 SDK (10.0.19041 or newer).
+Requires Visual Studio 2022 C++ tools and a Windows 10 SDK (10.0.19041 or newer). A prebuilt x64 executable is also attached to the `wgc-probe-windows-x64` artifact of the PR's `wgc-probe` Actions run.
 
 ```powershell
 cmake -S tools/wgc-probe -B build/wgc-probe -A x64

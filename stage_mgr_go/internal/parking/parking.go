@@ -27,13 +27,14 @@ const (
 	// picture it already had.
 	moveFlags = winapi.SwpNoRedraw | winapi.SwpNoSize | winapi.SwpNoZOrder | winapi.SwpNoActivate |
 		winapi.SwpNoOwnerZOrder | winapi.SwpAsyncWindowPos
-	// A window coming home also works out its frame again. One that did so
-	// while it waited, as Edge and other Chromium apps do now and then, found
-	// no display there, and Chromium then makes the whole window its client
-	// area: back on the desktop DWM sees a window without a frame and gives it
-	// neither rounded corners nor a shadow, until it is resized. Asked here,
-	// the app works it out for where the window is going.
-	homeFlags = moveFlags | winapi.SwpFrameChanged
+	// A window coming home must process its position change before it is
+	// redrawn. Reusing moveFlags here is unsafe: SWP_ASYNCWINDOWPOS returns
+	// before the target thread has moved the window, while SWP_NOREDRAW
+	// suppresses the repaint caused by that move. Redraw could therefore run
+	// against the old off-screen surface, leaving a blank/partial window until
+	// the app happens to paint again. Keep the frame recalculation, but make
+	// the normal landing synchronous and allow Windows to issue its paints.
+	homeFlags = moveFlags &^ (winapi.SwpAsyncWindowPos | winapi.SwpNoRedraw) | winapi.SwpFrameChanged
 	settle    = time.Second
 	// A window sent home that is not there after chaseAfter is sent again,
 	// up to chaseTries times, and then fitted onto the nearest display.

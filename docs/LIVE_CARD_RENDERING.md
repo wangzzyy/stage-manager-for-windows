@@ -31,34 +31,48 @@ MyGo already has most of the *renderer-side* primitive needed for a zero-readbac
 
 The remaining integration boundary is API visibility: `scene.Surface` is in MyGo's `internal` package, and `ui.Bitmap.showPicture` is private. Stage Manager cannot construct and attach a native surface through the public `ui.Bitmap` API today. The clean solution is a small public MyGo producer API (or an upstream change) that safely wraps a shared BGRA D3D11 surface and its lifetime. Avoid copying MyGo's renderer internals into Stage Manager.
 
+### Proposed MyGo API contract
+
+The app should not receive or mutate MyGo's internal `scene.Image`. A narrow public API should accept a native BGRA frame with:
+
+- width and height;
+- an owned shared NT handle and a stable texture ID;
+- a producer synchronization contract (keyed mutex, key 0);
+- optional CPU fallback pixels for renderers that cannot sample native surfaces;
+- explicit ownership/lifetime semantics: the producer transfers or retains the handle until the bitmap no longer references that surface, and MyGo closes it only after the surface becomes unreachable.
+
+The API should update an existing `ui.Bitmap` in place and mark its image changed, just as the internal video path does. It should not allocate a new bitmap/texture for every frame. This is the only renderer-facing API Stage Manager should need.
+
 ## Recommended target architecture
 
 Use **Windows Graphics Capture (WGC) + a GPU-resident shared texture + the existing card/flight transforms**.
 
-1. **Capture source:** create a WGC capture session for each eligible parked top-level HWND. The window remains non-minimized while parked, so it is a candidate source; actual frame delivery while off the virtual desktop must be verified on Windows.
-2. **Capture device and shared output:** use a D3D11 device for WGC frames. Copy each delivered frame on the GPU into a reusable BGRA texture created with shared-NT-handle and keyed-mutex flags, following MyGo's existing Media Foundation producer pattern. Publish the shared handle and a unique stable ID through the proposed MyGo API.
-3. **Event-driven frames:** consume frames when WGC reports new content. Do not poll with `PrintWindow` and do not capture every app on every UI frame.
-4. **GPU residency:** keep the newest frame in a reusable D3D11 texture. Scale/crop to the card's required resolution on the GPU where possible. Avoid mapping the full-resolution frame to CPU memory on every update.
-5. **Reuse existing transforms:** feed the live native-surface image into the same window layer that currently draws `st.card`. Keep the current `Scale`, `RotateY`, `Perspective`, opacity, and layout code. The flight layer should be able to reference the same texture.
-6. **Bound resource use:** start capture only for windows represented by visible cards (and at most the windows actually drawn in each stack); stop or suspend sessions when the strip is hidden, the card leaves the visible range, the HWND is destroyed, or the app shuts down. Reuse textures and cap their dimensions to the rendered card size plus a quality margin.
-7. **Graceful fallback:** if WGC cannot create a session, stops delivering frames, or the renderer cannot import its texture, keep the current cached still/icon. Never block the UI thread waiting for a capture frame.
+1. **Capture source:** create a WGC capture item for each eligible parked top-level HWND using `IGraphicsCaptureItemInterop.CreateForWindow`. The window remains non-minimized while parked, so it is a candidate source; actual frame delivery while off the virtual desktop must be verified on Windows.
+2. **Capture device:** create a D3D11 device and expose it as a WinRT `IDirect3DDevice` with `CreateDirect3D11DeviceFromDXGIDevice`. Create a free-threaded WGC frame pool with BGRA8 frames and a small buffer count (start with three), then a capture session for the item.
+3. **Capture frame:** consume frames only from WGC's `FrameArrived` event. Read the frame's content size and texture, then copy it on the GPU into one of three reusable shared BGRA textures. Do not map the full-resolution WGC frame to CPU memory.
+4. **Shared output:** create the output textures with shared-NT-handle and keyed-mutex flags, following MyGo's existing Media Foundation producer pattern. Publish the selected ring slot's handle and stable ID through the proposed MyGo API. Use non-blocking/short-timeout mutex acquisition; if all slots are busy, drop that frame rather than stalling capture or the UI.
+5. **Event-driven redraw:** coalesce frame-arrival notifications and request at most one UI redraw per display frame. The source controls the actual update rate; do not run a 144 Hz polling loop for a 30 Hz source.
+6. **Reuse existing transforms:** feed the live native-surface image into the same window layer that currently draws `st.card`. Keep the current `Scale`, `RotateY`, `Perspective`, opacity, clipping, and layout code. The flight layer should be able to reference the same live image.
+7. **Bound resource use:** start capture only for windows actually drawn in visible cards (including the visible stacked windows), not every window in every parked stage. Stop sessions when the strip is hidden, the card leaves the visible range, the HWND is destroyed, or the app shuts down. Reuse textures and cap their dimensions to the rendered card size plus a quality margin.
+8. **Graceful fallback:** if WGC cannot create a session, stops delivering frames, or the renderer cannot import its texture, keep the current cached still/icon. Never block the UI thread waiting for a capture frame.
 
 ## Animation and hand-off rules
 
 - At animation start, use the most recently completed WGC frame as the flight's initial image. Do not call `PrintWindow` synchronously from the animation path.
-- Keep the same shared texture resource alive for the duration of a flight; do not recreate or resize it per frame.
+- Keep the same shared texture ring alive for the duration of a flight; do not recreate or resize it per frame.
 - Continue updating the texture only when WGC delivers a new frame. The pose itself remains driven by the existing animation clock.
-- At landing, keep the live texture in the card layer. Do not briefly show a stale `ui.Bitmap` over it or register a DWM thumbnail on top of the perspective-transformed card.
+- At landing, keep the live image in the card layer. Do not briefly show a stale `ui.Bitmap` over it or register a DWM thumbnail on top of the perspective-transformed card.
+- If a capture session is stopped because the strip is hidden, preserve the last completed frame as the still fallback so the card never goes blank when it reappears.
 - Retain the current DWM thumbnail path for the stage lineup; it has different geometry and already has an efficient compositor-owned implementation.
 
 ## Feasibility gates before enabling by default
 
-1. **Capture while parked:** verify WGC produces frames for a normal HWND after the parking service moves it off the virtual desktop. Test GDI, Chromium/Electron, and GPU-rendered content. Some apps may pause rendering when off-screen; no capture API can force the source app to produce new frames.
-2. **WGC-to-shared-texture path:** verify frame textures can be copied to the shared output on the GPU, keyed-mutex hand-off does not stall either device, and device recreation is handled.
-3. **Public MyGo surface API:** design a lifetime-safe API that keeps the NT handle valid while the image is in use, increments a stable texture ID on replacement, and releases producer resources only after the renderer no longer references them.
+1. **Capture while parked:** verify WGC produces frames for a normal HWND after the parking service moves it off the virtual desktop. Test a GDI app with a changing clock, Chromium/Electron video, and GPU-rendered content. Record frame timestamps and compare them with the same window while on-stage. Some apps may pause their own rendering while off-screen; no capture API can force the source app to produce new frames.
+2. **WGC-to-shared-texture path:** verify WGC frame textures can be copied into the shared ring on the GPU, keyed-mutex hand-off does not stall either device, and device recreation is handled.
+3. **Public MyGo surface API:** design a lifetime-safe API that keeps each NT handle valid while the bitmap references it, uses a stable ID per ring slot, and releases producer resources only after the renderer no longer references them.
 4. **Color and alpha:** verify BGRA format, premultiplied alpha, color space, DPI, crop bounds, and device-loss/recreation behavior.
 5. **Lifecycle:** test HWND destruction/reuse, display changes, DPI changes, app shutdown, capture access denial, and sessions that stop producing frames.
-6. **Performance:** measure GPU time, CPU time, memory, and frame pacing with 1, 5, and 10 visible cards at 60/120/144 Hz. Compare idle and animated states against the current still-image implementation.
+6. **Performance:** measure GPU time, CPU time, memory, dropped frames, and frame pacing with 1, 5, and 10 visible cards at 60/120/144 Hz. Compare idle and animated states against the current still-image implementation.
 
 ## Non-goals for the first implementation
 
@@ -70,7 +84,7 @@ Use **Windows Graphics Capture (WGC) + a GPU-resident shared texture + the exist
 
 ## Suggested implementation sequence
 
-1. Build a Windows-only WGC capture prototype for one HWND and log frame arrival while the HWND is parked.
+1. Build a Windows-only WGC capture probe for one HWND. Log frame-arrival timestamps, content size, and failures while the HWND is parked; no UI integration yet.
 2. Add the smallest public MyGo API needed to publish a native shared BGRA surface, reusing the existing D3D11 renderer import and keyed-mutex path.
 3. Add a per-visible-card capture manager with bounded sessions and deterministic cleanup.
 4. Wire the live image into the existing card window layer, leaving all current transforms intact.

@@ -114,7 +114,7 @@ func (a *App) start(r *switchRequest) {
 	sw.report("switch: starting")
 	// Each leaving window gets a fresh still to fly into its card with.
 	t0 := time.Now()
-	a.media.capture(hs, false, 150*time.Millisecond, func() {
+	a.media.capture(hs, false, false, 150*time.Millisecond, func() {
 		debugf("switch: captured %d in %v", len(hs), time.Since(t0))
 		sw := newStopwatch()
 		defer sw.report("switch: setting the flights off")
@@ -351,7 +351,7 @@ func (a *App) freshenStage(d *display) {
 	if a.settings.AllStages {
 		shown = a.redraw
 	}
-	a.media.capture(hs, false, time.Second, shown)
+	a.media.capture(hs, false, false, time.Second, shown)
 }
 
 // What a card asks for.

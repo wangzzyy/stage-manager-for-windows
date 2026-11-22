@@ -316,6 +316,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	}
 	// Without a usable captured image there is no overlay frame to await.
 	finish()
+}
 
 // sendToStrip takes the app of a window dragged into a display's strip off
 // the stage, into a card of its own; the others stay. The window goes back

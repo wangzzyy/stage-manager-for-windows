@@ -192,7 +192,7 @@ type App struct {
 	dropHomes map[winapi.HWND]winapi.Rect
 	// handoffHidden marks windows temporarily hidden while a native drag is
 	// being converted into a card; their WinEvent hide/show is not a close.
-	handoffHidden map[winapi.HWND]bool
+	handoffHidden map[winapi.HWND]time.Time
 	// peek is the shell's window for a peek at a taskbar thumbnail, while
 	// it shows one, and taskbar where the pointer was last over a taskbar.
 	peek    winapi.HWND
@@ -246,7 +246,7 @@ func Start(o Options) *App {
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
 		dropHomes:     map[winapi.HWND]winapi.Rect{},
-		handoffHidden: map[winapi.HWND]bool{},
+		handoffHidden: map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},
 		trayIcon:  o.TrayIcon,
 		sysLang:   i18n.FromLANGID(winapi.UILanguage()),

@@ -60,11 +60,6 @@ type strip struct {
 	previous string
 	// line is the list of the windows on the stage (lineup.go).
 	line lineup
-	// cardThumbs are DWM's live pictures for settled, flat, single-window cards.
-	cardThumbs map[winapi.HWND]*cardThumb
-	cardThumbSeen map[winapi.HWND]bool
-	cardThumbFailed map[winapi.HWND]bool
-	cardThumbsAllowed bool
 	// near is how far the overview's panel shows as the pointer comes
 	// near it, 0 to 1. The poll measures it everywhere on the display,
 	// where the strip lets the pointer through and so hears nothing of it.

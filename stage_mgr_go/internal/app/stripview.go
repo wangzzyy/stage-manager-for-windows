@@ -44,6 +44,13 @@ type cardState struct {
 	// shook when the stage's card was last shaken (shakeGap).
 	over  bool
 	shook time.Time
+
+	// mergeFrom and mergeTo are the card's layout bounds before and after
+	// a merge. The strip interpolates them directly so the reflow does not
+	// depend on the UI engine retaining an element transition across frames.
+	mergeFrom, mergeTo ui.Rect
+	mergeStarted      time.Time
+	mergeAnimating    bool
 }
 
 type follow int8
@@ -96,6 +103,9 @@ var (
 		Enter:     &ui.Motion{X: -36, Scale: 0.86},
 	}
 	fadeQuick = ui.Animation{Duration: 160 * time.Millisecond}
+	// mergeReflow is the time uninvolved cards take to settle into the
+	// tighter layout after two cards become one.
+	mergeReflow = 340 * time.Millisecond
 	// ghostFade is how long the card of the apps on the stage takes to become
 	// a ghost, or back to a card: as long as the windows take to leave it.
 	ghostFade = ui.Animation{Duration: 320 * time.Millisecond}
@@ -485,6 +495,32 @@ func (s *strip) cardDrawOrder(order []int) []int {
 func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	a, d := s.a, s.d
 	st := d.card(g.key)
+	layoutBox := box
+	mergeFrame := st.mergeAnimating
+	if mergeFrame {
+		if st.mergeTo.W <= 0 || st.mergeTo.H <= 0 {
+			st.mergeTo = layoutBox
+		}
+		elapsed := c.Now().Sub(st.mergeStarted)
+		if elapsed >= mergeReflow {
+			box = layoutBox
+			st.mergeAnimating = false
+			st.mergeFrom, st.mergeTo = ui.Rect{}, ui.Rect{}
+			st.mergeStarted = time.Time{}
+		} else {
+			progress := float32(max(elapsed, time.Duration(0))) / float32(mergeReflow)
+			progress = min(max(progress, 0), 1)
+			// Ease out: the cards move decisively at first and settle gently.
+			progress = 1 - (1-progress)*(1-progress)*(1-progress)
+			box = ui.Rect{
+				X: st.mergeFrom.X + (st.mergeTo.X-st.mergeFrom.X)*progress,
+				Y: st.mergeFrom.Y + (st.mergeTo.Y-st.mergeFrom.Y)*progress,
+				W: st.mergeFrom.W + (st.mergeTo.W-st.mergeFrom.W)*progress,
+				H: st.mergeFrom.H + (st.mergeTo.H-st.mergeFrom.H)*progress,
+			}
+			c.AnimationFrame()
+		}
+	}
 	st.box = box
 	// A newly converted stage window has no previous card box. Resolve its
 	// first position now, using the real layout box, before drawing anything.
@@ -512,7 +548,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	}
 	if landing {
 		motion.Enter = nil
-	} else if right {
+	} else if right && motion.Enter != nil {
 		enter := *motion.Enter
 		enter.X = -enter.X
 		motion.Enter = &enter
@@ -524,7 +560,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		cursor = ui.CursorDefault
 	}
 	el := ui.Box(c.Key(g.key)).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).
-		Cursor(cursor).Transition(motion)
+		Cursor(cursor)
+	// The explicit rectangle interpolation above owns the merge frame.
+	// Do not let a second element transition compete with those bounds.
+	if !mergeFrame {
+		el.Transition(motion)
+	}
 
 	// A card dragged goes where it is let go (carddrag.go): back, up or
 	// down the strip, onto the stage or into another display's strip.
@@ -594,8 +635,15 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		lift = 0.96
 	case st.dragging:
 		lift = 1.08
+		if drag := a.cardDrag; drag != nil && drag.from == d && drag.key == g.key && drag.aim == aimMerge {
+			lift = 0.86
+		}
 	case live:
 		lift = 1.045
+	}
+	// Make the card being merged into visibly receive the dragged card.
+	if drag := a.cardDrag; drag != nil && drag.from == d && drag.aim == aimMerge && drag.target == g.key {
+		lift = 1.12
 	}
 	lift = el.AnimateTo("lift", lift, ui.Snappy)
 	st.tilt, st.lift = tilt, lift

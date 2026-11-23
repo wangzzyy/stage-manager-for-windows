@@ -365,6 +365,7 @@ const (
 	actOverview // asked for by the strip's button rather than a card
 	actMove     // the card was dropped in the strip of another display
 	actReorder  // the card was dragged up or down its strip
+	actMerge    // the card rested on another card before being let go
 	// A window of the list of the stage's windows (lineup.go), as a set
 	// of its own, asks for these.
 	actFront   // to come in front of the others on the stage

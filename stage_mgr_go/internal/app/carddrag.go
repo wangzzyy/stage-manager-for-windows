@@ -74,6 +74,7 @@ const (
 	aimSort            // to slot at of its strip
 	aimJoin            // onto the stage, beside the apps there
 	aimMove            // to slot at of another display's strip
+	aimMerge           // into the card hovered for a second
 )
 
 // cardDrag is the card being dragged out of a strip, if any, and where it
@@ -89,13 +90,16 @@ type cardDrag struct {
 	// may still go back there: it heads for the stage or another display.
 	out  bool
 	done bool
+	hoverKey string
+	target string
+	hoverTimer *time.Timer
 }
 
 // sorts reports whether a card dragged as c stays in its strip: moved up
 // or down it, or going back. A card is dragged as nothing before the first
 // move.
 func (c *cardDrag) sorts() bool {
-	return c == nil || !c.out && (c.aim == aimBack || c.aim == aimSort)
+	return c == nil || !c.out && (c.aim == aimBack || c.aim == aimSort || c.aim == aimMerge)
 }
 
 // joinReach is how far toward the stage, as a share of the strip's width,
@@ -142,9 +146,53 @@ func (a *App) cardDropAt(from *display, st *cardState, p winapi.Point) (*display
 // aimCard works out where card g of display d's strip, dragged as st
 // tells, would go if let go now.
 func (a *App) aimCard(d *display, g *set, st *cardState) {
-	c := &cardDrag{from: d, key: g.key}
+	c := a.cardDrag
+	if c == nil || c.from != d || c.key != g.key {
+		c = &cardDrag{from: d, key: g.key}
+	}
 	i := slices.IndexFunc(d.sets, func(s *set) bool { return s.key == g.key })
 	cur := winapi.Cursor()
+	target := ""
+	for j, other := range d.sets {
+		if j == i || j >= len(d.layout.cards) {
+			continue
+		}
+		if draggedCardOverlaps(st, d.layout.cards[j]) {
+			target = other.key
+			break
+		}
+	}
+	if target != c.hoverKey {
+		if c.hoverTimer != nil {
+			c.hoverTimer.Stop()
+			c.hoverTimer = nil
+		}
+		c.hoverKey, c.target = target, ""
+		c.aim, c.to, c.at = aimBack, nil, 0
+		if target != "" {
+			drag := c
+			drag.hoverTimer = after(500*time.Millisecond, func() {
+				if a.cardDrag != drag || drag.hoverKey != target || !winapi.LeftButtonDown() {
+					return
+				}
+				for j, other := range d.sets {
+					if other.key == target && j < len(d.layout.cards) && draggedCardOverlaps(st, d.layout.cards[j]) {
+						drag.aim, drag.to, drag.target = aimMerge, nil, target
+						d.strip.win.Invalidate()
+						return
+					}
+				}
+			})
+		}
+	}
+	// Keep the merge aim while the pointer remains over the same card.
+	if c.aim == aimMerge && target == c.hoverKey && target != "" {
+		c.to, c.target = nil, target
+		c.out = false
+		a.setCardDrag(c)
+		return
+	}
+	c.aim, c.to, c.at, c.target = aimBack, nil, 0, ""
 	// The stage's own card, in a strip that lists it, is on the stage
 	// already, and no other display's strip takes it: it can only be moved up
 	// or down its strip.
@@ -172,6 +220,27 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	}
 	c.out = !g.staged && (c.aim == aimMove || c.aim == aimJoin || a.headsAcross(d, st, cur))
 	a.setCardDrag(c)
+}
+
+// draggedCardOverlaps requires the dragged card's central area to overlap
+// the target's inset area, avoiding merges from shallow edge contact.
+func draggedCardOverlaps(st *cardState, target ui.Rect) bool {
+	if st == nil || st.box.W <= 0 || st.box.H <= 0 {
+		return false
+	}
+	lift := max(st.lift, float32(1))
+	w, h := st.box.W*lift, st.box.H*lift
+	dragged := ui.Rect{
+		X: st.box.X + st.dx + (st.box.W-w)/2,
+		Y: st.box.Y + st.dy + (st.box.H-h)/2,
+		W: w * 0.6,
+		H: h * 0.6,
+	}
+	dragged.X += (w - dragged.W) / 2
+	dragged.Y += (h - dragged.H) / 2
+	target = ui.Rect{X: target.X + target.W*0.2, Y: target.Y + target.H*0.2, W: target.W*0.6, H: target.H*0.6}
+	return dragged.X < target.X+target.W && dragged.X+dragged.W > target.X &&
+		dragged.Y < target.Y+target.H && dragged.Y+dragged.H > target.Y
 }
 
 // headsAcross reports whether a card of display d's strip, dragged as st
@@ -216,6 +285,9 @@ func (a *App) straightToStage(d *display, p winapi.Point) bool {
 // a drag in another strip.
 func (a *App) setCardDrag(c *cardDrag) {
 	old := a.cardDrag
+	if old != c && old != nil && old.hoverTimer != nil {
+		old.hoverTimer.Stop()
+	}
 	if old != nil && c != nil && *old == *c {
 		return
 	}
@@ -264,7 +336,13 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		if c == nil || c.from != d || c.key != g.key {
 			c = &cardDrag{from: d, key: g.key}
 		}
+		if c.hoverTimer != nil {
+			c.hoverTimer.Stop()
+		}
 		switch c.aim {
+		case aimMerge:
+			a.requestMerge(d, g, c.target)
+			a.flights.endDrag(d, 0)
 		case aimMove:
 			// Into the strip of another display: the card moves there,
 			// and its apps with it, without coming on a stage. It comes
@@ -382,6 +460,169 @@ func (a *App) requestMove(to *display, s *set, at int, drop winapi.Rect) {
 
 // requestReorder moves a card of display d's strip to slot at, once the
 // frame is built. Tests set App.act to see the request instead.
+func (a *App) requestMerge(d *display, source *set, target string) {
+	if target == "" || source == nil {
+		return
+	}
+	if a.act != nil {
+		a.act(actMerge, d, source)
+		return
+	}
+	post(func() { a.mergeSet(d, source, target) })
+}
+
+// mergeSet joins the dragged card into the card it rested on. The target
+// keeps its place and identity; the dragged card disappears from the strip.
+func (a *App) mergeSet(d *display, source *set, target string) {
+	defer a.cardLanded()
+	if !a.ready || a.quitting || d == nil || source == nil || source.key == target {
+		return
+	}
+	targetSet := findSet(d.sets, target)
+	if targetSet == nil {
+		return
+	}
+	if targetSet.staged {
+		// The ghost card is the live stage: bring the dragged apps onto
+		// it through the ordinary window handover, without changing focus.
+		next := append(d.model.Stage(), source.names()...)
+		a.switchStage(d, next, targetSet.front().HWND, false, false)
+		return
+	}
+	if !d.model.Merge(source.key, target) {
+		return
+	}
+	// The model has merged, but d.sets and d.layout still describe the
+	// previous frame. Capture those old rectangles before arrange rebuilds
+	// the card list; only uninvolved cards join this reflow.
+	a.startMergeReflow(d, source.key, target, time.Now())
+	// The model order alone cannot change the desktop's native HWND
+	// Z-order. Raise the dragged card's windows as one contiguous block,
+	// keeping the current front-to-back order inside both cards.
+	a.raiseMergedWindows(source, targetSet)
+	// SetWindowPos has changed the desktop's native Z-order. Re-enumerate
+	// before rebuilding the merged card: groupsOf reads a.windows, and
+	// keeping its pre-merge snapshot would briefly draw the old stack order
+	// until the next scheduled refresh.
+	a.windows = a.cat.Windows()
+	debugf("merge card %q into %q on %s", source.title(), target, d.mon.Device)
+	a.arrange(d, a.groupsOf(d), time.Now())
+	a.redraw()
+	a.refreshSoon()
+}
+
+// startMergeReflow captures the last rendered bounds of idle cards before
+// arrange changes the layout. The strip interpolates from these exact
+// rectangles to each card's new layout bounds. Cards already participating
+// in another interaction keep their existing motion.
+func (a *App) startMergeReflow(d *display, source, target string, now time.Time) {
+	if d == nil || len(d.sets) == 0 {
+		return
+	}
+	if d.cards == nil {
+		d.cards = make(map[string]*cardState)
+	}
+	for _, card := range d.sets {
+		if card == nil || card.key == source || card.key == target {
+			continue
+		}
+		st := d.cards[card.key]
+		if st == nil {
+			st = &cardState{}
+			d.cards[card.key] = st
+		}
+		// Hover, drag, external handoff, return, landing, or another
+		// animation means this card already has motion of its own.
+		if d.landingOf(card) || st.dragging || st.moved || st.external ||
+			st.externalAnimating || st.externalLayer || st.returning || st.over ||
+			st.mergeAnimating || st.poses != nil || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
+			continue
+		}
+		// The last rendered box is the true on-screen origin. Cards that
+		// have never been laid out cannot take part in this reflow.
+		if st.box.W <= 0 || st.box.H <= 0 {
+			continue
+		}
+		st.mergeFrom = st.box
+		st.mergeTo = ui.Rect{}
+		st.mergeStarted = now
+		st.mergeAnimating = true
+	}
+}
+
+// raiseMergedWindows applies the source-then-target order to the real
+// desktop Z-order. SetWindowPos(HWND_TOP) alone is not enough to establish
+// a stable sequence when several windows are moved: explicitly chain each
+// window immediately above the one below it.
+func (a *App) raiseMergedWindows(source, target *set) {
+	if source == nil || target == nil {
+		return
+	}
+
+	// A card's windows are already ordered front-to-back by newSet.
+	// The merged order must follow the drag operation, not the desktop's
+	// current EnumWindows order: source first, then target.
+	ordered := make([]winapi.HWND, 0, len(source.windows)+len(target.windows))
+	seen := make(map[winapi.HWND]bool, cap(ordered))
+	for _, card := range []*set{source, target} {
+		for _, w := range card.windows {
+			if w.HWND == 0 || seen[w.HWND] || !winapi.IsWindow(w.HWND) {
+				continue
+			}
+			seen[w.HWND] = true
+			ordered = append(ordered, w.HWND)
+		}
+	}
+	if len(ordered) < 2 {
+		debugf("merge z-order: not enough live windows (source=%d target=%d live=%d)",
+			len(source.windows), len(target.windows), len(ordered))
+		return
+	}
+
+	// SetWindowPos places each window behind insertAfter. Put the first
+	// source window at the top, then chain every following window behind
+	// the one immediately before it. This produces source -> target,
+	// front-to-back, while preserving each card's internal order.
+	insertAfter := winapi.HwndTop
+	for _, h := range ordered {
+		if !winapi.SetWindowPos(h, insertAfter, 0, 0, 0, 0,
+			winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate) {
+			debugf("merge z-order: SetWindowPos failed hwnd=%x insertAfter=%x", h, insertAfter)
+			continue
+		}
+		insertAfter = h
+	}
+
+	// Verify the native order rather than assuming SetWindowPos succeeded.
+	actual := a.cat.Windows()
+	wantIndex := 0
+	var got []winapi.HWND
+	for _, w := range actual {
+		if seen[w.HWND] {
+			got = append(got, w.HWND)
+		}
+	}
+	for _, h := range got {
+		if wantIndex < len(ordered) && h == ordered[wantIndex] {
+			wantIndex++
+		}
+	}
+	if wantIndex != len(ordered) || len(got) != len(ordered) {
+		debugf("merge z-order: verification mismatch want=%v got=%v",
+			hwndsFromHandles(ordered), hwndsFromHandles(got))
+	} else {
+		debugf("merge z-order: verified front-to-back=%v", hwndsFromHandles(got))
+	}
+}
+
+func hwndsFromHandles(hs []winapi.HWND) []uintptr {
+	out := make([]uintptr, len(hs))
+	for i, h := range hs {
+		out[i] = uintptr(h)
+	}
+	return out
+}
+
 func (a *App) requestReorder(d *display, s *set, at int) {
 	if a.act != nil {
 		a.act(actReorder, d, s)

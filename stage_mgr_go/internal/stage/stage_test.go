@@ -311,6 +311,28 @@ func TestInsertPutsSetInSlot(t *testing.T) {
 	}
 }
 
+func TestMergeCombinesCardsAtTargetSlot(t *testing.T) {
+	var d Display
+	d.Init("stage", t0)
+	d.Strip([]string{"stage", "target-a", "other", "source-a", "source-b"})
+	// Build the dragged card as a group before merging it.
+	d.Insert([]string{"source-a", "source-b"}, 3)
+	if !d.Merge("source-a", "target-a") {
+		t.Fatal("merge unexpectedly failed")
+	}
+	got := d.Strip([]string{"stage", "target-a", "other", "source-a", "source-b"})
+	want := [][]string{{"source-a", "source-b", "target-a"}, {"other"}}
+	if !equalSets(got, want) {
+		t.Fatalf("strip %v, want %v", got, want)
+	}
+	if got := d.SetOf("source-b"); !slices.Equal(got, []string{"source-a", "source-b", "target-a"}) {
+		t.Fatalf("merged set %v", got)
+	}
+	if d.Merge("missing", "target-a") || d.Merge("target-a", "target-a") {
+		t.Fatal("invalid merge succeeded")
+	}
+}
+
 func TestMoveReordersStrip(t *testing.T) {
 	var d Display
 	d.Init("code", t0)

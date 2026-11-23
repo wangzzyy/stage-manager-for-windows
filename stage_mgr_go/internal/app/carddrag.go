@@ -523,13 +523,14 @@ func (a *App) raiseMergedWindows(source, target *set) {
 	// internal window order, including windows opened since the card formed.
 	var ordered []winapi.HWND
 	seen := make(map[winapi.HWND]bool, len(inSource)+len(inTarget))
-	for _, w := range a.cat.Windows() {
+	windows := a.cat.Windows()
+	for _, w := range windows {
 		if inSource[w.HWND] && !seen[w.HWND] {
 			ordered = append(ordered, w.HWND)
 			seen[w.HWND] = true
 		}
 	}
-	for _, w := range a.cat.Windows() {
+	for _, w := range windows {
 		if inTarget[w.HWND] && !seen[w.HWND] {
 			ordered = append(ordered, w.HWND)
 			seen[w.HWND] = true

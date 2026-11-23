@@ -511,9 +511,10 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	a.refreshSoon()
 }
 
-// startMergeReflow marks cards that can use the layout engine's own
-// element transition when the merged card list is arranged. Cards already
-// participating in another interaction keep their existing motion.
+// startMergeReflow captures the last rendered bounds of idle cards before
+// arrange changes the layout. The strip interpolates from these exact
+// rectangles to each card's new layout bounds. Cards already participating
+// in another interaction keep their existing motion.
 func (a *App) startMergeReflow(d *display, source, target string, now time.Time) {
 	if d == nil || len(d.sets) == 0 {
 		return
@@ -537,6 +538,13 @@ func (a *App) startMergeReflow(d *display, source, target string, now time.Time)
 			st.mergeAnimating || st.poses != nil || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
 			continue
 		}
+		// The last rendered box is the true on-screen origin. Cards that
+		// have never been laid out cannot take part in this reflow.
+		if st.box.W <= 0 || st.box.H <= 0 {
+			continue
+		}
+		st.mergeFrom = st.box
+		st.mergeTo = ui.Rect{}
 		st.mergeStarted = now
 		st.mergeAnimating = true
 	}

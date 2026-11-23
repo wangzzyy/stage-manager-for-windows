@@ -45,11 +45,12 @@ type cardState struct {
 	over  bool
 	shook time.Time
 
-	// mergeStarted marks the layout change caused by merging another card.
-	// mergeAnimating lets the native element transition animate this card's
-	// actual layout bounds, rather than layering a second transform on top.
-	mergeStarted   time.Time
-	mergeAnimating bool
+	// mergeFrom and mergeTo are the card's layout bounds before and after
+	// a merge. The strip interpolates them directly so the reflow does not
+	// depend on the UI engine retaining an element transition across frames.
+	mergeFrom, mergeTo ui.Rect
+	mergeStarted      time.Time
+	mergeAnimating    bool
 }
 
 type follow int8
@@ -105,7 +106,6 @@ var (
 	// mergeReflow is the time uninvolved cards take to settle into the
 	// tighter layout after two cards become one.
 	mergeReflow = 340 * time.Millisecond
-	mergeReflowMotion = ui.Animation{Duration: mergeReflow}
 	// ghostFade is how long the card of the apps on the stage takes to become
 	// a ghost, or back to a card: as long as the windows take to leave it.
 	ghostFade = ui.Animation{Duration: 320 * time.Millisecond}
@@ -495,6 +495,32 @@ func (s *strip) cardDrawOrder(order []int) []int {
 func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	a, d := s.a, s.d
 	st := d.card(g.key)
+	layoutBox := box
+	mergeFrame := st.mergeAnimating
+	if mergeFrame {
+		if st.mergeTo.W <= 0 || st.mergeTo.H <= 0 {
+			st.mergeTo = layoutBox
+		}
+		elapsed := c.Now().Sub(st.mergeStarted)
+		if elapsed >= mergeReflow {
+			box = layoutBox
+			st.mergeAnimating = false
+			st.mergeFrom, st.mergeTo = ui.Rect{}, ui.Rect{}
+			st.mergeStarted = time.Time{}
+		} else {
+			progress := float32(max(elapsed, time.Duration(0))) / float32(mergeReflow)
+			progress = min(max(progress, 0), 1)
+			// Ease out: the cards move decisively at first and settle gently.
+			progress = 1 - (1-progress)*(1-progress)*(1-progress)
+			box = ui.Rect{
+				X: st.mergeFrom.X + (st.mergeTo.X-st.mergeFrom.X)*progress,
+				Y: st.mergeFrom.Y + (st.mergeTo.Y-st.mergeFrom.Y)*progress,
+				W: st.mergeFrom.W + (st.mergeTo.W-st.mergeFrom.W)*progress,
+				H: st.mergeFrom.H + (st.mergeTo.H-st.mergeFrom.H)*progress,
+			}
+			c.AnimationFrame()
+		}
+	}
 	st.box = box
 	// A newly converted stage window has no previous card box. Resolve its
 	// first position now, using the real layout box, before drawing anything.
@@ -519,15 +545,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// external drag is active; it would look like a stage-switch animation.
 	if st.external {
 		motion = ui.ElementTransition{}
-	} else if st.mergeAnimating {
-		// Let MyGo animate the element's actual layout bounds (position and
-		// size) as the card count changes. A manual transform here competes
-		// with the element transition and can be overwritten by layout.
-		motion = ui.ElementTransition{Animation: &mergeReflowMotion}
-		if c.Now().Sub(st.mergeStarted) >= mergeReflow {
-			st.mergeAnimating = false
-			st.mergeStarted = time.Time{}
-		}
 	}
 	if landing {
 		motion.Enter = nil
@@ -543,7 +560,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		cursor = ui.CursorDefault
 	}
 	el := ui.Box(c.Key(g.key)).Absolute().Left(box.X).Top(box.Y).Size(box.W, box.H).
-		Cursor(cursor).Transition(motion)
+		Cursor(cursor)
+	// The explicit rectangle interpolation above owns the merge frame.
+	// Do not let a second element transition compete with those bounds.
+	if !mergeFrame {
+		el.Transition(motion)
+	}
 
 	// A card dragged goes where it is let go (carddrag.go): back, up or
 	// down the strip, onto the stage or into another display's strip.

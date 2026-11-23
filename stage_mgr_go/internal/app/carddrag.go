@@ -492,10 +492,56 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	if !d.model.Merge(source.key, target) {
 		return
 	}
+	// The model order alone cannot change the desktop's native HWND
+	// Z-order. Raise the dragged card's windows as one contiguous block,
+	// keeping the current front-to-back order inside both cards.
+	a.raiseMergedWindows(source, targetSet)
 	debugf("merge card %q into %q on %s", source.title(), target, d.mon.Device)
 	a.arrange(d, a.groupsOf(d), time.Now())
 	a.redraw()
 	a.refreshSoon()
+}
+
+// raiseMergedWindows makes the dragged card's windows the front block
+// of the merged card. EnumWindows/catalog order is front-to-back; inserting
+// HWNDs at HWND_TOP must therefore run in reverse, or the block would end
+// up backwards. NOACTIVATE keeps the merge from stealing keyboard focus.
+func (a *App) raiseMergedWindows(source, target *set) {
+	if source == nil || target == nil {
+		return
+	}
+	inSource := make(map[winapi.HWND]bool, len(source.windows))
+	inTarget := make(map[winapi.HWND]bool, len(target.windows))
+	for _, w := range source.windows {
+		inSource[w.HWND] = true
+	}
+	for _, w := range target.windows {
+		inTarget[w.HWND] = true
+	}
+
+	// Take a fresh front-to-back snapshot so each card keeps its actual
+	// internal window order, including windows opened since the card formed.
+	var ordered []winapi.HWND
+	seen := make(map[winapi.HWND]bool, len(inSource)+len(inTarget))
+	for _, w := range a.cat.Windows() {
+		if inSource[w.HWND] && !seen[w.HWND] {
+			ordered = append(ordered, w.HWND)
+			seen[w.HWND] = true
+		}
+	}
+	for _, w := range a.cat.Windows() {
+		if inTarget[w.HWND] && !seen[w.HWND] {
+			ordered = append(ordered, w.HWND)
+			seen[w.HWND] = true
+		}
+	}
+	for i := len(ordered) - 1; i >= 0; i-- {
+		h := ordered[i]
+		if winapi.IsWindow(h) {
+			winapi.SetWindowPos(h, winapi.HwndTop, 0, 0, 0, 0,
+				winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+		}
+	}
 }
 
 func (a *App) requestReorder(d *display, s *set, at int) {

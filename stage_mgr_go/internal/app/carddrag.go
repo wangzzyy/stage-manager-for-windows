@@ -496,6 +496,11 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	// Z-order. Raise the dragged card's windows as one contiguous block,
 	// keeping the current front-to-back order inside both cards.
 	a.raiseMergedWindows(source, targetSet)
+	// SetWindowPos has changed the desktop's native Z-order. Re-enumerate
+	// before rebuilding the merged card: groupsOf reads a.windows, and
+	// keeping its pre-merge snapshot would briefly draw the old stack order
+	// until the next scheduled refresh.
+	a.windows = a.cat.Windows()
 	debugf("merge card %q into %q on %s", source.title(), target, d.mon.Device)
 	a.arrange(d, a.groupsOf(d), time.Now())
 	a.redraw()

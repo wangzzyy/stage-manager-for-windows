@@ -489,13 +489,13 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 		a.switchStage(d, next, targetSet.front().HWND, false, false)
 		return
 	}
-	// Remember the old rectangles before the model removes the dragged
-	// card. Only cards with no independent interaction are allowed to join
-	// this reflow; the source and target keep their own merge behavior.
-	a.startMergeReflow(d, source.key, target, time.Now())
 	if !d.model.Merge(source.key, target) {
 		return
 	}
+	// The model has merged, but d.sets and d.layout still describe the
+	// previous frame. Capture those old rectangles before arrange rebuilds
+	// the card list; only uninvolved cards join this reflow.
+	a.startMergeReflow(d, source.key, target, time.Now())
 	// The model order alone cannot change the desktop's native HWND
 	// Z-order. Raise the dragged card's windows as one contiguous block,
 	// keeping the current front-to-back order inside both cards.

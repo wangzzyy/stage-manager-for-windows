@@ -536,8 +536,9 @@ func (a *App) startMergeReflow(d *display, source, target string, now time.Time)
 		}
 		// Hover, drag, external handoff, return, or another reflow means
 		// this card already has motion of its own and must be left alone.
-		if st.dragging || st.external || st.externalAnimating || st.externalLayer ||
-			st.returning || st.over || st.mergeAnimating || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
+		if d.landingOf(card) || st.dragging || st.moved || st.external ||
+			st.externalAnimating || st.externalLayer || st.returning || st.over ||
+			st.mergeAnimating || st.poses != nil || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
 			continue
 		}
 		st.mergeFrom = from

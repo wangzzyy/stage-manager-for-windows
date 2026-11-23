@@ -153,11 +153,11 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	i := slices.IndexFunc(d.sets, func(s *set) bool { return s.key == g.key })
 	cur := winapi.Cursor()
 	target := ""
-	if !g.staged && i >= 0 && i < len(d.layout.cards) {
-		// Use the dragged card's center, not the grab point: a user may
-		// hold its outer edge while the card itself covers the target.
-		box := d.layout.cards[i]
-		x, y := box.X+box.W/2+st.dx, box.Y+box.H/2+st.dy
+	if d.strip != nil && d.strip.scale > 0 {
+		// The card's avoidance layout moves it away from the pointer, so
+		// use the pointer's position over the target card for hover dwell.
+		x := float32(float64(cur.X-d.strip.rect.Left) / d.strip.scale)
+		y := float32(float64(cur.Y-d.strip.rect.Top) / d.strip.scale)
 		for j, other := range d.sets {
 			if j == i || j >= len(d.layout.cards) {
 				continue
@@ -181,12 +181,12 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 				if a.cardDrag != drag || drag.hoverKey != target || !winapi.LeftButtonDown() {
 					return
 				}
-				i := slices.IndexFunc(d.sets, func(s *set) bool { return s.key == drag.key })
-				if i < 0 || i >= len(d.layout.cards) {
+				p := winapi.Cursor()
+				if d.strip == nil || d.strip.scale <= 0 {
 					return
 				}
-				box := d.layout.cards[i]
-				x, y := box.X+box.W/2+st.dx, box.Y+box.H/2+st.dy
+				x := float32(float64(p.X-d.strip.rect.Left) / d.strip.scale)
+				y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
 				for j, other := range d.sets {
 					if other.key == target && j < len(d.layout.cards) && pointInCard(d.layout.cards[j], x, y) {
 						drag.aim, drag.to, drag.target = aimMerge, nil, target

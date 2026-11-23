@@ -27,13 +27,14 @@ const (
 	// picture it already had.
 	moveFlags = winapi.SwpNoRedraw | winapi.SwpNoSize | winapi.SwpNoZOrder | winapi.SwpNoActivate |
 		winapi.SwpNoOwnerZOrder | winapi.SwpAsyncWindowPos
-	// A window coming home also works out its frame again. One that did so
-	// while it waited, as Edge and other Chromium apps do now and then, found
-	// no display there, and Chromium then makes the whole window its client
-	// area: back on the desktop DWM sees a window without a frame and gives it
-	// neither rounded corners nor a shadow, until it is resized. Asked here,
-	// the app works it out for where the window is going.
-	homeFlags = moveFlags | winapi.SwpFrameChanged
+	// A window coming home must process its position change before it is
+	// redrawn. Reusing moveFlags here is unsafe: SWP_ASYNCWINDOWPOS returns
+	// before the target thread has moved the window, while SWP_NOREDRAW
+	// suppresses the repaint caused by that move. Redraw could therefore run
+	// against the old off-screen surface, leaving a blank/partial window until
+	// the app happens to paint again. Keep the frame recalculation, but make
+	// the normal landing synchronous and allow Windows to issue its paints.
+	homeFlags = moveFlags &^ (winapi.SwpAsyncWindowPos | winapi.SwpNoRedraw) | winapi.SwpFrameChanged
 	settle    = time.Second
 	// A window sent home that is not there after chaseAfter is sent again,
 	// up to chaseTries times, and then fitted onto the nearest display.
@@ -88,13 +89,53 @@ func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 // Count is how many windows are parked.
 func (s *Service) Count() int { return len(s.parked) }
 
-// Park moves a window, and the dialogs it owns, off the desktop.
-func (s *Service) Park(h winapi.HWND) bool {
+// Park moves a window, and the dialogs it owns, off the desktop asynchronously.
+func (s *Service) Park(h winapi.HWND) bool { return s.park(h, move) }
+
+// ParkImmediate parks synchronously. Use when a window is being converted
+// from a native drag: async positioning can race with the drag loop and leave
+// the real window visible at its former position after the card has landed.
+func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmediate) }
+
+// ParkImmediateFrom parks synchronously using the window rectangle sampled
+// before a native move loop is cancelled. That loop can restore its starting
+// rectangle as it exits; sampling WindowRect afterwards would then both add
+// latency before moving the window and record the wrong place as its home.
+func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
+	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
+		from.Empty() || !winapi.OnAnyMonitor(from) {
+		return false
+	}
+	home := onDesktop(from)
+	spot := spotFor(home)
+	if !moveImmediate(h, spot) {
+		return false
+	}
+	s.parked[h] = parked{Home: home, Spot: spot, At: time.Now()}
+	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), from, home, spot, 0)
+	dx, dy := spot.X-from.Left, spot.Y-from.Top
+	shiftX, shiftY := home.Left-from.Left, home.Top-from.Top
+	along := func(r winapi.Rect) (winapi.Rect, winapi.Point) {
+		if at := r.Offset(dx, dy); !winapi.OnAnyMonitor(at) {
+			return r.Offset(shiftX, shiftY), winapi.Point{X: at.Left, Y: at.Top}
+		}
+		return alone(r)
+	}
+	for _, o := range catalog.OwnedWindows(h) {
+		if !s.IsParked(o) {
+			s.parkOneUsing(o, h, along, moveImmediate)
+		}
+	}
+	s.save()
+	return true
+}
+
+func (s *Service) park(h winapi.HWND, mover func(winapi.HWND, winapi.Point) bool) bool {
 	if s.IsParked(h) {
 		return false
 	}
 	from := winapi.WindowRect(h)
-	if !s.parkOne(h, 0, alone) {
+	if !s.parkOneUsing(h, 0, alone, mover) {
 		return false
 	}
 	// The windows it owns, the shadow some apps draw it in among them, wait
@@ -111,7 +152,7 @@ func (s *Service) Park(h winapi.HWND) bool {
 	}
 	for _, o := range catalog.OwnedWindows(h) {
 		if !s.IsParked(o) {
-			s.parkOne(o, h, along)
+			s.parkOneUsing(o, h, along, mover)
 		}
 	}
 	s.save()
@@ -273,6 +314,10 @@ func place(h winapi.HWND, p winapi.Point) {
 		return
 	}
 	land(h, p)
+	// Parking uses SWP_NOREDRAW to preserve the last composed frame while
+	// windows are off-screen. Invalidate on return so apps that discarded
+	// their surface while hidden repaint without waiting for pointer input.
+	winapi.Redraw(h)
 }
 
 // raising counts the calls to raise: the last one asked for is the order
@@ -509,9 +554,12 @@ func centerOnPrimary(r winapi.Rect) winapi.Rect {
 	return winapi.Rect{Left: x, Top: y, Right: x + r.W(), Bottom: y + r.H()}
 }
 
-// parkOne moves a window to the spot place picks for it from where it is,
-// to come back to the home place picks.
+// parkOne moves a window using the regular asynchronous positioning.
 func (s *Service) parkOne(h, owner winapi.HWND, place func(r winapi.Rect) (home winapi.Rect, spot winapi.Point)) bool {
+	return s.parkOneUsing(h, owner, place, move)
+}
+
+func (s *Service) parkOneUsing(h, owner winapi.HWND, place func(r winapi.Rect) (home winapi.Rect, spot winapi.Point), mover func(winapi.HWND, winapi.Point) bool) bool {
 	if !winapi.IsWindow(h) || winapi.IsIconic(h) {
 		s.logf("park %x %q refused: minimized or gone", h, winapi.Title(h))
 		return false
@@ -524,7 +572,7 @@ func (s *Service) parkOne(h, owner winapi.HWND, place func(r winapi.Rect) (home 
 		return false
 	}
 	home, spot := place(r)
-	if !move(h, spot) {
+	if !mover(h, spot) {
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, Owner: owner, At: time.Now()}
@@ -562,6 +610,11 @@ func spotFor(home winapi.Rect) winapi.Point {
 // move takes a window to p, keeping its place in the z-order.
 func move(h winapi.HWND, p winapi.Point) bool {
 	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, moveFlags)
+}
+
+func moveImmediate(h winapi.HWND, p winapi.Point) bool {
+	flags := uint32(moveFlags &^ winapi.SwpAsyncWindowPos)
+	return winapi.SetWindowPos(h, 0, p.X, p.Y, 0, 0, flags)
 }
 
 // land is move for a window coming back onto the desktop (homeFlags).

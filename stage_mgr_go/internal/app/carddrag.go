@@ -9,6 +9,60 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+func (a *App) beginWindowCardDrag(d *display, key string) {
+	if d == nil || d.strip == nil { return }
+	s := d.strip
+	st := d.card(key)
+	st.external, st.externalAnimating, st.dragging, st.moved = true, false, true, true
+	// The stage's window has no card layout box yet. Defer pointer placement
+	// until strip.card has its first real box, before that card is drawn.
+	st.externalReady = false
+	st.dx, st.dy = 0, 0
+	st.ox, st.follow = 0, followNone
+	a.setCardDrag(&cardDrag{from:d, key:key, aim:aimSort, to:d})
+	s.setDragging(true)
+	s.win.Invalidate()
+}
+
+func (s *strip) pollWindowCardDrag(cur winapi.Point) {
+	a, d := s.a, s.d
+	for key, st := range d.cards {
+		if !st.external { continue }
+		if !st.externalReady {
+			s.win.Invalidate()
+			return
+		}
+		if winapi.LeftButtonDown() {
+			if s.scale > 0 {
+				x := float32(float64(cur.X-s.rect.Left) / s.scale)
+				y := float32(float64(cur.Y-s.rect.Top) / s.scale)
+				// Keep the pointer's current position as the card's aim,
+				// rather than sorting from the card's old slot.
+				st.dx = x - (st.box.X + st.box.W/2)
+				st.dy = y - (st.box.Y + st.box.H/2)
+			}
+			if g := findSet(d.sets, key); g != nil { a.aimCard(d, g, st) }
+			s.win.Invalidate()
+			return
+		}
+		if g := findSet(d.sets, key); g != nil {
+			st.external = false
+			s.letGo(g, st, st.box)
+		} else {
+			st.external, st.dragging = false, false
+			a.setCardDrag(nil)
+			s.setDragging(false)
+		}
+		s.win.Invalidate()
+		return
+	}
+}
+
+func findSet(sets []*set, key string) *set {
+	for _, g := range sets { if g.key == key { return g } }
+	return nil
+}
+
 // A card dragged out of a strip goes, once let go, where it was aimed at
 // as it was last dragged: back to its place, to another place in its strip,
 // onto the stage, or into the strip of another display. The strips that

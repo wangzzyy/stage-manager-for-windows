@@ -25,6 +25,7 @@ type drag struct {
 	since    time.Time
 	stage    []string
 	dwell    *time.Timer
+	converted bool // the window has already become a strip card while still being dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -41,7 +42,7 @@ func (a *App) startDrag(h winapi.HWND) {
 // and back out should the window leave again before it is let go.
 func (a *App) dragOver() {
 	g := a.drag
-	if !a.ready || g == nil {
+	if !a.ready || g == nil || g.converted {
 		return
 	}
 	// By its visible frame, as displayOf goes: a switch must not take the
@@ -50,6 +51,47 @@ func (a *App) dragOver() {
 	d := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(g.h)))
 	if d != g.at {
 		g.at, g.since = d, time.Now()
+	}
+	// Turn the dragged window into a real card as soon as the pointer enters
+	// a visible strip. The ordinary stage switch owns the capture, flight,
+	// parking and card creation; mouse-up must not run the drop a second time.
+	if target := a.stripUnder(winapi.Cursor()); target != nil {
+		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
+			w := a.windows[i]
+			key := a.groupKey(w)
+			if target == g.home && slices.Contains(a.heading(target), key) {
+				origin := winapi.FrameBounds(g.h)
+				// Keep the real window visible until the flight layer has drawn
+				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
+				// before cancelling the native move loop and parking it.
+				g.converted = true
+				// Start the card's external drag before the native move loop
+				// ends. The loop-end event may clear a.drag before the switch
+				// has finished arranging the new card.
+				a.beginWindowCardDrag(target, key)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				return
+			}
+			if target != g.home && a.settings.HideInactive {
+				origin := winapi.FrameBounds(g.h)
+				stage := g.stage
+				if target != g.over {
+					stage = a.heading(target)
+				}
+				// Keep the real window visible until the flight layer has drawn
+				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
+				// before cancelling the native move loop and parking it.
+				g.converted = true
+				// Preserve the pointer gesture independently of a.drag: the
+				// native move-size-end event can arrive before card creation.
+				a.beginWindowCardDrag(target, key)
+				a.leave(g.home, w)
+				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
+				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin)
+				return
+			}
+		}
 	}
 	if d == g.over {
 		return
@@ -100,6 +142,12 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	a.drag = nil
+	if moved && g.converted {
+		// The stage switch already owns this window and its card. The end of
+		// the native move only ends the pointer gesture; it is not another drop.
+		a.refreshSoon()
+		return
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}
@@ -191,6 +239,105 @@ func (a *App) stripUnder(p winapi.Point) *display {
 	return d
 }
 
+// sendDraggedToStrip prepares a card handoff. The real window stays visible
+// until the flight layer has drawn its first frame over it; only then is the
+// native move loop cancelled and the real window parked.
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
+	debugf("%q prepared for direct strip-card handoff", w.Title)
+	// The overlay must have a real, drawable frame before the native window
+	// is hidden. In particular, Invalidate alone is only a paint request.
+	handoff := func() {
+		// The overlay has built its first frame. Cloak the real HWND before
+		// ending the native move loop: WM_CANCELMODE may make Windows restore
+		// the loop's starting rectangle, and merely waiting for the loop to
+		// unwind cannot prevent that rectangle from being presented.
+		// DWMWA_CLOAK can report success without actually suppressing the
+		// dragged HWND on some app/window combinations. Hide the real HWND
+		// explicitly for the short handoff, and ignore its corresponding
+		// WinEvent hide/show so it is not mistaken for an app closing.
+		if a.handoffHidden == nil {
+			a.handoffHidden = make(map[winapi.HWND]time.Time)
+		}
+		a.handoffHidden[w.HWND] = time.Now().Add(2 * time.Second)
+		winapi.Hide(w.HWND)
+		if winapi.IsWindowVisible(w.HWND) {
+			winapi.SetWindowPos(w.HWND, 0, 0, 0, 0, 0,
+				winapi.SwpHideWindow|winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		}
+		if winapi.IsWindowVisible(w.HWND) {
+			winapi.ShowNoActivate(w.HWND)
+			debugf("drag into card: could not hide real window %v; aborting handoff", w.HWND)
+			return
+		}
+		winapi.DwmFlush()
+		parkFrom := winapi.WindowRect(w.HWND)
+		if !winapi.CancelMoveSize(w.HWND) {
+			winapi.ShowNoActivate(w.HWND)
+			winapi.DwmFlush()
+			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
+			return
+		}
+		parked := false
+		if a.settings.HideInactive {
+			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
+			if parked {
+				a.park.Rehome(w.HWND, home)
+			}
+		}
+		if !parked {
+			// If parking is disabled or failed, put the window at its intended
+			// home before making it visible again; never expose the stale
+			// starting rectangle restored by the native move loop.
+			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		}
+		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
+		// keeps enumeration and later restoration working as usual.
+		winapi.ShowNoActivate(w.HWND)
+		winapi.DwmFlush()
+		if a.settings.HideInactive && !parked {
+			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
+		}
+	}
+	// Switch the model first so refresh lays out the destination card. The
+	// window's last stage still is already available in the common case; use
+	// it immediately rather than waiting for a fresh capture before showing
+	// the handoff animation.
+	from := poseOf(origin)
+	d.model.Switch(next, time.Now())
+	// Suppress the destination's real strip card before refresh can draw it.
+	// Previously refresh presented the resting card before the async capture
+	// completed and dragIntoCard enabled externalLayer, causing a visible
+	// final-card flash before the window-to-card animation began.
+	key := a.groupKey(w)
+	card := d.card(key)
+	card.externalLayer = true
+	card.externalPresented = false
+	card.externalAnimating = false
+	card.externalFrom = pose{}
+	card.externalStarted = time.Time{}
+	a.windows = a.cat.Windows()
+	a.refresh()
+
+	startFlight := func() bool {
+		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
+	}
+	// Capture only the dragged HWND. A desktop BitBlt is not a window
+	// capture: it includes whichever windows happen to overlap its rectangle.
+	// Use the window's PrintWindow capture path and let its timeout keep a
+	// hung application from holding up the handoff.
+	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
+		if !startFlight() {
+			// No overlay will take over; restore the real card after a failed
+			// capture so externalLayer cannot leave it permanently invisible.
+			card.externalLayer = false
+			card.externalPresented = false
+			debugf("drag into card: capture produced no drawable animation; restored real card")
+		}
+		a.redraw()
+	})
+}
+
 // sendToStrip takes the app of a window dragged into a display's strip off
 // the stage, into a card of its own; the others stay. The window goes back
 // to where the drag began, for when its app returns.
@@ -214,8 +361,11 @@ func (a *App) sendToStrip(d *display, w catalog.Window, from winapi.Rect) {
 func (a *App) sendAcross(d *display, w catalog.Window, stage []string) {
 	debugf("%q dragged into the strip of %s", w.Title, d.mon.Device)
 	f := winapi.FitInto(w.Frame, d.mon.Handle)
-	winapi.SetWindowPos(w.HWND, 0, w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top, 0, 0,
-		winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	x, y := w.Rect.Left+f.Left-w.Frame.Left, w.Rect.Top+f.Top-w.Frame.Top
+	winapi.SetWindowPos(w.HWND, 0, x, y, 0, 0, winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+	// Record the new home before parking so the card returns to this display,
+	// and make the handover use synchronous parking to prevent drag-loop races.
+	a.dropHomes[w.HWND] = winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
 	next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == a.groupKey(w) })
 	a.switchStage(d, next, 0, false, false)
 }

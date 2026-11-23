@@ -190,6 +190,9 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
+	// handoffHidden marks windows temporarily hidden while a native drag is
+	// being converted into a card; their WinEvent hide/show is not a close.
+	handoffHidden map[winapi.HWND]time.Time
 	// peek is the shell's window for a peek at a taskbar thumbnail, while
 	// it shows one, and taskbar where the pointer was last over a taskbar.
 	peek    winapi.HWND
@@ -242,7 +245,8 @@ func Start(o Options) *App {
 		media:     newMedia(),
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
-		dropHomes: map[winapi.HWND]winapi.Rect{},
+		dropHomes:     map[winapi.HWND]winapi.Rect{},
+		handoffHidden: map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},
 		trayIcon:  o.TrayIcon,
 		sysLang:   i18n.FromLANGID(winapi.UILanguage()),
@@ -399,7 +403,7 @@ func (a *App) syncDisplays() {
 	for _, m := range mons {
 		d := a.displayByDevice(m.Device)
 		if d == nil {
-			d = &display{cards: map[string]*cardState{}, landing: map[string]bool{}}
+			d = &display{cards: map[string]*cardState{}, landing: map[string]bool{}, dropPoses: map[winapi.HWND]pose{}}
 		}
 		d.mon = m
 		next = append(next, d)
@@ -609,13 +613,13 @@ func (a *App) initStage() {
 			rest = append(rest, w.HWND)
 		}
 	}
-	a.media.capture(leaving, false, 1500*time.Millisecond, func() {
+	a.media.capture(leaving, false, false, 1500*time.Millisecond, func() {
 		for _, h := range leaving {
 			a.park.Park(h)
 		}
 		a.ready = true
 		a.refresh()
-		a.media.capture(rest, false, 5*time.Second, a.redraw)
+		a.media.capture(rest, false, false, 5*time.Second, a.redraw)
 	})
 }
 
@@ -707,7 +711,7 @@ func (a *App) refresh() {
 		debugf("display %s stage=%v strip=%d covered=%v", d.mon.Device, d.model.Stage(), len(d.sets), d.covered)
 	}
 	if len(want) > 0 {
-		a.media.capture(want, false, 3*time.Second, a.redraw)
+		a.media.capture(want, false, false, 3*time.Second, a.redraw)
 	}
 	a.redraw()
 	a.refill()
@@ -781,7 +785,7 @@ func (a *App) parkStrays(d *display, groups []*group, now time.Time) {
 	if len(strays) == 0 {
 		return
 	}
-	a.media.capture(strays, false, time.Second, func() {
+	a.media.capture(strays, false, false, time.Second, func() {
 		for _, h := range strays {
 			if fg := catalog.RootOwner(winapi.Foreground()); fg != h {
 				a.park.Park(h)

@@ -5,6 +5,7 @@ package winapi
 import (
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -51,6 +52,7 @@ const (
 
 	dwmwaNCRenderingEnabled       = 1
 	dwmwaExtendedFrameBounds      = 9
+	dwmwaCloak                    = 13
 	dwmwaCloaked                  = 14
 	dwmwaTransitionsForceDisabled = 3
 
@@ -164,6 +166,19 @@ func CastsFrameShadow(h HWND) bool {
 	return kind == rgnError
 }
 
+// SetCloaked asks DWM to temporarily omit a window from composition.
+// Unlike SW_HIDE, this does not change the Win32 visibility state or emit
+// EVENT_OBJECT_HIDE, which applications and our own window hooks may treat
+// as a close/minimize transition.
+func SetCloaked(h HWND, cloaked bool) bool {
+	var v int32
+	if cloaked {
+		v = 1
+	}
+	hr, _, _ := procDwmSetWindowAttribute.Call(uintptr(h), dwmwaCloak, uintptr(unsafe.Pointer(&v)), 4)
+	return hr == 0
+}
+
 // IsCloaked reports whether DWM hides the window, as it hides windows of
 // other virtual desktops and suspended UWP apps.
 func IsCloaked(h HWND) bool {
@@ -270,13 +285,75 @@ func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 // Redraw asks a window to repaint everything, frame and children included,
 // without erasing what it shows first.
 func Redraw(h HWND) {
-	const rdwInvalidate, rdwNoErase, rdwAllChildren, rdwFrame = 0x1, 0x20, 0x80, 0x400
-	procRedrawWindow.Call(uintptr(h), 0, 0, rdwInvalidate|rdwNoErase|rdwAllChildren|rdwFrame)
+	// A window returning from the drag handoff may have discarded its
+	// redirected surface while hidden. Erase and paint invalidated regions
+	// immediately, rather than waiting for pointer movement or resize.
+	const rdwInvalidate, rdwErase, rdwAllChildren, rdwFrame, rdwUpdateNow = 0x1, 0x4, 0x80, 0x400, 0x100
+	procRedrawWindow.Call(uintptr(h), 0, 0, rdwInvalidate|rdwErase|rdwAllChildren|rdwFrame|rdwUpdateNow)
+	procDwmFlush.Call()
 }
-
 // PaintNow has a window of this thread paint at once, if it asked to be
 // painted, rather than when the message loop gets to it.
 func PaintNow(h HWND) { procUpdateWindow.Call(uintptr(h)) }
+
+type guiThreadInfo struct {
+	Size      uint32
+	Flags     uint32
+	Active    HWND
+	Focus     HWND
+	Capture   HWND
+	MenuOwner HWND
+	MoveSize  HWND
+	Caret     HWND
+	CaretRect Rect
+}
+
+// CancelMoveSize asks Windows to end its native modal move/size loop and
+// waits until the owning GUI thread confirms that the loop has actually
+// ended. WM_CANCELMODE can return before the modal loop has unwound; moving
+// the window immediately after SendMessageTimeout then races with the loop
+// restoring its starting rectangle.
+func CancelMoveSize(h HWND) bool {
+	const (
+		wmCancelMode    = 0x001F
+		smtoAbortIfHung  = 0x0002
+		timeoutMS       = 200
+		settleTimeout   = 500 * time.Millisecond
+	)
+	_, tid := ProcessID(h)
+	if tid == 0 {
+		return false
+	}
+	getInfo := syscall.NewLazyDLL("user32.dll").NewProc("GetGUIThreadInfo")
+	info := guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+	if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r == 0 {
+		return false
+	}
+	// The move may have ended between the WinEvent notification and this
+	// call. In that case there is nothing left to cancel.
+	if info.MoveSize != h {
+		return true
+	}
+	proc := syscall.NewLazyDLL("user32.dll").NewProc("SendMessageTimeoutW")
+	var result uintptr
+	r, _, _ := proc.Call(uintptr(h), wmCancelMode, 0, 0,
+		smtoAbortIfHung, timeoutMS, uintptr(unsafe.Pointer(&result)))
+	if r == 0 {
+		return false
+	}
+	deadline := time.Now().Add(settleTimeout)
+	for time.Now().Before(deadline) {
+		info = guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+		if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r == 0 {
+			return false
+		}
+		if info.MoveSize != h {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false
+}
 
 // Close asks a window to close, as its close button does.
 func Close(h HWND) {

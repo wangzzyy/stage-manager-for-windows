@@ -86,9 +86,27 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 			a.peekEnd()
 			return
 		}
+		delete(a.handoffHidden, h)
 		a.noteClosed(h)
 	case winapi.EventObjectHide:
+		if until, ok := a.handoffHidden[h]; ok {
+			if time.Now().Before(until) {
+				// WinEvent notifications can be queued and delivered after the
+				// matching SHOW. Keep suppressing both sides of this handoff
+				// pair for the whole grace period; consuming HIDE or SHOW once
+				// makes a late HIDE look like a genuine close.
+				return
+			}
+			delete(a.handoffHidden, h)
+		}
 		a.noteClosed(h)
+	case winapi.EventObjectShow:
+		if until, ok := a.handoffHidden[h]; ok {
+			if time.Now().Before(until) {
+				return
+			}
+			delete(a.handoffHidden, h)
+		}
 	case winapi.EventSystemMoveSizeEnd:
 		a.windowMoved(h)
 	case winapi.EventObjectLocationChange:
@@ -138,7 +156,7 @@ func (a *App) onForeground(h winapi.HWND) {
 	// all, the switch takes the still.
 	if prev := a.fg.prev; prev != 0 && prev != h && a.isListed(prev) && !a.park.IsParked(prev) && !sameProcess(prev, h) {
 		if s := a.media.still(prev); s == nil || time.Since(s.at) > 1500*time.Millisecond {
-			a.media.capture([]winapi.HWND{prev}, false, time.Second, a.redraw)
+			a.media.capture([]winapi.HWND{prev}, false, false, time.Second, a.redraw)
 		}
 	}
 	a.fg.prev = catalog.RootOwner(h)

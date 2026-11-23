@@ -600,6 +600,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	case live:
 		lift = 1.045
 	}
+	// Make the card being merged into visibly receive the dragged card.
+	if drag := a.cardDrag; drag != nil && drag.from == d && drag.aim == aimMerge && drag.target == g.key {
+		lift = 1.12
+	}
 	lift = el.AnimateTo("lift", lift, ui.Snappy)
 	st.tilt, st.lift = tilt, lift
 	var ox, oy float32

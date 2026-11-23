@@ -511,22 +511,18 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	a.refreshSoon()
 }
 
-// startMergeReflow records the last laid-out rectangles of cards that
-// are not doing anything else. Their transform is animated by strip.card
-// after the merged layout is built.
+// startMergeReflow marks cards that can use the layout engine's own
+// element transition when the merged card list is arranged. Cards already
+// participating in another interaction keep their existing motion.
 func (a *App) startMergeReflow(d *display, source, target string, now time.Time) {
-	if d == nil || len(d.layout.cards) == 0 {
+	if d == nil || len(d.sets) == 0 {
 		return
 	}
 	if d.cards == nil {
 		d.cards = make(map[string]*cardState)
 	}
-	for i, card := range d.sets {
-		if card == nil || card.key == source || card.key == target || i >= len(d.layout.cards) {
-			continue
-		}
-		from := d.layout.cards[i]
-		if from.W <= 0 || from.H <= 0 {
+	for _, card := range d.sets {
+		if card == nil || card.key == source || card.key == target {
 			continue
 		}
 		st := d.cards[card.key]
@@ -534,14 +530,13 @@ func (a *App) startMergeReflow(d *display, source, target string, now time.Time)
 			st = &cardState{}
 			d.cards[card.key] = st
 		}
-		// Hover, drag, external handoff, return, or another reflow means
-		// this card already has motion of its own and must be left alone.
+		// Hover, drag, external handoff, return, landing, or another
+		// animation means this card already has motion of its own.
 		if d.landingOf(card) || st.dragging || st.moved || st.external ||
 			st.externalAnimating || st.externalLayer || st.returning || st.over ||
 			st.mergeAnimating || st.poses != nil || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
 			continue
 		}
-		st.mergeFrom = from
 		st.mergeStarted = now
 		st.mergeAnimating = true
 	}

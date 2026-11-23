@@ -159,7 +159,7 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 		box := d.layout.cards[i]
 		x, y := box.X+box.W/2+st.dx, box.Y+box.H/2+st.dy
 		for j, other := range d.sets {
-			if j == i || other.staged || j >= len(d.layout.cards) {
+			if j == i || j >= len(d.layout.cards) {
 				continue
 			}
 			if pointInCard(d.layout.cards[j], x, y) {
@@ -472,6 +472,17 @@ func (a *App) requestMerge(d *display, source *set, target string) {
 func (a *App) mergeSet(d *display, source *set, target string) {
 	defer a.cardLanded()
 	if !a.ready || a.quitting || d == nil || source == nil || source.key == target {
+		return
+	}
+	targetSet := findSet(d.sets, target)
+	if targetSet == nil {
+		return
+	}
+	if targetSet.staged {
+		// The ghost card is the live stage: bring the dragged apps onto
+		// it through the ordinary window handover, without changing focus.
+		next := append(d.model.Stage(), source.names()...)
+		a.switchStage(d, next, targetSet.front().HWND, false, false)
 		return
 	}
 	if !d.model.Merge(source.key, target) {

@@ -278,6 +278,29 @@ func (d *Display) Move(app string, at int) {
 	d.sets = slices.Insert(d.sets, min(max(at, 0), len(d.sets)), s)
 }
 
+// Merge joins the set containing from into the set containing into.
+// The target keeps its slot and app order; the dragged set is appended.
+func (d *Display) Merge(from, into string) bool {
+	i, j := d.setIndex(from), d.setIndex(into)
+	if i < 0 || j < 0 || i == j {
+		return false
+	}
+	merged := append(slices.Clone(d.sets[j]), d.sets[i]...)
+	out := make([][]string, 0, len(d.sets)-1)
+	for k, set := range d.sets {
+		switch k {
+		case i:
+			continue
+		case j:
+			out = append(out, merged)
+		default:
+			out = append(out, set)
+		}
+	}
+	d.sets = out
+	return true
+}
+
 // Leave takes an app off the stage into a set of its own at the top of
 // the strip, as when all its windows are closed.
 func (d *Display) Leave(app string) {

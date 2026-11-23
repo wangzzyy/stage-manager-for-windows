@@ -74,6 +74,7 @@ const (
 	aimSort            // to slot at of its strip
 	aimJoin            // onto the stage, beside the apps there
 	aimMove            // to slot at of another display's strip
+	aimMerge           // into the card hovered for a second
 )
 
 // cardDrag is the card being dragged out of a strip, if any, and where it
@@ -89,6 +90,9 @@ type cardDrag struct {
 	// may still go back there: it heads for the stage or another display.
 	out  bool
 	done bool
+	hoverKey string
+	target string
+	hoverTimer *time.Timer
 }
 
 // sorts reports whether a card dragged as c stays in its strip: moved up
@@ -142,9 +146,63 @@ func (a *App) cardDropAt(from *display, st *cardState, p winapi.Point) (*display
 // aimCard works out where card g of display d's strip, dragged as st
 // tells, would go if let go now.
 func (a *App) aimCard(d *display, g *set, st *cardState) {
-	c := &cardDrag{from: d, key: g.key}
+	c := a.cardDrag
+	if c == nil || c.from != d || c.key != g.key {
+		c = &cardDrag{from: d, key: g.key}
+	}
 	i := slices.IndexFunc(d.sets, func(s *set) bool { return s.key == g.key })
 	cur := winapi.Cursor()
+	target := ""
+	if !g.staged && d.strip != nil && d.strip.scale > 0 {
+		x := float32(float64(cur.X-d.strip.rect.Left) / d.strip.scale)
+		y := float32(float64(cur.Y-d.strip.rect.Top) / d.strip.scale)
+		for j, other := range d.sets {
+			if j == i || other.staged || j >= len(d.layout.cards) {
+				continue
+			}
+			if pointInCard(d.layout.cards[j], x, y) {
+				target = other.key
+				break
+			}
+		}
+	}
+	if target != c.hoverKey {
+		if c.hoverTimer != nil {
+			c.hoverTimer.Stop()
+			c.hoverTimer = nil
+		}
+		c.hoverKey, c.target = target, ""
+		c.aim, c.to, c.at = aimBack, nil, 0
+		if target != "" {
+			drag := c
+			drag.hoverTimer = after(time.Second, func() {
+				if a.cardDrag != drag || drag.hoverKey != target || !winapi.LeftButtonDown() {
+					return
+				}
+				p := winapi.Cursor()
+				if d.strip == nil || d.strip.scale <= 0 {
+					return
+				}
+				x := float32(float64(p.X-d.strip.rect.Left) / d.strip.scale)
+				y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
+				for j, other := range d.sets {
+					if other.key == target && j < len(d.layout.cards) && pointInCard(d.layout.cards[j], x, y) {
+						drag.aim, drag.to, drag.target = aimMerge, d, target
+						d.strip.win.Invalidate()
+						return
+					}
+				}
+			})
+		}
+	}
+	// Keep the merge aim while the pointer remains over the same card.
+	if c.aim == aimMerge && target == c.hoverKey && target != "" {
+		c.to, c.target = d, target
+		c.out = false
+		a.setCardDrag(c)
+		return
+	}
+	c.aim, c.to, c.at, c.target = aimBack, nil, 0, ""
 	// The stage's own card, in a strip that lists it, is on the stage
 	// already, and no other display's strip takes it: it can only be moved up
 	// or down its strip.
@@ -157,14 +215,8 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	case to != nil:
 		c.aim, c.to, c.at = aimMove, to, at
 	case st.dx*turnSign(a.right(d)) > float32(a.settings.Width)*joinReach:
-		// Toward the stage is rightward, or leftward from a strip on the
-		// right.
 		c.aim = aimJoin
 	case d.strip != nil && !d.strip.rect.Contains(cur) && a.straightToStage(d, cur):
-		// The pointer itself left the strip on the stage's side: the card
-		// follows it out, rather than wait for the drag to add up to
-		// joinReach, which on a narrow strip it does only once the pointer
-		// is well past the neighbouring display's strip.
 		c.aim = aimJoin
 	case i >= 0 && i < len(d.layout.cards):
 		b := d.layout.cards[i]
@@ -172,6 +224,11 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	}
 	c.out = !g.staged && (c.aim == aimMove || c.aim == aimJoin || a.headsAcross(d, st, cur))
 	a.setCardDrag(c)
+}
+
+// pointInCard tests a pointer in the strip's local DIP coordinates.
+func pointInCard(r ui.Rect, x, y float32) bool {
+	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
 }
 
 // headsAcross reports whether a card of display d's strip, dragged as st
@@ -216,6 +273,9 @@ func (a *App) straightToStage(d *display, p winapi.Point) bool {
 // a drag in another strip.
 func (a *App) setCardDrag(c *cardDrag) {
 	old := a.cardDrag
+	if old != c && old != nil && old.hoverTimer != nil {
+		old.hoverTimer.Stop()
+	}
 	if old != nil && c != nil && *old == *c {
 		return
 	}
@@ -264,7 +324,13 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		if c == nil || c.from != d || c.key != g.key {
 			c = &cardDrag{from: d, key: g.key}
 		}
+		if c.hoverTimer != nil {
+			c.hoverTimer.Stop()
+		}
 		switch c.aim {
+		case aimMerge:
+			a.requestMerge(d, g, c.target)
+			a.flights.endDrag(d, 0)
 		case aimMove:
 			// Into the strip of another display: the card moves there,
 			// and its apps with it, without coming on a stage. It comes
@@ -382,6 +448,33 @@ func (a *App) requestMove(to *display, s *set, at int, drop winapi.Rect) {
 
 // requestReorder moves a card of display d's strip to slot at, once the
 // frame is built. Tests set App.act to see the request instead.
+func (a *App) requestMerge(d *display, source *set, target string) {
+	if target == "" || source == nil {
+		return
+	}
+	if a.act != nil {
+		a.act(actMerge, d, source)
+		return
+	}
+	post(func() { a.mergeSet(d, source, target) })
+}
+
+// mergeSet joins the dragged card into the card it rested on. The target
+// keeps its place and identity; the dragged card disappears from the strip.
+func (a *App) mergeSet(d *display, source *set, target string) {
+	defer a.cardLanded()
+	if !a.ready || a.quitting || d == nil || source == nil || source.key == target {
+		return
+	}
+	if !d.model.Merge(source.key, target) {
+		return
+	}
+	debugf("merge card %q into %q on %s", source.title(), target, d.mon.Device)
+	a.arrange(d, a.groupsOf(d), time.Now())
+	a.redraw()
+	a.refreshSoon()
+}
+
 func (a *App) requestReorder(d *display, s *set, at int) {
 	if a.act != nil {
 		a.act(actReorder, d, s)

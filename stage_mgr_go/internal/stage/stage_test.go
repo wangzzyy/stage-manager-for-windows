@@ -315,6 +315,8 @@ func TestMergeCombinesCardsAtTargetSlot(t *testing.T) {
 	var d Display
 	d.Init("stage", t0)
 	d.Strip([]string{"stage", "target-a", "other", "source-a", "source-b"})
+	// Build the dragged card as a group before merging it.
+	d.Insert([]string{"source-a", "source-b"}, 3)
 	if !d.Merge("source-a", "target-a") {
 		t.Fatal("merge unexpectedly failed")
 	}

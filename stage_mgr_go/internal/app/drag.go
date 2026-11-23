@@ -305,6 +305,17 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// the handoff animation.
 	from := poseOf(origin)
 	d.model.Switch(next, time.Now())
+	// Suppress the destination's real strip card before refresh can draw it.
+	// Previously refresh presented the resting card before the async capture
+	// completed and dragIntoCard enabled externalLayer, causing a visible
+	// final-card flash before the window-to-card animation began.
+	key := a.groupKey(w)
+	card := d.card(key)
+	card.externalLayer = true
+	card.externalPresented = false
+	card.externalAnimating = false
+	card.externalFrom = pose{}
+	card.externalStarted = time.Time{}
 	a.windows = a.cat.Windows()
 	a.refresh()
 
@@ -317,7 +328,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// hung application from holding up the handoff.
 	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
 		if !startFlight() {
-			debugf("drag into card: capture produced no drawable animation; keeping real window visible")
+			// No overlay will take over; restore the real card after a failed
+			// capture so externalLayer cannot leave it permanently invisible.
+			card.externalLayer = false
+			card.externalPresented = false
+			debugf("drag into card: capture produced no drawable animation; restored real card")
 		}
 		a.redraw()
 	})

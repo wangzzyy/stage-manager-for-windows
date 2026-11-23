@@ -243,6 +243,24 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
 		return nil
 	}
+	// A window can briefly report an empty frame while it is being moved,
+	// hidden, or rehomed. The proportional stage layout cannot map such
+	// geometry; use the ordinary aspect-ratio card stack instead. This is
+	// especially important during native-drag handoff, when the card must
+	// remain drawable even if its HWND bounds are transiently invalid.
+	for _, r := range bounds {
+		if r.Empty() {
+			aspects := make([]float64, len(bounds))
+			for i, b := range bounds {
+				if b.Empty() {
+					aspects[i] = 16.0 / 10
+				} else {
+					aspects[i] = float64(b.W()) / float64(b.H())
+				}
+			}
+			return stackWindows(card, aspects, onRight)
+		}
+	}
 	left, top := bounds[0].Left, bounds[0].Top
 	edgeRight, bottom := bounds[0].Right, bounds[0].Bottom
 	for _, r := range bounds[1:] {

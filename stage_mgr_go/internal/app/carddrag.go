@@ -99,7 +99,7 @@ type cardDrag struct {
 // or down it, or going back. A card is dragged as nothing before the first
 // move.
 func (c *cardDrag) sorts() bool {
-	return c == nil || !c.out && (c.aim == aimBack || c.aim == aimSort)
+	return c == nil || !c.out && (c.aim == aimBack || c.aim == aimSort || c.aim == aimMerge)
 }
 
 // joinReach is how far toward the stage, as a share of the strip's width,
@@ -187,7 +187,7 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 				y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
 				for j, other := range d.sets {
 					if other.key == target && j < len(d.layout.cards) && pointInCard(d.layout.cards[j], x, y) {
-						drag.aim, drag.to, drag.target = aimMerge, d, target
+						drag.aim, drag.to, drag.target = aimMerge, nil, target
 						d.strip.win.Invalidate()
 						return
 					}
@@ -197,7 +197,7 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	}
 	// Keep the merge aim while the pointer remains over the same card.
 	if c.aim == aimMerge && target == c.hoverKey && target != "" {
-		c.to, c.target = d, target
+		c.to, c.target = nil, target
 		c.out = false
 		a.setCardDrag(c)
 		return
@@ -215,8 +215,14 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	case to != nil:
 		c.aim, c.to, c.at = aimMove, to, at
 	case st.dx*turnSign(a.right(d)) > float32(a.settings.Width)*joinReach:
+		// Toward the stage is rightward, or leftward from a strip on the
+		// right.
 		c.aim = aimJoin
 	case d.strip != nil && !d.strip.rect.Contains(cur) && a.straightToStage(d, cur):
+		// The pointer itself left the strip on the stage's side: the card
+		// follows it out, rather than wait for the drag to add up to
+		// joinReach, which on a narrow strip it does only once the pointer
+		// is well past the neighbouring display's strip.
 		c.aim = aimJoin
 	case i >= 0 && i < len(d.layout.cards):
 		b := d.layout.cards[i]

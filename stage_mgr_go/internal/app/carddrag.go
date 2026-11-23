@@ -153,19 +153,13 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	i := slices.IndexFunc(d.sets, func(s *set) bool { return s.key == g.key })
 	cur := winapi.Cursor()
 	target := ""
-	if d.strip != nil && d.strip.scale > 0 {
-		// The card's avoidance layout moves it away from the pointer, so
-		// use the pointer's position over the target card for hover dwell.
-		x := float32(float64(cur.X-d.strip.rect.Left) / d.strip.scale)
-		y := float32(float64(cur.Y-d.strip.rect.Top) / d.strip.scale)
-		for j, other := range d.sets {
-			if j == i || j >= len(d.layout.cards) {
-				continue
-			}
-			if pointInCard(d.layout.cards[j], x, y) {
-				target = other.key
-				break
-			}
+	for j, other := range d.sets {
+		if j == i || j >= len(d.layout.cards) {
+			continue
+		}
+		if draggedCardOverlaps(st, d.layout.cards[j]) {
+			target = other.key
+			break
 		}
 	}
 	if target != c.hoverKey {
@@ -177,18 +171,12 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 		c.aim, c.to, c.at = aimBack, nil, 0
 		if target != "" {
 			drag := c
-			drag.hoverTimer = after(time.Second, func() {
+			drag.hoverTimer = after(500*time.Millisecond, func() {
 				if a.cardDrag != drag || drag.hoverKey != target || !winapi.LeftButtonDown() {
 					return
 				}
-				p := winapi.Cursor()
-				if d.strip == nil || d.strip.scale <= 0 {
-					return
-				}
-				x := float32(float64(p.X-d.strip.rect.Left) / d.strip.scale)
-				y := float32(float64(p.Y-d.strip.rect.Top) / d.strip.scale)
 				for j, other := range d.sets {
-					if other.key == target && j < len(d.layout.cards) && pointInCard(d.layout.cards[j], x, y) {
+					if other.key == target && j < len(d.layout.cards) && draggedCardOverlaps(st, d.layout.cards[j]) {
 						drag.aim, drag.to, drag.target = aimMerge, nil, target
 						d.strip.win.Invalidate()
 						return
@@ -234,9 +222,25 @@ func (a *App) aimCard(d *display, g *set, st *cardState) {
 	a.setCardDrag(c)
 }
 
-// pointInCard tests a pointer in the strip's local DIP coordinates.
-func pointInCard(r ui.Rect, x, y float32) bool {
-	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
+// draggedCardOverlaps requires the dragged card's central area to overlap
+// the target's inset area, avoiding merges from shallow edge contact.
+func draggedCardOverlaps(st *cardState, target ui.Rect) bool {
+	if st == nil || st.box.W <= 0 || st.box.H <= 0 {
+		return false
+	}
+	lift := max(st.lift, float32(1))
+	w, h := st.box.W*lift, st.box.H*lift
+	dragged := ui.Rect{
+		X: st.box.X + st.dx + (st.box.W-w)/2,
+		Y: st.box.Y + st.dy + (st.box.H-h)/2,
+		W: w * 0.6,
+		H: h * 0.6,
+	}
+	dragged.X += (w - dragged.W) / 2
+	dragged.Y += (h - dragged.H) / 2
+	target = ui.Rect{X: target.X + target.W*0.2, Y: target.Y + target.H*0.2, W: target.W*0.6, H: target.H*0.6}
+	return dragged.X < target.X+target.W && dragged.X+dragged.W > target.X &&
+		dragged.Y < target.Y+target.H && dragged.Y+dragged.H > target.Y
 }
 
 // headsAcross reports whether a card of display d's strip, dragged as st

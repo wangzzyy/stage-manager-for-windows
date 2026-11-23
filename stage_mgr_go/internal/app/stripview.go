@@ -594,6 +594,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		lift = 0.96
 	case st.dragging:
 		lift = 1.08
+		if drag := a.cardDrag; drag != nil && drag.from == d && drag.key == g.key && drag.aim == aimMerge {
+			lift = 0.86
+		}
 	case live:
 		lift = 1.045
 	}

@@ -531,7 +531,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	}
 	if landing {
 		motion.Enter = nil
-	} else if right {
+	} else if right && motion.Enter != nil {
 		enter := *motion.Enter
 		enter.X = -enter.X
 		motion.Enter = &enter

@@ -489,6 +489,10 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 		a.switchStage(d, next, targetSet.front().HWND, false, false)
 		return
 	}
+	// Remember the old rectangles before the model removes the dragged
+	// card. Only cards with no independent interaction are allowed to join
+	// this reflow; the source and target keep their own merge behavior.
+	a.startMergeReflow(d, source.key, target, time.Now())
 	if !d.model.Merge(source.key, target) {
 		return
 	}
@@ -505,6 +509,41 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	a.arrange(d, a.groupsOf(d), time.Now())
 	a.redraw()
 	a.refreshSoon()
+}
+
+// startMergeReflow records the last laid-out rectangles of cards that
+// are not doing anything else. Their transform is animated by strip.card
+// after the merged layout is built.
+func (a *App) startMergeReflow(d *display, source, target string, now time.Time) {
+	if d == nil || len(d.layout.cards) == 0 {
+		return
+	}
+	if d.cards == nil {
+		d.cards = make(map[string]*cardState)
+	}
+	for i, card := range d.sets {
+		if card == nil || card.key == source || card.key == target || i >= len(d.layout.cards) {
+			continue
+		}
+		from := d.layout.cards[i]
+		if from.W <= 0 || from.H <= 0 {
+			continue
+		}
+		st := d.cards[card.key]
+		if st == nil {
+			st = &cardState{}
+			d.cards[card.key] = st
+		}
+		// Hover, drag, external handoff, return, or another reflow means
+		// this card already has motion of its own and must be left alone.
+		if st.dragging || st.external || st.externalAnimating || st.externalLayer ||
+			st.returning || st.over || st.mergeAnimating || st.dx != 0 || st.dy != 0 || st.lift > 1.001 {
+			continue
+		}
+		st.mergeFrom = from
+		st.mergeStarted = now
+		st.mergeAnimating = true
+	}
 }
 
 // raiseMergedWindows applies the source-then-target order to the real

@@ -285,7 +285,9 @@ func (d *Display) Merge(from, into string) bool {
 	if i < 0 || j < 0 || i == j {
 		return false
 	}
-	merged := append(slices.Clone(d.sets[j]), d.sets[i]...)
+	// The strip is top-first: the dragged set must precede the target
+	// so its windows are restored above the windows already in that set.
+	merged := append(slices.Clone(d.sets[i]), d.sets[j]...)
 	out := make([][]string, 0, len(d.sets)-1)
 	for k, set := range d.sets {
 		switch k {

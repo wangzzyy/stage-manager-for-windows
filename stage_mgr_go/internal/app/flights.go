@@ -835,7 +835,9 @@ func (f *flights) standByAll() {
 // dragIntoCard flies a captured window from its live drag position into the
 // card's current layout pose. The target is measured from the strip layout,
 // never from a fixed screen coordinate.
-const dragIntoCardDuration = 1500 * time.Millisecond
+// Keep the drag-to-card landing on the same spring curve as click-driven
+// flights, with its requested fixed duration.
+const dragIntoCardDuration = 420 * time.Millisecond
 
 func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff func()) bool {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {

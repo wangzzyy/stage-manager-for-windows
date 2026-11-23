@@ -516,7 +516,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// A window converted from a native drag is already under the pointer.
 	// Do not run the card's normal enter/position transition while that
 	// external drag is active; it would look like a stage-switch animation.
-	if st.external {
+	if st.external || st.mergeAnimating {
+		// Merge reflow supplies its own screen-space transform below;
+		// do not layer the ordinary element transition over it.
 		motion = ui.ElementTransition{}
 	}
 	if landing {

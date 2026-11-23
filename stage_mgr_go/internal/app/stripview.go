@@ -44,6 +44,12 @@ type cardState struct {
 	// shook when the stage's card was last shaken (shakeGap).
 	over  bool
 	shook time.Time
+
+	// mergeFrom is the card's last resting rectangle before another card
+	// was merged. Uninvolved cards animate from it to their new layout slot.
+	mergeFrom     ui.Rect
+	mergeStarted  time.Time
+	mergeAnimating bool
 }
 
 type follow int8
@@ -96,6 +102,9 @@ var (
 		Enter:     &ui.Motion{X: -36, Scale: 0.86},
 	}
 	fadeQuick = ui.Animation{Duration: 160 * time.Millisecond}
+	// mergeReflow is the time uninvolved cards take to settle into the
+	// tighter layout after two cards become one.
+	mergeReflow = 340 * time.Millisecond
 	// ghostFade is how long the card of the apps on the stage takes to become
 	// a ghost, or back to a card: as long as the windows take to leave it.
 	ghostFade = ui.Animation{Duration: 320 * time.Millisecond}
@@ -688,6 +697,37 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		shake = 0
 	}
 	translateX, translateY, scale := ox+shake, oy, float32(1)
+	// The layout has already adopted the smaller card count, which can
+	// enlarge every remaining card at once. Keep uninvolved cards at their
+	// old screen-space rectangles and interpolate both position and size.
+	// Cards with their own interaction never receive this reflow animation.
+	if st.mergeAnimating && !st.dragging && !st.external && !st.externalAnimating &&
+		!st.externalLayer && !st.returning && !st.over && st.dx == 0 && st.dy == 0 {
+		p := float32(c.Now().Sub(st.mergeStarted)) / float32(mergeReflow)
+		p = min(max(p, 0), 1)
+		e := p * p * (3 - 2*p)
+		from, to := st.mergeFrom, box
+		if from.W > 0 && from.H > 0 && to.W > 0 && to.H > 0 {
+			fromCX, fromCY := from.X+from.W/2, from.Y+from.H/2
+			toCX, toCY := to.X+to.W/2, to.Y+to.H/2
+			translateX += fromCX + (toCX-fromCX)*e - toCX
+			translateY += fromCY + (toCY-fromCY)*e - toCY
+			fromScale := min(from.W/to.W, from.H/to.H)
+			scale *= fromScale + (1-fromScale)*e
+		}
+		if p < 1 {
+			c.AnimationFrame()
+		} else {
+			st.mergeAnimating = false
+			st.mergeFrom = ui.Rect{}
+			st.mergeStarted = time.Time{}
+		}
+	} else if st.mergeAnimating {
+		// A new interaction takes precedence over a pending reflow.
+		st.mergeAnimating = false
+		st.mergeFrom = ui.Rect{}
+		st.mergeStarted = time.Time{}
+	}
 	if st.externalAnimating && st.externalReady && st.externalFrom.w > 0 && s.scale > 0 {
 		if st.externalStarted.IsZero() {
 			st.externalStarted = c.Now()

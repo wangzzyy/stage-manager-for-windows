@@ -510,61 +510,47 @@ func (a *App) raiseMergedWindows(source, target *set) {
 	if source == nil || target == nil {
 		return
 	}
-	inSource := make(map[winapi.HWND]bool, len(source.windows))
-	inTarget := make(map[winapi.HWND]bool, len(target.windows))
-	for _, w := range source.windows {
-		inSource[w.HWND] = true
-	}
-	for _, w := range target.windows {
-		inTarget[w.HWND] = true
-	}
 
-	// EnumWindows and Catalog.Windows both enumerate front-to-back.
-	// Build the requested order from a single fresh snapshot.
-	windows := a.cat.Windows()
-	ordered := make([]winapi.HWND, 0, len(inSource)+len(inTarget))
-	seen := make(map[winapi.HWND]bool, len(inSource)+len(inTarget))
-	for _, w := range windows {
-		if inSource[w.HWND] && !seen[w.HWND] {
-			ordered = append(ordered, w.HWND)
+	// A card's windows are already ordered front-to-back by newSet.
+	// The merged order must follow the drag operation, not the desktop's
+	// current EnumWindows order: source first, then target.
+	ordered := make([]winapi.HWND, 0, len(source.windows)+len(target.windows))
+	seen := make(map[winapi.HWND]bool, cap(ordered))
+	for _, card := range []*set{source, target} {
+		for _, w := range card.windows {
+			if w.HWND == 0 || seen[w.HWND] || !winapi.IsWindow(w.HWND) {
+				continue
+			}
 			seen[w.HWND] = true
-		}
-	}
-	for _, w := range windows {
-		if inTarget[w.HWND] && !seen[w.HWND] {
 			ordered = append(ordered, w.HWND)
-			seen[w.HWND] = true
 		}
 	}
 	if len(ordered) < 2 {
-		debugf("merge z-order: not enough live windows (source=%d target=%d live=%d)", len(inSource), len(inTarget), len(ordered))
+		debugf("merge z-order: not enough live windows (source=%d target=%d live=%d)",
+			len(source.windows), len(target.windows), len(ordered))
 		return
 	}
 
-	// Start with the desired bottom window at HWND_TOP, then insert each
-	// preceding window immediately above its successor. This creates one
-	// contiguous block in exactly the requested order.
-	below := winapi.HwndTop
-	for i := len(ordered) - 1; i >= 0; i-- {
-		h := ordered[i]
-		if !winapi.IsWindow(h) {
-			continue
-		}
-		if !winapi.SetWindowPos(h, below, 0, 0, 0, 0,
+	// SetWindowPos places each window behind insertAfter. Put the first
+	// source window at the top, then chain every following window behind
+	// the one immediately before it. This produces source -> target,
+	// front-to-back, while preserving each card's internal order.
+	insertAfter := winapi.HwndTop
+	for _, h := range ordered {
+		if !winapi.SetWindowPos(h, insertAfter, 0, 0, 0, 0,
 			winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate) {
-			debugf("merge z-order: SetWindowPos failed hwnd=%x insertAfter=%x", h, below)
+			debugf("merge z-order: SetWindowPos failed hwnd=%x insertAfter=%x", h, insertAfter)
 			continue
 		}
-		below = h
+		insertAfter = h
 	}
 
-	// Verify the actual resulting order, rather than assuming the Win32
-	// requests succeeded or that owned-window rules left it untouched.
+	// Verify the native order rather than assuming SetWindowPos succeeded.
 	actual := a.cat.Windows()
 	wantIndex := 0
 	var got []winapi.HWND
 	for _, w := range actual {
-		if inSource[w.HWND] || inTarget[w.HWND] {
+		if seen[w.HWND] {
 			got = append(got, w.HWND)
 		}
 	}
@@ -574,7 +560,8 @@ func (a *App) raiseMergedWindows(source, target *set) {
 		}
 	}
 	if wantIndex != len(ordered) || len(got) != len(ordered) {
-		debugf("merge z-order: verification mismatch want=%v got=%v", hwndsFromHandles(ordered), hwndsFromHandles(got))
+		debugf("merge z-order: verification mismatch want=%v got=%v",
+			hwndsFromHandles(ordered), hwndsFromHandles(got))
 	} else {
 		debugf("merge z-order: verified front-to-back=%v", hwndsFromHandles(got))
 	}

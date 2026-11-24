@@ -47,6 +47,7 @@ type parked struct {
 	Spot  winapi.Point // where it waits
 	Owner      winapi.HWND // the window it went with, for a dialog
 	Maximized  bool        // restore maximized after the window returns from its card
+	Hidden     bool        // keep HWND hidden when native positioning failed
 	At         time.Time
 }
 
@@ -81,6 +82,13 @@ func New(dir string) *Service {
 // IsParked reports whether a window is parked.
 func (s *Service) IsParked(h winapi.HWND) bool { _, ok := s.parked[h]; return ok }
 
+// KeepHidden reports whether a failed native park requires the HWND to remain
+// hidden until the user returns its card to the desktop.
+func (s *Service) KeepHidden(h winapi.HWND) bool {
+	p, ok := s.parked[h]
+	return ok && p.Hidden
+}
+
 // Home returns where a parked window goes back to.
 func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 	p, ok := s.parked[h]
@@ -103,16 +111,26 @@ func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmed
 // rectangle as it exits; sampling WindowRect afterwards would then both add
 // latency before moving the window and record the wrong place as its home.
 func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect, maximized bool) bool {
-	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
-		from.Empty() || !winapi.OnAnyMonitor(from) {
+	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) {
+		return false
+	}
+	if from.Empty() {
+		from = winapi.WindowRect(h)
+	}
+	if from.Empty() {
 		return false
 	}
 	home := onDesktop(from)
 	spot := spotFor(home)
-	if !moveImmediate(h, spot) {
+	moved := moveImmediate(h, spot)
+	// A maximized window has already been hidden for the visual handoff.
+	// If SetWindowPos cannot move its restored HWND (some native move loops
+	// reject the first positioning request), keep it hidden and register it
+	// as parked rather than exposing it again at its stale normal-size rect.
+	if !moved && !maximized {
 		return false
 	}
-	s.parked[h] = parked{Home: home, Spot: spot, Maximized: maximized, At: time.Now()}
+	s.parked[h] = parked{Home: home, Spot: spot, Maximized: maximized, Hidden: !moved, At: time.Now()}
 	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), from, home, spot, 0)
 	dx, dy := spot.X-from.Left, spot.Y-from.Top
 	shiftX, shiftY := home.Left-from.Left, home.Top-from.Top

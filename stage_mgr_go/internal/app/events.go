@@ -336,6 +336,13 @@ func (a *App) poll() {
 	}
 	cur := winapi.Cursor()
 	now := time.Now()
+	// Maximized windows restore as the native move loop begins, and some
+	// apps do not emit reliable location-change events while being dragged.
+	// Poll the pointer during a drag so entering a strip is detected even
+	// when the HWND's location events are sparse.
+	if a.drag != nil {
+		a.dragOver()
+	}
 	a.watchTaskbar(cur)
 	for _, d := range a.displays {
 		if d.strip != nil {

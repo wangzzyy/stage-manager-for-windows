@@ -2,9 +2,11 @@
 
 package winapi
 
-import "syscall"
+import (
+	"syscall"
+)
 
-var procPostMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("PostMessageW")
+var procSendMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("SendMessageW")
 
 // FullscreenRestoreRect reports the saved normal placement of a borderless
 // window that currently covers its monitor. It deliberately fails closed:
@@ -46,17 +48,23 @@ func abs32(v int32) int32 {
 	return v
 }
 
-// PostCaptionDrag posts the native non-client caption-down message. Posting,
-// rather than sending, is essential: DefWindowProc enters a modal move loop
-// and must not block Stage Manager's main thread.
-func PostCaptionDrag(h HWND, p Point) bool {
+// StartCaptionDrag asks the target window to process a real non-client
+// button-down. DefWindowProc starts the native move loop while handling this
+// message. That call does not return until the user releases the mouse, so it
+// must run on another goroutine rather than blocking Stage Manager's UI loop.
+// A posted WM_NCLBUTTONDOWN is not sufficient here: applications can ignore
+// synthetic posted mouse messages instead of entering the move loop.
+func StartCaptionDrag(h HWND, p Point) bool {
 	const (
 		wmNCLButtonDown = 0x00A1
 		htCaption       = 2
 	)
+	if !IsWindow(h) {
+		return false
+	}
 	lparam := uintptr(uint32(uint16(p.X)) | uint32(uint16(p.Y))<<16)
-	r, _, _ := procPostMessageWDrag.Call(
+	go procSendMessageWDrag.Call(
 		uintptr(h), wmNCLButtonDown, htCaption, lparam,
 	)
-	return r != 0
+	return true
 }

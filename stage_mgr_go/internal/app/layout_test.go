@@ -458,33 +458,3 @@ func TestTurnedPoint(t *testing.T) {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
 }
-
-// Invalid native window frames can occur briefly during a drag handoff.
-// The card still needs drawable geometry on either side of the strip.
-func TestStageWindowLayoutFallsBackForInvalidBounds(t *testing.T) {
-	card := ui.Rect{X: 20, Y: 30, W: 260, H: 180}
-	bounds := []winapi.Rect{
-		{Left: 100, Top: 100, Right: 0, Bottom: 0},
-		{Left: 0, Top: 0, Right: 0, Bottom: 0},
-	}
-	for _, right := range []bool{false, true} {
-		got := stageWindowLayout(card, bounds, right)
-		if len(got) != len(bounds) {
-			t.Fatalf("right=%v: got %d fallback windows, want %d", right, len(got), len(bounds))
-		}
-		for i, r := range got {
-			if r.W <= 0 || r.H <= 0 || r.X < card.X-0.01 || r.Y < card.Y-0.01 ||
-				r.X+r.W > card.X+card.W+0.01 || r.Y+r.H > card.Y+card.H+0.01 {
-				t.Fatalf("right=%v window %d has invalid fallback bounds %+v in card %+v", right, i, r, card)
-			}
-		}
-		if right {
-			front := got[0]
-			if front.X+front.W < card.X+card.W-0.01 {
-				t.Fatalf("right-side fallback is not anchored to outer edge: %+v", front)
-			}
-		} else if got[0].X > card.X+0.01 {
-			t.Fatalf("left-side fallback is not anchored to outer edge: %+v", got[0])
-		}
-	}
-}

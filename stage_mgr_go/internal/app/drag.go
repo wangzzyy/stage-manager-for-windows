@@ -293,9 +293,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
-			winapi.ShowNoActivate(w.HWND)
+			// The card has already taken over visually. Never show the real HWND
+			// again merely because the native move loop did not acknowledge
+			// cancellation: it can still snap back to its original rectangle.
+			if a.park.RememberHiddenFrom(w.HWND, parkFrom, wasMaximized) {
+				a.park.Rehome(w.HWND, home)
+			}
 			winapi.DwmFlush()
-			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
+			debugf("drag into card: native move loop did not end for %v; keeping real window hidden", w.HWND)
 			return
 		}
 		parked := false

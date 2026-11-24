@@ -338,6 +338,22 @@ func (a *App) poll() {
 	}
 	cur := winapi.Cursor()
 	now := time.Now()
+	// Keep a short-lived snapshot of maximized windows. Windows may restore
+	// the HWND as the user grabs its title bar, just before the move-size
+	// start event is delivered. Do not overwrite the active drag's snapshot.
+	if a.maximizedWindows == nil {
+		a.maximizedWindows = make(map[winapi.HWND]bool)
+	}
+	for _, w := range a.windows {
+		if a.drag != nil && a.drag.h == w.HWND {
+			continue
+		}
+		if winapi.IsZoomed(w.HWND) {
+			a.maximizedWindows[w.HWND] = true
+		} else {
+			delete(a.maximizedWindows, w.HWND)
+		}
+	}
 	a.watchTaskbar(cur)
 	for _, d := range a.displays {
 		if d.strip != nil {

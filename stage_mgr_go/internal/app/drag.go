@@ -116,14 +116,15 @@ func (a *App) dragOver() {
 				}
 				next := slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key })
 				g.converted = true
-				// Start the pointer gesture now, but do not mutate the stage
-				// model underneath a switch already in flight. Its commit would
-				// overwrite this drop and leave the landing without a card.
-				a.beginWindowCardDrag(target, key)
+				// A pending drop must not start the strip's pointer-card drag:
+				// the user may release the mouse before the running switch ends.
+				// That pointer gesture would consume the placeholder before the
+				// real card is committed. The deferred handoff owns the drop.
 				if a.busy {
 					a.pendingDragDrop = &draggedDrop{d: target, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
 					return
 				}
+				a.beginWindowCardDrag(target, key)
 				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
 			}
@@ -143,14 +144,14 @@ func (a *App) dragOver() {
 				}
 				next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key })
 				g.converted = true
-				// Keep the native drag gesture alive independently of a.drag.
-				// If a switch is running, defer both source-stage removal and
-				// destination-stage commit until that switch has settled.
-				a.beginWindowCardDrag(target, key)
+				// While a switch is running, keep only the native drop request.
+				// Starting a pointer-card drag here races mouse-up: its temporary
+				// card can be released before the real card exists.
 				if a.busy {
 					a.pendingDragDrop = &draggedDrop{d: target, from: g.home, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
 					return
 				}
+				a.beginWindowCardDrag(target, key)
 				a.leave(g.home, w)
 				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
@@ -317,9 +318,23 @@ func (a *App) flushDraggedDrop() {
 		return
 	}
 	a.pendingDragDrop = nil
-	if p.from != nil {
+	// The native drag may have ended, or its window/display may have gone
+	// away, while another stage was switching. Do not create a card for a
+	// stale HWND or a strip that is no longer managed.
+	if a.quitting || !winapi.IsWindow(p.w.HWND) || !a.managed(p.d) || p.d.strip == nil {
+		return
+	}
+	a.windows = a.cat.Windows()
+	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == p.w.HWND })
+	if i < 0 {
+		return
+	}
+	p.w = a.windows[i]
+	if p.from != nil && a.managed(p.from) {
 		a.leave(p.from, p.w)
 	}
+	// Mouse-up only ends the pointer gesture. The deferred native drop still
+	// completes the same capture, hide/park, card creation and flight path.
 	a.sendDraggedToStrip(p.d, p.w, p.next, p.home, p.origin, p.maximized)
 }
 

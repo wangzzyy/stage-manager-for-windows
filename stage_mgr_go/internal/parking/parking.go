@@ -231,6 +231,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	shiftX, shiftY := home.Left-root.Home.Left, home.Top-root.Home.Top
 	for w, p := range s.parked {
 		if w == h || p.Owner == h {
+			delete(s.protected, w)
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
 			// A window may have remained hidden through a drag-to-card

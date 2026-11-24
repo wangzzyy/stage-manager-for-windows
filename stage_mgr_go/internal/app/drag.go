@@ -20,6 +20,18 @@ type maximizedSnapshot struct {
 	restoreBounds winapi.Rect
 }
 
+// draggedDrop is a window already being dragged into a strip while another
+// stage switch is running. Its model changes must wait for that switch's
+// commit, or the in-flight switch can overwrite the destination card.
+type draggedDrop struct {
+	d, from   *display
+	w         catalog.Window
+	next      []string
+	home      winapi.Rect
+	origin    winapi.Rect
+	maximized bool
+}
+
 var maximizedBeforeMove = map[winapi.HWND]maximizedSnapshot{}
 
 // drag is a window the user is moving, from the start of the move to its
@@ -98,16 +110,21 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
-				g.converted = true
-				// Start the card's external drag before the native move loop
-				// ends. The loop-end event may clear a.drag before the switch
-				// has finished arranging the new card.
-				a.beginWindowCardDrag(target, key)
 				home := g.from
 				if g.wasMaximized && !g.restoreBounds.Empty() {
 					home = g.restoreBounds
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
+				next := slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key })
+				g.converted = true
+				// Start the pointer gesture now, but do not mutate the stage
+				// model underneath a switch already in flight. Its commit would
+				// overwrite this drop and leave the landing without a card.
+				a.beginWindowCardDrag(target, key)
+				if a.busy {
+					a.pendingDragDrop = &draggedDrop{d: target, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
+					return
+				}
+				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -119,17 +136,23 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
-				g.converted = true
-				// Preserve the pointer gesture independently of a.drag: the
-				// native move-size-end event can arrive before card creation.
-				a.beginWindowCardDrag(target, key)
-				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
 				if g.wasMaximized && !g.restoreBounds.Empty() {
 					home = g.restoreBounds
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
+				next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key })
+				g.converted = true
+				// Keep the native drag gesture alive independently of a.drag.
+				// If a switch is running, defer both source-stage removal and
+				// destination-stage commit until that switch has settled.
+				a.beginWindowCardDrag(target, key)
+				if a.busy {
+					a.pendingDragDrop = &draggedDrop{d: target, from: g.home, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
+					return
+				}
+				a.leave(g.home, w)
+				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
 			}
 		}
@@ -284,6 +307,20 @@ func (a *App) stripUnder(p winapi.Point) *display {
 		return nil
 	}
 	return d
+}
+
+// flushDraggedDrop carries out a strip drop deferred while a stage switch
+// was running. Call only after the running and queued switches have ended.
+func (a *App) flushDraggedDrop() {
+	p := a.pendingDragDrop
+	if p == nil || a.busy {
+		return
+	}
+	a.pendingDragDrop = nil
+	if p.from != nil {
+		a.leave(p.from, p.w)
+	}
+	a.sendDraggedToStrip(p.d, p.w, p.next, p.home, p.origin, p.maximized)
 }
 
 // sendDraggedToStrip prepares a card handoff. The real window stays visible

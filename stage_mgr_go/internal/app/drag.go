@@ -270,13 +270,19 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			return
 		}
 		winapi.DwmFlush()
-		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
 			winapi.ShowNoActivate(w.HWND)
 			winapi.DwmFlush()
 			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
 			return
 		}
+		// A maximized window is restored by Windows as the native move loop
+		// starts. Ending that loop can apply another frame/size transition;
+		// sample the HWND only after the loop has fully ended so the parking
+		// spot is calculated for the rectangle that is actually being moved.
+		// The animation origin and return-home rectangle remain the pre-cancel
+		// snapshots captured by dragOver/startDrag.
+		parkFrom := winapi.WindowRect(w.HWND)
 		parked := false
 		if a.settings.HideInactive {
 			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)

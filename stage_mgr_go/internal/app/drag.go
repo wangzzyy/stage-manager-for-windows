@@ -16,10 +16,10 @@ const dwell = 150 * time.Millisecond
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {
-	h    winapi.HWND
-	from winapi.Rect // normal-size home rectangle, or drag-start rectangle
-	maximized bool // the window was maximized before the native drag restored it
-	home *display    // the display it was on then
+	h        winapi.HWND
+	from     winapi.Rect // normal-size home rectangle, or drag-start rectangle
+	maximized bool       // the window was maximized before the native drag restored it
+	home     *display    // the display it was on then    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over *display

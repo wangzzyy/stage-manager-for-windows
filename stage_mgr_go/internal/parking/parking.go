@@ -208,10 +208,10 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
 			winapi.SetCloaked(w, false)
-			if s.maximized[w] {
+			if normal, maximized := s.maximized[w]; maximized {
 				delete(s.maximized, w)
-				ok := winapi.ShowMaximizedAtNoActivate(w, s.maximized[w])
-				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v normal=%v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), s.maximized[w])
+				ok := winapi.ShowMaximizedAtNoActivate(w, normal)
+				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v normal=%v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), normal)
 			} else {
 				winapi.ShowNoActivate(w)
 			}
@@ -459,8 +459,8 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			if s.maximized[h] {
-				winapi.ShowMaximizedAtNoActivate(h, s.maximized[h])
+			if normal, maximized := s.maximized[h]; maximized {
+				winapi.ShowMaximizedAtNoActivate(h, normal)
 			} else {
 				winapi.ShowNoActivate(h)
 			}
@@ -481,7 +481,7 @@ func (s *Service) RestoreAll() {
 		}
 	}
 	s.parked = map[winapi.HWND]parked{}
-	s.maximized = map[winapi.HWND]bool{}
+	s.maximized = map[winapi.HWND]winapi.Rect{}
 	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()

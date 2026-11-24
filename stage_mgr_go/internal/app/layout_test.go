@@ -458,3 +458,26 @@ func TestTurnedPoint(t *testing.T) {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
 }
+
+func TestStageWindowLayoutRightIsMirrorOfLeft(t *testing.T) {
+	card := ui.Rect{X: 30, Y: 40, W: 280, H: 180}
+	bounds := []winapi.Rect{
+		{Left: 100, Top: 100, Right: 500, Bottom: 400},
+		{Left: 550, Top: 150, Right: 950, Bottom: 450},
+		{Left: 220, Top: 500, Right: 420, Bottom: 650},
+	}
+	left := stageWindowLayout(card, bounds, false)
+	right := stageWindowLayout(card, bounds, true)
+	if len(left) != len(right) {
+		t.Fatalf("left has %d windows, right has %d", len(left), len(right))
+	}
+	for i := range left {
+		wantX := card.X + card.W - (left[i].X-card.X) - left[i].W
+		if math.Abs(float64(right[i].X-wantX)) > 0.01 ||
+			math.Abs(float64(right[i].Y-left[i].Y)) > 0.01 ||
+			math.Abs(float64(right[i].W-left[i].W)) > 0.01 ||
+			math.Abs(float64(right[i].H-left[i].H)) > 0.01 {
+			t.Fatalf("right window %d %+v is not mirrored left window %+v; expected x=%v", i, right[i], left[i], wantX)
+		}
+	}
+}

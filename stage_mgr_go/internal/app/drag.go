@@ -40,10 +40,10 @@ type drag struct {
 	stage     []string
 	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
-	captureFromFullscreen bool
-	fullscreenCaptureDone bool
-	fullscreenCaptureOK bool
-	fullscreenCaptureWaiters []func(bool)
+	captureAtDragStart bool
+	dragStartCaptureDone bool
+	dragStartCaptureOK bool
+	dragStartCaptureWaiters []func(bool)
 }
 
 // startDrag follows window h, which the user began to move.
@@ -54,8 +54,8 @@ func (a *App) startDrag(h winapi.HWND) {
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	var g *drag
 	// A borderless-fullscreen drag is restarted as a caption drag after its
-	// first restore. Reuse its capture state so the second native move loop
-	// still animates from the original fullscreen frame.
+	// first restore. Reuse its drag-start capture state so the second native
+	// move loop still animates from the original frame.
 	if previous := a.drag; previous != nil && previous.h == h && previous.captureFromFullscreen {
 		g = previous
 		g.from, g.home, g.at = winapi.WindowRect(h), home, home
@@ -94,13 +94,14 @@ func (a *App) startDrag(h winapi.HWND) {
 			h, winapi.FrameBounds(h), normal, maximized, placementOK,
 			winapi.MonitorInfo(winapi.MonitorFromRect(winapi.FrameBounds(h))).Monitor)
 	}
-	if g.fullscreen {
+	if g.fullscreen || g.wasMaximized {
 		before := time.Time{}
 		if st := a.media.still(h); st != nil {
 			before = st.at
 		}
-		// Take the flight image while the window is still borderless fullscreen.
-		// The native move loop may restore it before the pointer reaches a strip.
+		// Take the flight image before Windows changes a maximized or fullscreen
+		// window during the native move loop. A later handoff capture may see the
+		// restored, smaller window instead of the frame the user began dragging.
 		a.media.capture([]winapi.HWND{h}, true, true, 2*time.Second, func() {
 			st := a.media.still(h)
 			g.fullscreenCaptureOK = st != nil && st.at.After(before)

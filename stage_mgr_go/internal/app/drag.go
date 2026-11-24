@@ -24,6 +24,12 @@ type drag struct {
 	fullscreenNormal winapi.Rect
 	fullscreenFrame  winapi.Rect
 	fullscreen       bool
+	// A caption drag that starts maximized is restored by Windows as soon as
+	// the pointer leaves the top edge. Remember the first normal-sized
+	// rectangle: that is the position to return to after the strip handoff,
+	// not the maximized monitor-sized rectangle from the start of the drag.
+	wasMaximized bool
+	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over  *display
@@ -39,7 +45,7 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
 	debugf("move-size start %x class=%q style=%#x iconic=%v zoomed=%v rect=%v frame=%v",
 		h, winapi.ClassName(h), winapi.Style(h), winapi.IsIconic(h), winapi.IsZoomed(h), g.from, winapi.FrameBounds(h))
 	// The fullscreen test must happen at move-size start. Windows may restore
@@ -72,6 +78,15 @@ func (a *App) dragOver() {
 	d := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(g.h)))
 	if d != g.at {
 		g.at, g.since = d, time.Now()
+	}
+	// Windows restores a maximized caption window inside the native move
+	// loop. Capture that first restored rectangle before the strip handoff
+	// cancels the loop; g.from still describes the maximized frame.
+	if g.wasMaximized && g.restoredRect.Empty() && !winapi.IsZoomed(g.h) && !winapi.IsIconic(g.h) {
+		if r := winapi.WindowRect(g.h); !r.Empty() && (r.W() != g.from.W() || r.H() != g.from.H()) {
+			g.restoredRect = r
+			debugf("maximized drag restored %x from %v to %v", g.h, g.from, r)
+		}
 	}
 	// Turn the dragged window into a real card as soon as the pointer enters
 	// a visible strip. The ordinary stage switch owns the capture, flight,
@@ -112,7 +127,11 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				home := g.from
+				if g.wasMaximized && !g.restoredRect.Empty() {
+					home = g.restoredRect
+				}
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {

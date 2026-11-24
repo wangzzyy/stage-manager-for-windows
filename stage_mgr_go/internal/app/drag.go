@@ -271,7 +271,18 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// logically down; some applications continue repositioning themselves
 		// in response to that held input after the window has been parked.
 		if !winapi.ReleaseLeftButton() {
-			debugf("fullscreen-drag step=mouse-up hwnd=%x phase=handoff ok=false reason=SendInput-failed; leaving window visible", w.HWND)
+			// Roll back the external card drag as well: the real HWND is
+			// still visible and remains under the user's native drag.
+			st := d.card(a.groupKey(w))
+			st.external, st.externalLayer, st.externalPresented = false, false, false
+			st.externalAnimating, st.dragging = false, false
+			a.setCardDrag(nil)
+			if d.strip != nil {
+				d.strip.setDragging(false)
+				d.strip.win.Invalidate()
+			}
+			a.redraw()
+			debugf("fullscreen-drag step=rollback hwnd=%x phase=handoff failed_step=mouse-up reason=SendInput-failed window_visible=%t", w.HWND, winapi.IsWindowVisible(w.HWND))
 			return
 		}
 		debugf("fullscreen-drag step=mouse-up hwnd=%x phase=handoff ok=true", w.HWND)

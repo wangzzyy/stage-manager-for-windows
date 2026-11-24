@@ -408,13 +408,8 @@ func ShowMaximizedNoActivate(h HWND) bool {
 	}
 	// SetWindowPlacement records the show state, but hidden windows can stay
 	// hidden on some applications. Explicitly reveal without activation.
-	const swpNoSize = 0x0001
-	const swpNoMove = 0x0002
-	const swpNoZOrder = 0x0004
-	const swpNoActivate = 0x0010
-	const swpShowWindow = 0x0040
-	return boolCall(procSetWindowPos, uintptr(h), 0, 0, 0, 0,
-		swpNoSize|swpNoMove|swpNoZOrder|swpNoActivate|swpShowWindow)
+	return SetWindowPos(h, 0, 0, 0, 0, 0,
+		SwpNoSize|SwpNoMove|SwpNoZOrder|SwpNoActivate|SwpShowWindow)
 }
 
 // MoveRestored changes where a minimized window goes back to, p in screen

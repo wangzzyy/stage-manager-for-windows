@@ -84,6 +84,17 @@ func (a *App) dragOver() {
 	if !a.ready || g == nil || g.converted {
 		return
 	}
+	// EVENT_SYSTEM_MOVESIZESTART can race the first native placement update
+	// on some windows. If the initial GetWindowPlacement snapshot failed,
+	// retry while Windows still reports the window maximized; once the
+	// caption drag restores it, the original normal placement is no longer
+	// recoverable from the live HWND.
+	if g.wasMaximized && !g.maximizedPlacementOK && winapi.IsZoomed(g.h) {
+		if snapshot, ok := winapi.CaptureWindowPlacement(g.h); ok {
+			g.maximizedPlacement, g.maximizedPlacementOK = snapshot, true
+			debugf("maximized drag snapshot retry %x placement=%+v", g.h, snapshot)
+		}
+	}
 	// By its visible frame, as displayOf goes: a switch must not take the
 	// window for one of the stage it leaves, and park it under the pointer.
 	// Not by its size: crossing to a display of another DPI resizes it.

@@ -4,7 +4,6 @@ package winapi
 
 import (
 	"syscall"
-	"unsafe"
 )
 
 var procPostMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("PostMessageW")
@@ -61,6 +60,5 @@ func PostCaptionDrag(h HWND, p Point) bool {
 	r, _, _ := procPostMessageWDrag.Call(
 		uintptr(h), wmNCLButtonDown, htCaption, lparam,
 	)
-	_ = unsafe.Pointer(nil) // keep this file's Win32 payload representation explicit
 	return r != 0
 }

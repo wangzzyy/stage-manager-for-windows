@@ -393,23 +393,51 @@ func RestoredRect(h HWND) (r Rect, maximized bool, ok bool) {
 }
 
 
-// ShowMaximizedNoActivate restores a hidden window to its maximized state
-// without activating it. SetWindowPlacement applies the show state while
-// retaining the window's normal (restore) rectangle.
-func ShowMaximizedNoActivate(h HWND) bool {
+// WindowNormalRect returns the window's saved normal rectangle in screen coordinates,
+// even while the window is maximized. Capture it before a native caption drag:
+// Windows rewrites the live placement as soon as the drag restores the window.
+func WindowNormalRect(h HWND) (Rect, bool) {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return Rect{}, false
+	}
+	n := wp.NormalPosition
+	mi := monitorInfo(MonitorFromRect(n))
+	if ExStyle(h)&WsExToolWindow == 0 {
+		n = n.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
+	}
+	return n, !n.Empty()
+}
+
+// ShowMaximizedAtNoActivate restores a hidden window maximized, first restoring
+// the normal rectangle captured before its native caption drag. NormalPosition
+// also selects the monitor whose work area Windows uses for maximization.
+func ShowMaximizedAtNoActivate(h HWND, normal Rect) bool {
 	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
 	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
+	}
+	if !normal.Empty() {
+		n := normal
+		if ExStyle(h)&WsExToolWindow == 0 {
+			mi := monitorInfo(MonitorFromRect(n))
+			n = n.Offset(mi.Monitor.Left-mi.Work.Left, mi.Monitor.Top-mi.Work.Top)
+		}
+		wp.NormalPosition = n
 	}
 	const swShowMaximized = 3
 	wp.ShowCmd = swShowMaximized
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}
-	// SetWindowPlacement records the show state, but hidden windows can stay
-	// hidden on some applications. Explicitly reveal without activation.
 	return SetWindowPos(h, 0, 0, 0, 0, 0,
 		SwpNoSize|SwpNoMove|SwpNoZOrder|SwpNoActivate|SwpShowWindow)
+}
+
+// ShowMaximizedNoActivate restores a hidden window using its current saved
+// normal rectangle. Kept for callers that do not have a pre-drag snapshot.
+func ShowMaximizedNoActivate(h HWND) bool {
+	return ShowMaximizedAtNoActivate(h, Rect{})
 }
 
 // MoveRestored changes where a minimized window goes back to, p in screen

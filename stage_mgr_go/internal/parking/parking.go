@@ -574,6 +574,7 @@ func restoreJournal(path string) int {
 		}
 		home := onDesktop(winapi.Rect{Left: e.HomeX, Top: e.HomeY, Right: e.HomeX + r.W(), Bottom: e.HomeY + r.H()})
 		place(h, winapi.Point{X: home.Left, Y: home.Top})
+		winapi.SetCloaked(h, false)
 		winapi.Redraw(h)
 		n++
 	}

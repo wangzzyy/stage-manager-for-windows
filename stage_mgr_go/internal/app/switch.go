@@ -35,7 +35,7 @@ func (a *App) start(r *switchRequest) {
 		return
 	}
 	sw := newStopwatch()
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	sw.lap("list windows")
 	groups := a.groupsOf(d)
 	// The windows of a switch that was taken over are parked, and show on

@@ -190,6 +190,9 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
+	// maximizeOnReturn remembers maximized windows converted into cards.
+	// They use the ordinary card flight and are maximized only after landing.
+	maximizeOnReturn map[winapi.HWND]bool
 	// handoffHidden marks windows temporarily hidden while a native drag is
 	// being converted into a card; their WinEvent hide/show is not a close.
 	handoffHidden map[winapi.HWND]time.Time
@@ -246,6 +249,7 @@ func Start(o Options) *App {
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
 		dropHomes:     map[winapi.HWND]winapi.Rect{},
+		maximizeOnReturn: map[winapi.HWND]bool{},
 		handoffHidden: map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},
 		trayIcon:  o.TrayIcon,

@@ -371,6 +371,24 @@ type windowPlacement struct {
 	Device         Rect
 }
 
+// NormalBounds returns the window placement's normal (non-maximized)
+// rectangle in screen coordinates. Unlike RestoredRect, it does not replace
+// the saved normal rectangle with the monitor work area for maximized windows.
+func NormalBounds(h HWND) (r Rect, ok bool) {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return Rect{}, false
+	}
+	n := wp.NormalPosition
+	mon := MonitorFromRect(n)
+	mi := monitorInfo(mon)
+	// Placement is in workspace coordinates unless the window is a tool window.
+	if ExStyle(h)&WsExToolWindow == 0 {
+		n = n.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
+	}
+	return n, !n.Empty()
+}
+
 // RestoredRect returns where a minimized window goes back to, in screen
 // coordinates, and whether it returns maximized.
 func RestoredRect(h HWND) (r Rect, maximized bool, ok bool) {

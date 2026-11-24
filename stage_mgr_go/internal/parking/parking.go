@@ -45,8 +45,9 @@ const (
 type parked struct {
 	Home  winapi.Rect  // the window rectangle it had on the desktop
 	Spot  winapi.Point // where it waits
-	Owner winapi.HWND  // the window it went with, for a dialog
-	At    time.Time
+	Owner      winapi.HWND // the window it went with, for a dialog
+	Maximized  bool        // restore maximized after the window returns from its card
+	At         time.Time
 }
 
 // Service parks and unparks windows. Use it from one goroutine.
@@ -101,7 +102,7 @@ func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmed
 // before a native move loop is cancelled. That loop can restore its starting
 // rectangle as it exits; sampling WindowRect afterwards would then both add
 // latency before moving the window and record the wrong place as its home.
-func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
+func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect, maximized bool) bool {
 	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
 		from.Empty() || !winapi.OnAnyMonitor(from) {
 		return false
@@ -111,7 +112,7 @@ func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
 	if !moveImmediate(h, spot) {
 		return false
 	}
-	s.parked[h] = parked{Home: home, Spot: spot, At: time.Now()}
+	s.parked[h] = parked{Home: home, Spot: spot, Maximized: maximized, At: time.Now()}
 	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), from, home, spot, 0)
 	dx, dy := spot.X-from.Left, spot.Y-from.Top
 	shiftX, shiftY := home.Left-from.Left, home.Top-from.Top
@@ -195,6 +196,9 @@ func (s *Service) unpark(h winapi.HWND) bool {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			if p.Maximized {
+				winapi.Maximize(w)
+			}
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -487,6 +491,7 @@ type entry struct {
 	Handle       uint64
 	HomeX, HomeY int32
 	SpotX, SpotY int32
+	Maximized    bool
 }
 
 // Recover brings back the windows a previous run left parked.
@@ -524,6 +529,9 @@ func restoreJournal(path string) int {
 		}
 		home := onDesktop(winapi.Rect{Left: e.HomeX, Top: e.HomeY, Right: e.HomeX + r.W(), Bottom: e.HomeY + r.H()})
 		place(h, winapi.Point{X: home.Left, Y: home.Top})
+		if e.Maximized {
+			winapi.Maximize(h)
+		}
 		winapi.Redraw(h)
 		n++
 	}
@@ -629,7 +637,7 @@ func (s *Service) save() {
 	}
 	entries := make([]entry, 0, len(s.parked))
 	for h, p := range s.parked {
-		entries = append(entries, entry{uint64(h), p.Home.Left, p.Home.Top, p.Spot.X, p.Spot.Y})
+		entries = append(entries, entry{Handle: uint64(h), HomeX: p.Home.Left, HomeY: p.Home.Top, SpotX: p.Spot.X, SpotY: p.Spot.Y, Maximized: p.Maximized})
 	}
 	data, _ := json.Marshal(entries)
 	// Parking still works without the journal; only recovery is lost.

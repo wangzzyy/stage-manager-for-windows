@@ -272,6 +272,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // native move loop cancelled and the real window parked.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
+	handoffComplete := false
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
 	handoff := func() {
@@ -319,13 +320,16 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
-		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
-		// keeps enumeration and later restoration working as usual.
-		winapi.ShowNoActivate(w.HWND)
-		winapi.DwmFlush()
+		// Keep the real HWND hidden for the whole window-to-card flight.
+		// Showing it immediately after parking lets apps which undo the
+		// native drag's restore/position changes expose the live window under
+		// the still-running overlay, producing a double image and flicker.
+		// The landing completion callback shows it again only after the strip
+		// has presented its real card.
 		if a.settings.HideInactive && !parked {
-			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
+			debugf("drag into card: could not park real window %v; keeping it hidden until the card lands", w.HWND)
 		}
+		handoffComplete = true
 	}
 	// Switch the model first so refresh lays out the destination card. The
 	// window's last stage still is already available in the common case; use
@@ -347,8 +351,23 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	a.windows = a.cat.Windows()
 	a.refresh()
 
+	finishHandoff := func() {
+		if !handoffComplete {
+			return
+		}
+		// The real HWND stayed hidden while the overlay and the real card
+		// were synchronized. If the app escaped its parking spot while the
+		// native move loop unwound, re-park it before making it visible.
+		if a.settings.HideInactive {
+			a.reparkEscaped()
+		}
+		winapi.ShowNoActivate(w.HWND)
+		winapi.DwmFlush()
+		debugf("drag into card: real window %v shown after card landing", w.HWND)
+		a.refreshSoon()
+	}
 	startFlight := func() bool {
-		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
+		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff, finishHandoff)
 	}
 	// Capture only the dragged HWND. A desktop BitBlt is not a window
 	// capture: it includes whichever windows happen to overlap its rectangle.

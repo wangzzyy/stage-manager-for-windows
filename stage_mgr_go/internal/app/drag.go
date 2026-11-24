@@ -312,9 +312,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
-		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
-		// keeps enumeration and later restoration working as usual.
-		winapi.ShowNoActivate(w.HWND)
+		// Successfully parked windows remain WS_VISIBLE beyond the desktop.
+		// If native positioning failed for a maximized HWND, keep it hidden:
+		// showing it here would expose the restored normal-size remnant behind
+		// the card. Unparking sends it home and makes it visible again.
+		if !a.park.KeepHidden(w.HWND) {
+			winapi.ShowNoActivate(w.HWND)
+		}
 		winapi.DwmFlush()
 		if a.settings.HideInactive && !parked {
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)

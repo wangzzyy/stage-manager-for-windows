@@ -435,11 +435,21 @@ func ShowMaximizedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot) 
 	wp := windowPlacement{
 		Length: uint32(unsafe.Sizeof(windowPlacement{})),
 		Flags: snapshot.Flags,
-		ShowCmd: 3, // SW_SHOWMAXIMIZED
+		ShowCmd: 1, // SW_SHOWNORMAL
 		MinPosition: snapshot.MinPosition,
 		MaxPosition: snapshot.MaxPosition,
 		NormalPosition: snapshot.NormalPosition,
 	}
+	// A parked HWND has been moved off-screen while hidden. Asking
+	// SetWindowPlacement to maximize it directly changes its show state,
+	// but Windows can retain the off-screen maximized bounds. First apply
+	// the saved normal placement so Windows selects the correct monitor;
+	// then maximize from that monitor. DWM transitions are disabled during
+	// the handoff, so the intermediate normal placement is not animated.
+	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	wp.ShowCmd = 3 // SW_SHOWMAXIMIZED
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}

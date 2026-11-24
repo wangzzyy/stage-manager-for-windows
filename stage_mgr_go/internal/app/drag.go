@@ -419,6 +419,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if !startFlight() {
 			// No overlay will take over; restore the real card after a failed
 			// capture so externalLayer cannot leave it permanently invisible.
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			card.externalLayer = false
 			card.externalPresented = false
 			debugf("drag into card: capture produced no drawable animation; restored real card")

@@ -13,9 +13,14 @@ import (
 // a third display or back, does not set it flying.
 const dwell = 150 * time.Millisecond
 
-// maximizedBeforeMove remembers the last maximized state observed before
-// Windows restores a window as its native title-bar drag begins.
-var maximizedBeforeMove = map[winapi.HWND]time.Time{}
+// maximizedSnapshot remembers the last maximized state and the normal
+// (restored) bounds before Windows restores a window for a title-bar drag.
+type maximizedSnapshot struct {
+	at            time.Time
+	restoreBounds winapi.Rect
+}
+
+var maximizedBeforeMove = map[winapi.HWND]maximizedSnapshot{}
 
 // drag is a window the user is moving, from the start of the move to its
 // end.
@@ -29,8 +34,9 @@ type drag struct {
 	since    time.Time
 	stage    []string
 	dwell         *time.Timer
-	wasMaximized bool // Windows restored this maximized window as its native move loop began
-	converted    bool // the window has already become a strip card while still being dragged
+	wasMaximized  bool // Windows restored this maximized window as its native move loop began
+	restoreBounds winapi.Rect // its normal size and position, before it was maximized
+	converted     bool // the window has already become a strip card while still being dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -39,9 +45,22 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	wasMaximized := winapi.IsZoomed(h)
-	if at, ok := maximizedBeforeMove[h]; ok {
-		wasMaximized = wasMaximized || time.Since(at) < time.Second
+	var restoreBounds winapi.Rect
+	if snapshot, ok := maximizedBeforeMove[h]; ok {
+		if time.Since(snapshot.at) < time.Second {
+			wasMaximized = true
+			restoreBounds = snapshot.restoreBounds
+		}
 		delete(maximizedBeforeMove, h)
+	}
+	// WINDOWPLACEMENT retains the normal rectangle while a window is
+	// maximized. Read it before the native move loop's restore gesture can
+	// replace the visible HWND bounds with the pointer-positioned rectangle.
+	if wasMaximized && restoreBounds.Empty() {
+		restoreBounds, _, _ = winapi.RestoredRect(h)
+	}
+	if wasMaximized && restoreBounds.Empty() {
+		restoreBounds = winapi.WindowRect(h)
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	if wasMaximized {
@@ -49,7 +68,7 @@ func (a *App) startDrag(h winapi.HWND) {
 		// move loop. Do not call Restore: Windows already owns the gesture.
 		winapi.SetTransitionsDisabled(h, true)
 	}
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: wasMaximized}
+	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: wasMaximized, restoreBounds: restoreBounds}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -84,7 +103,11 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin, g.wasMaximized)
+				home := g.from
+				if g.wasMaximized && !g.restoreBounds.Empty() {
+					home = g.restoreBounds
+				}
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -103,6 +126,9 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
+				if g.wasMaximized && !g.restoreBounds.Empty() {
+					home = g.restoreBounds
+				}
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
 				return
 			}

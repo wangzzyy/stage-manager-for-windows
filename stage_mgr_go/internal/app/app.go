@@ -463,7 +463,7 @@ func (a *App) syncDisplays() {
 
 // frontApp returns the front-most app showing on a display, or "".
 func (a *App) frontApp(d *display) string {
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	for _, g := range a.groupsOf(d) {
 		if showing(a, g) {
 			return g.app
@@ -568,7 +568,7 @@ func (a *App) displaysChanged() {
 // initStage puts on each display's stage the app the user is in, or the
 // front-most app showing there, and parks the others.
 func (a *App) initStage() {
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	now := time.Now()
 	fg := catalog.RootOwner(winapi.Foreground())
 	var leaving []winapi.HWND
@@ -623,6 +623,20 @@ func (a *App) initStage() {
 	})
 }
 
+// listWindows retains cached metadata for handoff HWNDs that are deliberately SW_HIDE while parked.
+// Catalog.Windows omits hidden windows, but their cards must remain in the model until unpark.
+func (a *App) listWindows() []catalog.Window {
+	listed := a.cat.Windows()
+	seen := make(map[winapi.HWND]bool, len(listed))
+	for _, w := range listed { seen[w.HWND] = true }
+	for _, w := range a.windows {
+		if seen[w.HWND] || !a.park.IsParked(w.HWND) || !winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) { continue }
+		listed = append(listed, w)
+		seen[w.HWND] = true
+	}
+	return listed
+}
+
 // refresh lists the windows again and brings strips and stages up to date.
 func (a *App) refresh() {
 	if a.refreshTimer != nil {
@@ -644,7 +658,7 @@ func (a *App) refresh() {
 		return
 	}
 	a.reparkEscaped()
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	if a.followMoved() {
 		return
 	}

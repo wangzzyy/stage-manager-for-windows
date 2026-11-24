@@ -179,10 +179,18 @@ func (a *App) windowMoved(h winapi.HWND) {
 			a.sendAcross(d, w, stage)
 			return
 		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
-			// A resize that ends over the strip is no drag into it.
+			// A resize that ends over the strip is no drag into it. A
+			// title-bar drag may restore a maximized window first, changing
+			// its size; it is still a drag and must use the same animated
+			// handoff as a window whose location events reached the strip.
 			r := winapi.WindowRect(h)
 			if (r.W() == g.from.W() && r.H() == g.from.H()) || g.caption {
-				a.sendToStrip(d, w, g.from)
+				origin := winapi.FrameBounds(h)
+				g.converted = true
+				a.beginWindowCardDrag(d, a.groupKey(w))
+				a.sendDraggedToStrip(d, w,
+					slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) }),
+					g.from, origin)
 				return
 			}
 		}

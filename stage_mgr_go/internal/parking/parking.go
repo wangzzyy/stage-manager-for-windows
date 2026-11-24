@@ -92,6 +92,9 @@ func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 func (s *Service) RestoreMaximized(h winapi.HWND) {
 	if s.IsParked(h) {
 		s.maximized[h] = true
+		s.logf("parked %x will restore maximized", h)
+	} else {
+		s.logf("cannot mark %x maximized: window is not parked", h)
 	}
 }
 
@@ -207,7 +210,8 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			winapi.SetCloaked(w, false)
 			if s.maximized[w] {
 				delete(s.maximized, w)
-				winapi.ShowMaximizedNoActivate(w)
+				ok := winapi.ShowMaximizedNoActivate(w)
+				s.logf("restore maximized %x ok=%v", w, ok)
 			} else {
 				winapi.ShowNoActivate(w)
 			}

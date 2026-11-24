@@ -52,7 +52,7 @@ type parked struct {
 // Service parks and unparks windows. Use it from one goroutine.
 type Service struct {
 	parked  map[winapi.HWND]parked
-	maximized map[winapi.HWND]bool // windows whose native maximize state was lost during caption drag
+	maximized map[winapi.HWND]winapi.Rect // pre-drag normal rectangles for windows whose maximize state was lost
 	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
@@ -76,7 +76,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]bool{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.Rect{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -89,10 +89,10 @@ func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 }
 
 // RestoreMaximized marks a parked window to return maximized after its card is selected.
-func (s *Service) RestoreMaximized(h winapi.HWND) {
+func (s *Service) RestoreMaximized(h winapi.HWND, normal winapi.Rect) {
 	if s.IsParked(h) {
-		s.maximized[h] = true
-		s.logf("parked %x will restore maximized", h)
+		s.maximized[h] = normal
+		s.logf("parked %x will restore maximized normal=%v", h, normal)
 	} else {
 		s.logf("cannot mark %x maximized: window is not parked", h)
 	}
@@ -210,8 +210,8 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			winapi.SetCloaked(w, false)
 			if s.maximized[w] {
 				delete(s.maximized, w)
-				ok := winapi.ShowMaximizedNoActivate(w)
-				s.logf("restore maximized %x ok=%v", w, ok)
+				ok := winapi.ShowMaximizedAtNoActivate(w, s.maximized[w])
+				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v normal=%v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), s.maximized[w])
 			} else {
 				winapi.ShowNoActivate(w)
 			}
@@ -460,7 +460,7 @@ func (s *Service) RestoreAll() {
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
 			if s.maximized[h] {
-				winapi.ShowMaximizedNoActivate(h)
+				winapi.ShowMaximizedAtNoActivate(h, s.maximized[h])
 			} else {
 				winapi.ShowNoActivate(h)
 			}

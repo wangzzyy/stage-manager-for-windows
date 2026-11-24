@@ -243,24 +243,6 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
 		return nil
 	}
-	// A window can briefly report an empty frame while it is being moved,
-	// hidden, or rehomed. The proportional stage layout cannot map such
-	// geometry; use the ordinary aspect-ratio card stack instead. This is
-	// especially important during native-drag handoff, when the card must
-	// remain drawable even if its HWND bounds are transiently invalid.
-	for _, r := range bounds {
-		if r.Empty() {
-			aspects := make([]float64, len(bounds))
-			for i, b := range bounds {
-				if b.Empty() {
-					aspects[i] = 16.0 / 10
-				} else {
-					aspects[i] = float64(b.W()) / float64(b.H())
-				}
-			}
-			return stackWindows(card, aspects, onRight)
-		}
-	}
 	left, top := bounds[0].Left, bounds[0].Top
 	edgeRight, bottom := bounds[0].Right, bounds[0].Bottom
 	for _, r := range bounds[1:] {
@@ -275,9 +257,6 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 	// Keep the group aligned to the card's outer edge, away from the stage:
 	// left edge in a left strip, right edge in a right strip.
 	offsetX := card.X - float32(left)*scale
-	if onRight {
-		offsetX = card.X + card.W - width*scale - float32(left)*scale
-	}
 	offsetY := card.Y + (card.H-height*scale)/2 - float32(top)*scale
 	out := make([]ui.Rect, len(bounds))
 	for i, r := range bounds {
@@ -286,6 +265,11 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 			Y: offsetY + float32(r.Top)*scale,
 			W: float32(r.W()) * scale,
 			H: float32(r.H()) * scale,
+		}
+	}
+	if onRight {
+		for i := range out {
+			out[i] = mirror(out[i], card)
 		}
 	}
 	return out

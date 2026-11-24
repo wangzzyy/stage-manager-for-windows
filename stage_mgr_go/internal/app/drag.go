@@ -355,9 +355,10 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if !handoffComplete {
 			return
 		}
-		if a.settings.HideInactive {
-			// Match the ordinary stage-switch lifecycle: a window belonging
-			// to a card stays parked and is not shown again at animation end.
+		if a.settings.HideInactive && a.maximizeOnReturn[w.HWND] {
+			// A maximized HWND is kept hidden after landing. Showing it here
+			// lets the app undo the native drag's restore/position changes and
+			// put the live window back on the desktop over its card.
 			// If the initial park did not stick, retry from its intended home.
 			if !a.park.IsParked(w.HWND) {
 				if a.park.ParkImmediateFrom(w.HWND, home) {
@@ -366,22 +367,23 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			}
 			if a.park.IsParked(w.HWND) {
 				if !a.park.Repark(w.HWND) {
-					debugf("drag into card: parked window %v remains hidden; repark will be retried", w.HWND)
+					debugf("drag into card: maximized window %v remains hidden while parked; repark will be retried", w.HWND)
 					a.refreshSoon()
 					return
 				}
-				debugf("drag into card: real window %v remains parked and hidden after landing", w.HWND)
+				debugf("drag into card: maximized window %v remains parked and hidden after landing", w.HWND)
 			} else {
 				// Parking failed even on retry. Prefer a reachable real window
 				// over leaving an untracked hidden HWND behind.
 				winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 					winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 				winapi.ShowNoActivate(w.HWND)
-				debugf("drag into card: parking failed for %v; restored it visibly at home", w.HWND)
+				debugf("drag into card: parking failed for maximized window %v; restored it visibly at home", w.HWND)
 			}
 		} else {
+			// Keep the established ordinary-window handoff behavior unchanged.
 			winapi.ShowNoActivate(w.HWND)
-			debugf("drag into card: non-hidden window %v shown after landing", w.HWND)
+			debugf("drag into card: real window %v shown after landing", w.HWND)
 		}
 		winapi.DwmFlush()
 		a.refreshSoon()

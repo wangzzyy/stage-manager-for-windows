@@ -392,6 +392,20 @@ func RestoredRect(h HWND) (r Rect, maximized bool, ok bool) {
 	return n, false, true
 }
 
+
+// ShowMaximizedNoActivate restores a hidden window to its maximized state
+// without activating it. SetWindowPlacement applies the show state while
+// retaining the window's normal (restore) rectangle.
+func ShowMaximizedNoActivate(h HWND) bool {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	const swShowMaximized = 3
+	wp.ShowCmd = swShowMaximized
+	return boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp)))
+}
+
 // MoveRestored changes where a minimized window goes back to, p in screen
 // coordinates, leaving it minimized and inactive. Moving a minimized window
 // only moves its icon, so it would come back where it was.

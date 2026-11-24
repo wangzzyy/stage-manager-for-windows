@@ -73,6 +73,7 @@ const (
 	HwndBottom    HWND = 1
 
 	swRestore         = 9
+	swShowMaximized   = 3
 	swShowNoActivate  = 4
 	swMinimize        = 6
 	swShowMinimized   = 2
@@ -279,6 +280,7 @@ func SetWindowPos(h, insertAfter HWND, x, y, w, ht int32, flags uint32) bool {
 }
 
 func ShowNoActivate(h HWND) { procShowWindowAsync.Call(uintptr(h), swShowNoActivate) }
+func Maximize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swShowMaximized) }
 func Hide(h HWND)           { procShowWindow.Call(uintptr(h), swHide) }
 func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 

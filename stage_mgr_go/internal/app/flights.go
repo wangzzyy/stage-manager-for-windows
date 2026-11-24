@@ -989,8 +989,8 @@ func (l *layer) view(c *ui.Context) {
 				// switch is busy. A frame retry alone cannot create the card:
 				// refresh is what rebuilds d.sets and its layout. Keep asking
 				// for that shared refresh until the ordinary card pose exists.
-				if l.owner != nil {
-					l.owner.refreshSoon()
+				if l.owner != nil && l.owner.a != nil {
+					l.owner.a.refreshSoon()
 				}
 				l.pace.frame(l.win)
 				return

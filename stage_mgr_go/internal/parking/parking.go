@@ -215,6 +215,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			} else {
 				winapi.ShowNoActivate(w)
 			}
+			winapi.SetTransitionsDisabled(w, false)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -464,6 +465,7 @@ func (s *Service) RestoreAll() {
 			} else {
 				winapi.ShowNoActivate(h)
 			}
+			winapi.SetTransitionsDisabled(h, false)
 			winapi.Redraw(h)
 		}
 	}

@@ -321,12 +321,18 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			a.handoffHidden = make(map[winapi.HWND]time.Time)
 		}
 		a.handoffHidden[w.HWND] = time.Now().Add(2 * time.Second)
+		// Keep the window out of DWM composition after it is shown again
+		// off-screen. Moving it outside the desktop alone is not sufficient
+		// on every multi-monitor/DPI arrangement.
+		cloaked := winapi.SetCloaked(w.HWND, true)
+		debugf("drag into card: cloak real window %v ok=%v", w.HWND, cloaked)
 		winapi.Hide(w.HWND)
 		if winapi.IsWindowVisible(w.HWND) {
 			winapi.SetWindowPos(w.HWND, 0, 0, 0, 0, 0,
 				winapi.SwpHideWindow|winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
 		if winapi.IsWindowVisible(w.HWND) {
+			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
 			debugf("drag into card: could not hide real window %v; aborting handoff", w.HWND)
 			return
@@ -334,6 +340,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
+			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
 			winapi.DwmFlush()
 			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
@@ -352,9 +359,11 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			// starting rectangle restored by the native move loop.
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+			winapi.SetCloaked(w.HWND, false)
 		}
-		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
-		// keeps enumeration and later restoration working as usual.
+		// Keep successfully parked handoff windows cloaked. They remain
+		// WS_VISIBLE for catalog/enumeration, but DWM cannot flash them onto
+		// the desktop while the native move loop or the app changes geometry.
 		winapi.ShowNoActivate(w.HWND)
 		winapi.DwmFlush()
 		if a.settings.HideInactive && !parked {

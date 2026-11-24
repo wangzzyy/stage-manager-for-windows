@@ -40,6 +40,9 @@ type drag struct {
 	stage     []string
 	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	fullscreenCaptureDone bool
+	fullscreenCaptureOK bool
+	fullscreenCaptureWaiters []func(bool)
 }
 
 // startDrag follows window h, which the user began to move.
@@ -72,6 +75,25 @@ func (a *App) startDrag(h winapi.HWND) {
 		debugf("fullscreen drag rejected %x frame=%v normal=%v maximized=%v placementOK=%v monitor=%v",
 			h, winapi.FrameBounds(h), normal, maximized, placementOK,
 			winapi.MonitorInfo(winapi.MonitorFromRect(winapi.FrameBounds(h))).Monitor)
+	}
+	if g.fullscreen {
+		before := time.Time{}
+		if st := a.media.still(h); st != nil {
+			before = st.at
+		}
+		// Take the flight image while the window is still borderless fullscreen.
+		// The native move loop may restore it before the pointer reaches a strip.
+		a.media.capture([]winapi.HWND{h}, true, true, 2*time.Second, func() {
+			st := a.media.still(h)
+			g.fullscreenCaptureOK = st != nil && st.at.After(before)
+			g.fullscreenCaptureDone = true
+			debugf("fullscreen drag capture %x ok=%v", h, g.fullscreenCaptureOK)
+			waiters := g.fullscreenCaptureWaiters
+			g.fullscreenCaptureWaiters = nil
+			for _, waiter := range waiters {
+				waiter(g.fullscreenCaptureOK)
+			}
+		})
 	}
 	a.drag = g
 }
@@ -154,7 +176,17 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func(ready func(bool)) {
+					if !g.fullscreen {
+						ready(false)
+						return
+					}
+					if g.fullscreenCaptureDone {
+						ready(g.fullscreenCaptureOK)
+						return
+					}
+					g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
+				})
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -173,7 +205,17 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func(ready func(bool)) {
+					if !g.fullscreen {
+						ready(false)
+						return
+					}
+					if g.fullscreenCaptureDone {
+						ready(g.fullscreenCaptureOK)
+						return
+					}
+					g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
+				})
 				return
 			}
 		}
@@ -330,7 +372,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedPlacement winapi.WindowPlacementSnapshot) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedPlacement winapi.WindowPlacementSnapshot, awaitCapture func(func(bool))) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -426,21 +468,29 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
-	// Capture only the dragged HWND. A desktop BitBlt is not a window
-	// capture: it includes whichever windows happen to overlap its rectangle.
-	// Use the window's PrintWindow capture path and let its timeout keep a
-	// hung application from holding up the handoff.
-	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
-		if !startFlight() {
-			// No overlay will take over; restore the real card after a failed
-			// capture so externalLayer cannot leave it permanently invisible.
+	launchFlight := func(captured bool) {
+		if !captured || !startFlight() {
+			// No suitable image is available (or no overlay can take over).
+			// In particular, never substitute a post-restore image for the
+			// fullscreen frame captured at drag start.
 			winapi.SetTransitionsDisabled(w.HWND, false)
 			card.externalLayer = false
 			card.externalPresented = false
-			debugf("drag into card: capture produced no drawable animation; restored real card")
+			debugf("drag into card: no valid pre-captured image or drawable animation; restored real card")
 		}
 		a.redraw()
-	})
+	}
+	if awaitCapture != nil {
+		// Fullscreen windows must animate from the image captured before
+		// Windows restores them during the native caption-drag loop.
+		awaitCapture(launchFlight)
+	} else {
+		// Normal windows keep the existing capture-at-handoff behavior.
+		// Capture only the dragged HWND, not the desktop behind it.
+		a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
+			launchFlight(true)
+		})
+	}
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

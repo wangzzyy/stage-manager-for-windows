@@ -88,6 +88,10 @@ func (a *App) start(r *switchRequest) {
 			winapi.Activate(focus)
 		}
 		a.refresh()
+		// A deferred native drop may be waiting for this switch to settle.
+		// The no-flight fast path must release it too; otherwise no handover
+		// callback will ever arrive to flush the pending card creation.
+		a.flushDraggedDrop()
 		if d.strip != nil {
 			d.strip.setSwitching(false)
 		}

@@ -805,7 +805,12 @@ func (a *App) reparkEscaped() {
 	fg := winapi.Foreground()
 	for _, h := range a.park.CollectEscaped() {
 		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
-		if i < 0 || h == fg || !a.settings.HideInactive {
+		// A maximized window converted from a native drag is still intended
+		// to be a strip card. Some apps (including Notepad++) move their
+		// restored window back onto the desktop after the handoff. Do not
+		// mistake its stale foreground state for a user-initiated move:
+		// re-park it so followMoved cannot put it straight back on the stage.
+		if i < 0 || h == fg && !a.maximizeOnReturn[h] || !a.settings.HideInactive {
 			continue
 		}
 		w := a.windows[i]

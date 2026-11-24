@@ -29,6 +29,7 @@ type drag struct {
 	// rectangle: that is the position to return to after the strip handoff,
 	// not the maximized monitor-sized rectangle from the start of the drag.
 	wasMaximized bool
+	maximizedNormal winapi.Rect
 	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
@@ -46,6 +47,10 @@ func (a *App) startDrag(h winapi.HWND) {
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
+	if g.wasMaximized {
+		g.maximizedNormal, _ = winapi.WindowNormalRect(h)
+		debugf("maximized drag snapshot %x normal=%v", h, g.maximizedNormal)
+	}
 	debugf("move-size start %x class=%q style=%#x iconic=%v zoomed=%v rect=%v frame=%v",
 		h, winapi.ClassName(h), winapi.Style(h), winapi.IsIconic(h), winapi.IsZoomed(h), g.from, winapi.FrameBounds(h))
 	// The fullscreen test must happen at move-size start. Windows may restore
@@ -131,7 +136,7 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.maximizedNormal)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -150,7 +155,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.maximizedNormal)
 				return
 			}
 		}
@@ -304,7 +309,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin, restoreMaximized winapi.Rect) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -351,8 +356,8 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
 			if parked {
 				a.park.Rehome(w.HWND, home)
-				if restoreMaximized {
-					a.park.RestoreMaximized(w.HWND)
+				if !restoreMaximized.Empty() {
+					a.park.RestoreMaximized(w.HWND, restoreMaximized)
 				}
 			}
 		}

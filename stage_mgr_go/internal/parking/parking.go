@@ -101,6 +101,29 @@ func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmed
 // before a native move loop is cancelled. That loop can restore its starting
 // rectangle as it exits; sampling WindowRect afterwards would then both add
 // latency before moving the window and record the wrong place as its home.
+// Repark immediately returns a parked window to its recorded off-desktop
+// spot if its application moved it while the native move loop was unwinding.
+// Unlike CollectEscaped, this deliberately does not wait for the settle period:
+// a temporarily hidden handoff window must be safe before it is shown again.
+func (s *Service) Repark(h winapi.HWND) bool {
+	p, ok := s.parked[h]
+	if !ok || !winapi.IsWindow(h) || winapi.IsIconic(h) {
+		return false
+	}
+	r := winapi.WindowRect(h)
+	if r.Left == p.Spot.X && r.Top == p.Spot.Y {
+		return true
+	}
+	if !moveImmediate(h, p.Spot) {
+		return false
+	}
+	p.At = time.Now()
+	s.parked[h] = p
+	s.logf("repark %x %q from %v to %v", h, winapi.Title(h), r, p.Spot)
+	s.save()
+	return true
+}
+
 func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
 	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
 		from.Empty() || !winapi.OnAnyMonitor(from) {
@@ -195,6 +218,9 @@ func (s *Service) unpark(h winapi.HWND) bool {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			// A window may have remained hidden through a drag-to-card
+			// animation. Make it visible again only after it has been moved home.
+			winapi.ShowNoActivate(w)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the

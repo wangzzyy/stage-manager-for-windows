@@ -131,7 +131,7 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {

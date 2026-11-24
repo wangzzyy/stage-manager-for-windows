@@ -248,7 +248,7 @@ func Start(o Options) *App {
 		media:     newMedia(),
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
-		dropHomes:     map[winapi.HWND]winapi.Rect{},
+		dropHomes:        map[winapi.HWND]winapi.Rect{},
 		maximizeOnReturn: map[winapi.HWND]bool{},
 		handoffHidden: map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},

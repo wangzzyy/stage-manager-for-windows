@@ -43,6 +43,7 @@ func (a *App) startDrag(h winapi.HWND) {
 		}
 	}
 	a.drag = &drag{h: h, from: from, maximized: maximized, home: home, at: home}
+	debugf("drag start hwnd=%x maximized=%v rect=%+v home=%v listed=%v cursor=%+v", h, maximized, from, home != nil, a.isListed(h), winapi.Cursor())
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -63,10 +64,20 @@ func (a *App) dragOver() {
 	// Turn the dragged window into a real card as soon as the pointer enters
 	// a visible strip. The ordinary stage switch owns the capture, flight,
 	// parking and card creation; mouse-up must not run the drop a second time.
-	if target := a.stripUnder(winapi.Cursor()); target != nil {
-		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
+	cur := winapi.Cursor()
+	target := a.stripUnder(cur)
+	if target == nil {
+		if d := a.displayByHandle(winapi.MonitorFromPoint(cur)); d != nil && d.strip != nil {
+			debugf("drag strip miss hwnd=%x cursor=%+v stripShown=%v stripVisible=%v stripRect=%+v managed=%v", g.h, cur, d.strip.shown, d.strip.visible, d.strip.rect, a.managed(d))
+		}
+	} else {
+		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h })
+		if i < 0 {
+			debugf("drag strip hit but hwnd not listed hwnd=%x cursor=%+v target=%s", g.h, cur, target.mon.Device)
+		} else {
 			w := a.windows[i]
 			key := a.groupKey(w)
+			debugf("drag strip hit hwnd=%x target=%s home=%v key=%q onHeading=%v hideInactive=%v", g.h, target.mon.Device, target == g.home, key, slices.Contains(a.heading(target), key), a.settings.HideInactive)
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				origin := winapi.FrameBounds(g.h)
 				// Keep the real window visible until the flight layer has drawn

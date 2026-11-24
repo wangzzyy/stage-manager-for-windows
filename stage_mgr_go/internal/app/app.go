@@ -644,7 +644,7 @@ func (a *App) refresh() {
 	}
 	// While a peek shows, the parked windows are home on purpose and must
 	// not be taken for strays.
-	if !a.ready || a.busy || a.quitting || a.peek != 0 {
+	if !a.ready || a.busy || a.quitting || a.peek != 0 || a.flights.hasLanding() {
 		return
 	}
 	a.reparkEscaped()

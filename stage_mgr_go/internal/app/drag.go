@@ -16,9 +16,10 @@ const dwell = 150 * time.Millisecond
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {
-	h    winapi.HWND
-	from winapi.Rect // where it was as the move began
-	home *display    // the display it was on then
+	h            winapi.HWND
+	from         winapi.Rect // where it was as the move began
+	wasMaximized bool        // the native move loop restores maximized windows before they are dropped
+	home         *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over *display
@@ -34,7 +35,13 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	a.drag = &drag{
+		h:            h,
+		from:         winapi.WindowRect(h),
+		wasMaximized: winapi.IsZoomed(h),
+		home:         home,
+		at:           home,
+	}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -173,7 +180,14 @@ func (a *App) windowMoved(h winapi.HWND) {
 			return
 		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
 			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+			// Windows restores a maximized window to its normal size as
+			// soon as its title bar is dragged. That size change is part
+			// of the move gesture, not a user resize, so retain the
+			// strip-drop behavior for windows maximized at drag start.
+			// For ordinary windows, keep distinguishing a resize from a
+			// drag by requiring the original dimensions.
+			r := winapi.WindowRect(h)
+			if g.wasMaximized || (r.W() == g.from.W() && r.H() == g.from.H()) {
 				a.sendToStrip(d, w, g.from)
 				return
 			}

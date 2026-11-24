@@ -252,6 +252,7 @@ func Start(o Options) *App {
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
 		dropHomes:        map[winapi.HWND]winapi.Rect{},
+		maximizedWindows: map[winapi.HWND]bool{},
 		maximizeOnReturn: map[winapi.HWND]bool{},
 		handoffHidden:    map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},

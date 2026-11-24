@@ -673,7 +673,7 @@ func land(h winapi.HWND, p winapi.Point) bool {
 }
 
 func (s *Service) save() {
-	if len(s.parked) == 0 {
+	if len(s.parked) == 0 && len(s.escaped) == 0 {
 		os.Remove(s.journal)
 		return
 	}

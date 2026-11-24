@@ -472,8 +472,8 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			if s.maximized[h] {
-				winapi.ShowMaximizedNoActivate(h)
+			if normal, maximized := s.maximized[h]; maximized {
+				winapi.ShowMaximizedAtNoActivate(h, normal)
 			} else {
 				winapi.ShowNoActivate(h)
 			}

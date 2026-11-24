@@ -70,19 +70,6 @@ func (a *App) dragOver() {
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]
 			key := a.groupKey(w)
-			if target == g.home && slices.Contains(a.heading(target), key) {
-				origin := winapi.FrameBounds(g.h)
-				// Keep the real window visible until the flight layer has drawn
-				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
-				// before cancelling the native move loop and parking it.
-				g.converted = true
-				// Start the card's external drag before the native move loop
-				// ends. The loop-end event may clear a.drag before the switch
-				// has finished arranging the new card.
-				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
-				return
-			}
 			if target != g.home && a.settings.HideInactive {
 				origin := winapi.FrameBounds(g.h)
 				stage := g.stage

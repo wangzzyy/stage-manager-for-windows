@@ -106,6 +106,26 @@ func (s *Service) Park(h winapi.HWND) bool { return s.park(h, move) }
 // the real window visible at its former position after the card has landed.
 func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmediate) }
 
+// RememberHiddenFrom records a window whose native move loop could not be
+// cancelled. The visual card has taken over, so keep the real HWND hidden
+// rather than showing a stale frame while Windows is still unwinding the drag.
+func (s *Service) RememberHiddenFrom(h winapi.HWND, from winapi.Rect, maximized bool) bool {
+	if s.IsParked(h) || !winapi.IsWindow(h) {
+		return false
+	}
+	if from.Empty() {
+		from = winapi.WindowRect(h)
+	}
+	if from.Empty() {
+		return false
+	}
+	home := onDesktop(from)
+	s.parked[h] = parked{Home: home, Spot: spotFor(home), Maximized: maximized, Hidden: true, At: time.Now()}
+	s.logf("keep hidden %x %q from %v home %v: native move loop still active", h, winapi.Title(h), from, home)
+	s.save()
+	return true
+}
+
 // ParkImmediateFrom parks synchronously using the window rectangle sampled
 // before a native move loop is cancelled. That loop can restore its starting
 // rectangle as it exits; sampling WindowRect afterwards would then both add
@@ -214,6 +234,9 @@ func (s *Service) unpark(h winapi.HWND) bool {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			if p.Hidden {
+				winapi.ShowNoActivate(w)
+			}
 			if p.Maximized {
 				winapi.Maximize(w)
 			}
@@ -455,6 +478,9 @@ func (s *Service) RestoreAll() {
 		if winapi.IsWindow(h) {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+			if p.Hidden {
+				winapi.ShowNoActivate(h)
+			}
 			winapi.Redraw(h)
 		}
 	}

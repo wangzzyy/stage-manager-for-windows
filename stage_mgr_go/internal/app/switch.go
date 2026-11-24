@@ -234,6 +234,15 @@ func (h *handover) land() {
 	// above them in the same raise, not in one of its own that would race
 	// with theirs.
 	h.a.park.UnparkUnder(h.front, parked...)
+	// Maximized windows fly and land using their normal-size rectangles,
+	// exactly like ordinary cards. Restore the maximized state only after
+	// the real HWND has been handed back under the completed flight.
+	for _, w := range h.arriving {
+		if h.a.maximizeOnReturn[w.HWND] {
+			delete(h.a.maximizeOnReturn, w.HWND)
+			winapi.Maximize(w.HWND)
+		}
+	}
 	if h.activate && !h.early && h.focus != 0 {
 		ok := winapi.Activate(h.focus)
 		debugf("activate late %x ok=%v fg=%x", h.focus, ok, winapi.Foreground())

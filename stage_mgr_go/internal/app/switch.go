@@ -239,7 +239,7 @@ func (h *handover) land() {
 	// card-to-stage flight has landed and the real HWND is back on the
 	// desktop, so the full-screen frame cannot flash over the card animation.
 	for _, w := range h.arriving {
-		if h.a.maximizeOnReturn[w.HWND] {
+		if h.activate && h.a.maximizeOnReturn[w.HWND] {
 			delete(h.a.maximizeOnReturn, w.HWND)
 			if winapi.IsWindow(w.HWND) {
 				winapi.Maximize(w.HWND)

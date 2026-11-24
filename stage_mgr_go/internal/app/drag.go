@@ -17,7 +17,8 @@ const dwell = 150 * time.Millisecond
 // end.
 type drag struct {
 	h    winapi.HWND
-	from winapi.Rect // where it was as the move began
+	from winapi.Rect // normal-size home rectangle, or drag-start rectangle
+	maximized bool // the window was maximized before the native drag restored it
 	home *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
@@ -34,7 +35,14 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	maximized := winapi.IsZoomed(h)
+	from := winapi.WindowRect(h)
+	if maximized {
+		if normal, ok := winapi.NormalRect(h); ok {
+			from = normal
+		}
+	}
+	a.drag = &drag{h: h, from: from, maximized: maximized, home: home, at: home}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -65,6 +73,9 @@ func (a *App) dragOver() {
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
 				g.converted = true
+				if g.maximized {
+					a.maximizeOnReturn[g.h] = true
+				}
 				// Start the card's external drag before the native move loop
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
@@ -82,6 +93,9 @@ func (a *App) dragOver() {
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
 				g.converted = true
+				if g.maximized {
+					a.maximizeOnReturn[g.h] = true
+				}
 				// Preserve the pointer gesture independently of a.drag: the
 				// native move-size-end event can arrive before card creation.
 				a.beginWindowCardDrag(target, key)

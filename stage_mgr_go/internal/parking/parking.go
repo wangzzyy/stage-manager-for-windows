@@ -479,6 +479,7 @@ func (s *Service) RestoreAll() {
 			} else {
 				winapi.ShowNoActivate(h)
 			}
+			winapi.SetTransitionsDisabled(h, false)
 			winapi.Redraw(h)
 		}
 	}

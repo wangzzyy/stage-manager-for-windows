@@ -18,6 +18,7 @@ const dwell = 150 * time.Millisecond
 type drag struct {
 	h    winapi.HWND
 	from winapi.Rect // where it was as the move began
+	homeRect winapi.Rect // normal placement to restore after a strip handoff
 	home *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
@@ -34,7 +35,17 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	from := winapi.WindowRect(h)
+	homeRect := from
+	// GetWindowRect is the maximized frame, not the saved normal placement.
+	// Rehoming to it after cancelling the native move loop briefly maximizes
+	// the window again and can flash the full-screen rectangle before it settles.
+	if winapi.IsZoomed(h) {
+		if normal, ok := winapi.NormalBounds(h); ok {
+			homeRect = normal
+		}
+	}
+	a.drag = &drag{h: h, from: from, homeRect: homeRect, home: home, at: home}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -69,7 +80,7 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.homeRect, origin)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {

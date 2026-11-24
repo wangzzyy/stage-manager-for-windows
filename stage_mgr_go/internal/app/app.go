@@ -190,9 +190,11 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
-	// maximizeOnReturn remembers windows that Windows restored while their
-	// maximized title bars were dragged into cards. They are maximized only
-	// after a later card-to-stage flight has landed.
+	// maximizedWindows remembers the last observed maximized state. Windows
+	// can restore a maximized HWND before EVENT_SYSTEM_MOVESIZESTART arrives.
+	maximizedWindows map[winapi.HWND]bool
+	// maximizeOnReturn remembers windows restored by a native title-bar drag.
+	// They are maximized only after a later card-to-stage flight has landed.
 	maximizeOnReturn map[winapi.HWND]bool
 	// handoffHidden marks windows temporarily hidden while a native drag is
 	// being converted into a card; their WinEvent hide/show is not a close.

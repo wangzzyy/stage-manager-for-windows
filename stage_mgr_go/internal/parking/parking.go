@@ -455,7 +455,11 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			winapi.ShowNoActivate(h)
+			if s.maximized[h] {
+				winapi.ShowMaximizedNoActivate(h)
+			} else {
+				winapi.ShowNoActivate(h)
+			}
 			winapi.Redraw(h)
 		}
 	}
@@ -464,7 +468,11 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			winapi.ShowNoActivate(h)
+			if s.maximized[h] {
+				winapi.ShowMaximizedNoActivate(h)
+			} else {
+				winapi.ShowNoActivate(h)
+			}
 			winapi.Redraw(h)
 		}
 	}

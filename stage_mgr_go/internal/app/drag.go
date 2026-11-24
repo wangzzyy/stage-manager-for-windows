@@ -40,6 +40,7 @@ type drag struct {
 	stage     []string
 	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	captureFromFullscreen bool
 	fullscreenCaptureDone bool
 	fullscreenCaptureOK bool
 	fullscreenCaptureWaiters []func(bool)
@@ -51,7 +52,23 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
+	var g *drag
+	// A borderless-fullscreen drag is restarted as a caption drag after its
+	// first restore. Reuse its capture state so the second native move loop
+	// still animates from the original fullscreen frame.
+	if previous := a.drag; previous != nil && previous.h == h && previous.captureFromFullscreen {
+		g = previous
+		g.from, g.home, g.at = winapi.WindowRect(h), home, home
+		g.wasMaximized = winapi.IsZoomed(h)
+		g.fullscreen = false
+		g.fullscreenNormal, g.fullscreenFrame = winapi.Rect{}, winapi.Rect{}
+		g.restoredRect = winapi.Rect{}
+		g.over, g.stage, g.dwell = nil, nil, nil
+		g.converted = false
+		g.since = time.Now()
+	} else {
+		g = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
+	}
 	if g.wasMaximized {
 		g.maximizedPlacement, g.maximizedPlacementOK = winapi.CaptureWindowPlacement(h)
 		if !g.maximizedPlacementOK {
@@ -69,6 +86,7 @@ func (a *App) startDrag(h winapi.HWND) {
 	// geometry and cannot distinguish this gesture from an ordinary drag.
 	if normal, frame, ok := winapi.FullscreenRestoreRect(h); ok {
 		g.fullscreenNormal, g.fullscreenFrame, g.fullscreen = normal, frame, true
+		g.captureFromFullscreen = true
 		debugf("fullscreen drag detected %x frame %v normal %v", h, frame, normal)
 	} else {
 		normal, maximized, placementOK := winapi.RestoredRect(h)
@@ -145,7 +163,9 @@ func (a *App) dragOver() {
 			cursor := winapi.Cursor()
 			original := winapi.WindowRect(g.h)
 			if winapi.CancelMoveSize(g.h) {
-				a.drag = nil
+				// Keep g attached to the HWND: StartCaptionDrag starts a new
+				// native move loop, whose start event reuses this fullscreen
+				// capture instead of taking a post-restore screenshot.
 				if winapi.SetWindowPos(g.h, 0, g.fullscreenNormal.Left, g.fullscreenNormal.Top,
 					g.fullscreenNormal.W(), g.fullscreenNormal.H(),
 					winapi.SwpNoZOrder|winapi.SwpNoActivate|winapi.SwpFrameChanged) {
@@ -177,7 +197,7 @@ func (a *App) dragOver() {
 					home = g.restoredRect
 				}
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
-					if !g.fullscreen {
+					if !g.captureFromFullscreen {
 						return nil
 					}
 					return func(ready func(bool)) {
@@ -207,7 +227,7 @@ func (a *App) dragOver() {
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
-					if !g.fullscreen {
+					if !g.captureFromFullscreen {
 						return nil
 					}
 					return func(ready func(bool)) {

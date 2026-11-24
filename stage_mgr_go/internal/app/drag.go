@@ -311,6 +311,12 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
 			if parked {
 				a.park.Rehome(w.HWND, home)
+				if a.maximizeOnReturn[w.HWND] {
+					// Keep enforcing the off-desktop position after the native
+					// move loop: some apps asynchronously restore their maximized
+					// HWND after the initial synchronous park.
+					a.park.Protect(w.HWND)
+				}
 			}
 		}
 		if !parked {
@@ -366,6 +372,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 				}
 			}
 			if a.park.IsParked(w.HWND) {
+				a.park.Protect(w.HWND)
 				if !a.park.Repark(w.HWND) {
 					debugf("drag into card: maximized window %v remains hidden while parked; repark will be retried", w.HWND)
 					a.refreshSoon()

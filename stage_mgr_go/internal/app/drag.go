@@ -56,7 +56,7 @@ func (a *App) startDrag(h winapi.HWND) {
 	// A borderless-fullscreen drag is restarted as a caption drag after its
 	// first restore. Reuse its drag-start capture state so the second native
 	// move loop still animates from the original frame.
-	if previous := a.drag; previous != nil && previous.h == h && previous.captureFromFullscreen {
+	if previous := a.drag; previous != nil && previous.h == h && previous.captureAtDragStart {
 		g = previous
 		g.from, g.home, g.at = winapi.WindowRect(h), home, home
 		g.wasMaximized = winapi.IsZoomed(h)
@@ -86,7 +86,7 @@ func (a *App) startDrag(h winapi.HWND) {
 	// geometry and cannot distinguish this gesture from an ordinary drag.
 	if normal, frame, ok := winapi.FullscreenRestoreRect(h); ok {
 		g.fullscreenNormal, g.fullscreenFrame, g.fullscreen = normal, frame, true
-		g.captureFromFullscreen = true
+		g.captureAtDragStart = true
 		debugf("fullscreen drag detected %x frame %v normal %v", h, frame, normal)
 	} else {
 		normal, maximized, placementOK := winapi.RestoredRect(h)
@@ -95,6 +95,7 @@ func (a *App) startDrag(h winapi.HWND) {
 			winapi.MonitorInfo(winapi.MonitorFromRect(winapi.FrameBounds(h))).Monitor)
 	}
 	if g.fullscreen || g.wasMaximized {
+		g.captureAtDragStart = true
 		before := time.Time{}
 		if st := a.media.still(h); st != nil {
 			before = st.at
@@ -104,13 +105,13 @@ func (a *App) startDrag(h winapi.HWND) {
 		// restored, smaller window instead of the frame the user began dragging.
 		a.media.capture([]winapi.HWND{h}, true, true, 2*time.Second, func() {
 			st := a.media.still(h)
-			g.fullscreenCaptureOK = st != nil && st.at.After(before)
-			g.fullscreenCaptureDone = true
-			debugf("fullscreen drag capture %x ok=%v", h, g.fullscreenCaptureOK)
-			waiters := g.fullscreenCaptureWaiters
-			g.fullscreenCaptureWaiters = nil
+			g.dragStartCaptureOK = st != nil && st.at.After(before)
+			g.dragStartCaptureDone = true
+			debugf("drag-start capture %x ok=%v", h, g.dragStartCaptureOK)
+			waiters := g.dragStartCaptureWaiters
+			g.dragStartCaptureWaiters = nil
 			for _, waiter := range waiters {
-				waiter(g.fullscreenCaptureOK)
+				waiter(g.dragStartCaptureOK)
 			}
 		})
 	}
@@ -198,15 +199,15 @@ func (a *App) dragOver() {
 					home = g.restoredRect
 				}
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
-					if !g.captureFromFullscreen {
+					if !g.captureAtDragStart {
 						return nil
 					}
 					return func(ready func(bool)) {
-						if g.fullscreenCaptureDone {
-							ready(g.fullscreenCaptureOK)
+						if g.dragStartCaptureDone {
+							ready(g.dragStartCaptureOK)
 							return
 						}
-						g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
+						g.dragStartCaptureWaiters = append(g.dragStartCaptureWaiters, ready)
 					}
 				}())
 				return
@@ -228,15 +229,15 @@ func (a *App) dragOver() {
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
-					if !g.captureFromFullscreen {
+					if !g.captureAtDragStart {
 						return nil
 					}
 					return func(ready func(bool)) {
-						if g.fullscreenCaptureDone {
-							ready(g.fullscreenCaptureOK)
+						if g.dragStartCaptureDone {
+							ready(g.dragStartCaptureOK)
 							return
 						}
-						g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
+						g.dragStartCaptureWaiters = append(g.dragStartCaptureWaiters, ready)
 					}
 				}())
 				return
@@ -495,7 +496,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if !captured || !startFlight() {
 			// No suitable image is available (or no overlay can take over).
 			// In particular, never substitute a post-restore image for the
-			// fullscreen frame captured at drag start.
+			// drag-start frame captured at drag start.
 			winapi.SetTransitionsDisabled(w.HWND, false)
 			card.externalLayer = false
 			card.externalPresented = false

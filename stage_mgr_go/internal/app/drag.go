@@ -260,6 +260,9 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// separately; the native drag, parking and card animation all use the
 	// normal-size window geometry.
 	if g := a.drag; g != nil && g.h == w.HWND && g.maximized {
+		if a.maximizeOnReturn == nil {
+			a.maximizeOnReturn = make(map[winapi.HWND]bool)
+		}
 		a.maximizeOnReturn[w.HWND] = true
 	}
 	// The overlay must have a real, drawable frame before the native window

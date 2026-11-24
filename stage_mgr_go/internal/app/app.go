@@ -188,6 +188,9 @@ type App struct {
 	drag *drag
 	// cardDrag is the card dragged out of a strip, if any (carddrag.go).
 	cardDrag *cardDrag
+	// pendingDragDrop waits for an active stage switch to finish before
+	// committing a native window drag into its destination card.
+	pendingDragDrop *draggedDrop
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
 	// handoffHidden marks windows temporarily hidden while a native drag is

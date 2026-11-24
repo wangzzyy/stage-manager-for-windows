@@ -87,6 +87,7 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 			return
 		}
 		delete(a.handoffHidden, h)
+		delete(a.maximizedWindows, h)
 		delete(a.maximizeOnReturn, h)
 		a.noteClosed(h)
 	case winapi.EventObjectHide:

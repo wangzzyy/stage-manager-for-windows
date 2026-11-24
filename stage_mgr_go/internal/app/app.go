@@ -630,7 +630,7 @@ func (a *App) listWindows() []catalog.Window {
 	seen := make(map[winapi.HWND]bool, len(listed))
 	for _, w := range listed { seen[w.HWND] = true }
 	for _, w := range a.windows {
-		if seen[w.HWND] || !a.park.IsParked(w.HWND) || !winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) { continue }
+		if a.park == nil || seen[w.HWND] || !a.park.IsParked(w.HWND) || !winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) { continue }
 		listed = append(listed, w)
 		seen[w.HWND] = true
 	}

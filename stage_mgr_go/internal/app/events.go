@@ -222,6 +222,19 @@ func (a *App) settleForeground() {
 		return
 	}
 	root := catalog.RootOwner(h)
+	// A foreground notification queued by the native move loop can arrive
+	// after a dragged window has already been converted into a strip card.
+	// Do not let that stale activation undo the handoff by unparking it.
+	if until, ok := a.handoffHidden[h]; ok && time.Now().Before(until) {
+		debugf("foreground %x ignored during drag-card handoff until %v", h, until)
+		a.fg.h = 0
+		return
+	}
+	if until, ok := a.handoffHidden[root]; ok && time.Now().Before(until) {
+		debugf("foreground %x (root %x) ignored during drag-card handoff until %v", h, root, until)
+		a.fg.h = 0
+		return
+	}
 	a.windows = a.cat.Windows()
 	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == root })
 	if i < 0 {
@@ -250,6 +263,7 @@ func (a *App) settleForeground() {
 		// The foreground stayed on the stage: whatever closed is over.
 		a.closed.d = nil
 		if a.park.IsParked(w.HWND) {
+			debugf("foreground settled on current stage: unparking %x (%q)", w.HWND, w.Title)
 			a.park.Unpark(w.HWND)
 			a.refreshSoon()
 		}

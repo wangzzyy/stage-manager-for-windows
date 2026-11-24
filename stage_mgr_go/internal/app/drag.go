@@ -266,6 +266,15 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// dragged HWND on some app/window combinations. Hide the real HWND
 		// explicitly for the short handoff, and ignore its corresponding
 		// WinEvent hide/show so it is not mistaken for an app closing.
+		// End the user's physical drag before hiding or parking the HWND.
+		// WM_CANCELMODE alone ends the modal loop but leaves the left button
+		// logically down; some applications continue repositioning themselves
+		// in response to that held input after the window has been parked.
+		if !winapi.ReleaseLeftButton() {
+			debugf("fullscreen-drag step=mouse-up hwnd=%x phase=handoff ok=false reason=SendInput-failed; leaving window visible", w.HWND)
+			return
+		}
+		debugf("fullscreen-drag step=mouse-up hwnd=%x phase=handoff ok=true", w.HWND)
 		if a.handoffHidden == nil {
 			a.handoffHidden = make(map[winapi.HWND]time.Time)
 		}

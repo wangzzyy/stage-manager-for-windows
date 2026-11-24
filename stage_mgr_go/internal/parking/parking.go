@@ -52,7 +52,7 @@ type parked struct {
 // Service parks and unparks windows. Use it from one goroutine.
 type Service struct {
 	parked  map[winapi.HWND]parked
-	maximized map[winapi.HWND]winapi.Rect // pre-drag normal rectangles for windows whose maximize state was lost
+	maximized map[winapi.HWND]winapi.WindowPlacementSnapshot // pre-drag normal rectangles for windows whose maximize state was lost
 	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
@@ -76,7 +76,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.Rect{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.WindowPlacementSnapshot{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -89,10 +89,10 @@ func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 }
 
 // RestoreMaximized marks a parked window to return maximized after its card is selected.
-func (s *Service) RestoreMaximized(h winapi.HWND, normal winapi.Rect) {
+func (s *Service) RestoreMaximized(h winapi.HWND, placement winapi.WindowPlacementSnapshot) {
 	if s.IsParked(h) {
-		s.maximized[h] = normal
-		s.logf("parked %x will restore maximized normal=%v", h, normal)
+		s.maximized[h] = placement
+		s.logf("parked %x will restore maximized placement=%+v", h, placement)
 	} else {
 		s.logf("cannot mark %x maximized: window is not parked", h)
 	}
@@ -206,13 +206,19 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	for w, p := range s.parked {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
-			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
-			winapi.SetCloaked(w, false)
-			if normal, maximized := s.maximized[w]; maximized {
+			if placement, maximized := s.maximized[w]; maximized {
 				delete(s.maximized, w)
-				ok := winapi.ShowMaximizedAtNoActivate(w, normal)
-				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v normal=%v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), normal)
+				// A maximized window must not enter the ordinary sendHome/Chase
+				// path. Those routines keep applying SetWindowPos to its outer
+				// rectangle after it has maximized, which can move it away from
+				// the monitor selected by its saved WINDOWPLACEMENT.
+				delete(s.homing, w)
+				winapi.SetCloaked(w, false)
+				ok := winapi.ShowMaximizedPlacementNoActivate(w, placement)
+				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v placement=%+v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), placement)
 			} else {
+				s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+				winapi.SetCloaked(w, false)
 				winapi.ShowNoActivate(w)
 			}
 			winapi.SetTransitionsDisabled(w, false)

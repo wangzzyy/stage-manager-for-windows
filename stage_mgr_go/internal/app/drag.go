@@ -188,6 +188,9 @@ func (a *App) windowMoved(h winapi.HWND) {
 		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
 			// A resize that ends over the strip is no drag into it.
 			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+				if g.maximized {
+					a.maximizeOnReturn[h] = true
+				}
 				a.sendToStrip(d, w, g.from)
 				return
 			}

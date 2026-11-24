@@ -40,6 +40,8 @@ func (a *App) startDrag(h winapi.HWND) {
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	debugf("move-size start %x class=%q style=%#x iconic=%v zoomed=%v rect=%v frame=%v",
+		h, winapi.ClassName(h), winapi.Style(h), winapi.IsIconic(h), winapi.IsZoomed(h), g.from, winapi.FrameBounds(h))
 	// The fullscreen test must happen at move-size start. Windows may restore
 	// the window as soon as the user pulls it away from the top edge; testing
 	// later, when the pointer reaches a strip, loses the original fullscreen
@@ -47,6 +49,11 @@ func (a *App) startDrag(h winapi.HWND) {
 	if normal, frame, ok := winapi.FullscreenRestoreRect(h); ok {
 		g.fullscreenNormal, g.fullscreenFrame, g.fullscreen = normal, frame, true
 		debugf("fullscreen drag detected %x frame %v normal %v", h, frame, normal)
+	} else {
+		normal, maximized, placementOK := winapi.RestoredRect(h)
+		debugf("fullscreen drag rejected %x frame=%v normal=%v maximized=%v placementOK=%v monitor=%v",
+			h, winapi.FrameBounds(h), normal, maximized, placementOK,
+			winapi.MonitorInfo(winapi.MonitorFromRect(winapi.FrameBounds(h))).Monitor)
 	}
 	a.drag = g
 }
@@ -70,6 +77,7 @@ func (a *App) dragOver() {
 	// a visible strip. The ordinary stage switch owns the capture, flight,
 	// parking and card creation; mouse-up must not run the drop a second time.
 	if target := a.stripUnder(winapi.Cursor()); target != nil {
+		debugf("drag %x reached strip %s fullscreen=%v cursor=%v", g.h, target.mon.Device, g.fullscreen, winapi.Cursor())
 		// Use the placement captured at move-size start: by the time the
 		// pointer reaches the strip, Windows may already have restored the
 		// fullscreen window and its current frame no longer identifies it.

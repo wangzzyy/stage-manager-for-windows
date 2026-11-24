@@ -318,10 +318,14 @@ func place(h winapi.HWND, p winapi.Point) {
 		return
 	}
 	land(h, p)
-	// Parking uses SWP_NOREDRAW to preserve the last composed frame while
-	// windows are off-screen. Invalidate on return so apps that discarded
-	// their surface while hidden repaint without waiting for pointer input.
-	winapi.Redraw(h)
+	// A handoff window is deliberately SW_HIDE'd while parked. Redrawing it
+	// before it is shown forces some applications (notably editor windows)
+	// to discard/rebuild their redirected surface, producing a blank flash
+	// or an apparent reload on card restore. Preserve the last composed frame
+	// for hidden windows; ordinary visible parked windows still get repainted.
+	if winapi.IsWindowVisible(h) {
+		winapi.Redraw(h)
+	}
 }
 
 // raising counts the calls to raise: the last one asked for is the order

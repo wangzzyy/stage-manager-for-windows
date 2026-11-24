@@ -671,10 +671,23 @@ func (s *Service) parkOneUsing(h, owner winapi.HWND, place func(r winapi.Rect) (
 		return false
 	}
 	home, spot := place(r)
+	// A normal stage switch uses Park rather than the drag handoff path.
+	// Moving a maximized window off-screen can make Windows forget its
+	// maximized show state, so preserve the complete placement before the
+	// move and let unpark restore it explicitly.
+	var maximizedPlacement winapi.WindowPlacementSnapshot
+	wasMaximized := winapi.IsZoomed(h)
+	if wasMaximized {
+		maximizedPlacement, wasMaximized = winapi.CaptureWindowPlacement(h)
+	}
 	if !mover(h, spot) {
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, Owner: owner, At: time.Now()}
+	if wasMaximized {
+		s.maximized[h] = maximizedPlacement
+		s.logf("parked %x will restore maximized placement=%+v", h, maximizedPlacement)
+	}
 	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), r, home, spot, owner)
 	return true
 }

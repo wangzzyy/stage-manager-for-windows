@@ -197,6 +197,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
 			winapi.SetCloaked(w, false)
+			winapi.ShowNoActivate(w)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -437,6 +438,7 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
+			winapi.ShowNoActivate(h)
 			winapi.Redraw(h)
 		}
 	}
@@ -445,6 +447,7 @@ func (s *Service) RestoreAll() {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
+			winapi.ShowNoActivate(h)
 			winapi.Redraw(h)
 		}
 	}

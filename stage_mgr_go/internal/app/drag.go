@@ -29,7 +29,7 @@ type drag struct {
 	// rectangle: that is the position to return to after the strip handoff,
 	// not the maximized monitor-sized rectangle from the start of the drag.
 	wasMaximized bool
-	maximizedPlacement winapi.Rect
+	maximizedPlacement winapi.WindowPlacementSnapshot
 	transitionsDisabled bool
 	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage

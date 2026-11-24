@@ -462,35 +462,41 @@ func (s *Service) Lower() {
 // RestoreAll brings every parked window home. It is safe while quitting.
 func (s *Service) RestoreAll() {
 	for h, p := range s.parked {
-		if winapi.IsWindow(h) {
+		if !winapi.IsWindow(h) {
+			continue
+		}
+		if placement, maximized := s.maximized[h]; maximized {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			winapi.ShowMaximizedPlacementNoActivate(h, placement)
+		} else {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			if normal, maximized := s.maximized[h]; maximized {
-				winapi.ShowMaximizedAtNoActivate(h, normal)
-			} else {
-				winapi.ShowNoActivate(h)
-			}
-			winapi.SetTransitionsDisabled(h, false)
-			winapi.Redraw(h)
+			winapi.ShowNoActivate(h)
 		}
+		winapi.SetTransitionsDisabled(h, false)
+		winapi.Redraw(h)
 	}
 	for h, p := range s.escaped {
-		if winapi.IsWindow(h) {
+		if !winapi.IsWindow(h) {
+			continue
+		}
+		if placement, maximized := s.maximized[h]; maximized {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			winapi.ShowMaximizedPlacementNoActivate(h, placement)
+		} else {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 			winapi.SetCloaked(h, false)
-			if normal, maximized := s.maximized[h]; maximized {
-				winapi.ShowMaximizedAtNoActivate(h, normal)
-			} else {
-				winapi.ShowNoActivate(h)
-			}
-			winapi.SetTransitionsDisabled(h, false)
-			winapi.Redraw(h)
+			winapi.ShowNoActivate(h)
 		}
+		winapi.SetTransitionsDisabled(h, false)
+		winapi.Redraw(h)
 	}
 	s.parked = map[winapi.HWND]parked{}
-	s.maximized = map[winapi.HWND]winapi.Rect{}
+	s.maximized = map[winapi.HWND]winapi.WindowPlacementSnapshot{}
 	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()

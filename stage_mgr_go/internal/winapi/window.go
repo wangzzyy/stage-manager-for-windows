@@ -310,24 +310,28 @@ type guiThreadInfo struct {
 	CaretRect Rect
 }
 
-// MoveSizeWindow reports the HWND in the foreground thread's native move/size loop.
-// WinEvent start notifications can be missed by some maximized-window drag paths;
-// polling this GUI-thread state provides a reliable fallback.
+// MoveSizeWindow finds the HWND participating in any thread's native move/size
+// loop. The foreground thread is not necessarily the owner of the dragged window
+// (for example, when a shell or helper window temporarily owns activation), so
+// inspect top-level windows and deduplicate their GUI threads.
 func MoveSizeWindow() HWND {
-	fg := Foreground()
-	if fg == 0 {
-		return 0
-	}
-	_, tid := ProcessID(fg)
-	if tid == 0 {
-		return 0
-	}
 	getInfo := syscall.NewLazyDLL("user32.dll").NewProc("GetGUIThreadInfo")
-	info := guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
-	if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r == 0 {
-		return 0
-	}
-	return Root(info.MoveSize)
+	seen := make(map[uint32]bool)
+	var moving HWND
+	EnumWindows(func(h HWND) bool {
+		_, tid := ProcessID(h)
+		if tid == 0 || seen[tid] {
+			return true
+		}
+		seen[tid] = true
+		info := guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+		if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r != 0 && info.MoveSize != 0 {
+			moving = Root(info.MoveSize)
+			return false
+		}
+		return true
+	})
+	return moving
 }
 
 // CancelMoveSize asks Windows to end its native modal move/size loop and

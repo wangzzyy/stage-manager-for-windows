@@ -66,6 +66,71 @@ ReleasePending -- inject LEFTUP --> NativeLoopEnding
 - 如需新的 Win32 消息/结构：声明在 winapi 层并用 Windows build tag；不引入第三方依赖。
 - `docs/CODEMAP.md` 与 `AGENTS.md`：实现完成后更新拖动流程说明；用户可见行为无需改 README，除非此修复成为正式功能说明。
 
+
+## 分阶段诊断日志（实现时必须落地）
+
+目的：一次复现即可判断流程停在哪一步、Windows 原生拖动是否结束、窗口是否成功恢复、重新按下是否真正启动了新的 move-size loop，以及卡片 handoff 是否完成。日志使用项目现有 `debugf`，统一前缀 `fullscreen-drag`；不记录窗口标题、进程命令行等隐私内容。
+
+### 统一字段
+
+每条日志尽量带上：
+
+- `seq`：本次拖动会话唯一递增 ID；同一次转换所有日志共享。
+- `step`：固定步骤名，便于过滤。
+- `hwnd`：窗口句柄（十六进制）。
+- `phase`：状态机当前状态。
+- `cursor`：当前屏幕坐标。
+- `rect`：窗口外框（left,top,right,bottom）。
+- `elapsed_ms`：从本次转换开始经过的毫秒数。
+- `ok` / `reason`：结果与失败原因；失败日志必须包含 Win32 错误码（若 API 提供）。
+
+建议统一格式：`fullscreen-drag seq=%d step=%s hwnd=%v phase=%s cursor=(%d,%d) rect=(%d,%d,%d,%d) ok=%t reason=%s`。矩形/坐标无法读取时明确写 `unknown`，不要用零值伪装成功。
+
+### 必须覆盖的日志点
+
+| 步骤 | 日志事件 | 关键判断字段 | 异常时要能看出的结论 |
+|---|---|---|---|
+| 0. 拖动开始 | `start` | IsZoomed、窗口 style、窗口 rect、恢复 rect、鼠标按键状态 | WinEvent Start 到达时窗口是否已被 Windows 还原 |
+| 1. 侧边栏命中 | `strip-hit` | strip/display、命中坐标、是否 fullscreen candidate、是否已转换 | 是否命中正确侧边栏；为何走普通路径/重启路径 |
+| 2. 释放鼠标 | `mouse-up` | SendInput 返回数量、GetLastError、注入前后按键状态 | UP 是否真正注入；是否可能误释放用户其他输入 |
+| 3. 原生循环结束 | `move-end` | End WinEvent 是否收到、等待耗时、线程 move-size 状态 | Windows 原生拖动循环是否退出；是否超时 |
+| 4. 恢复窗口 | `restore` | Restore API 结果、恢复前后 IsZoomed、前后 rect、placement、可见性 | 是否恢复成功；是否跳回旧位置或仍处于最大化 |
+| 5. 刷新窗口数据 | `refresh` | catalog 是否找到 HWND、最新 rect/frame、所属 display | Stage Manager 是否拿到恢复后的最新窗口状态 |
+| 6. 重新按下 | `mouse-down` | 锚点坐标、SendInput 返回数量、鼠标位置、目标 HWND | DOWN 是否注入；锚点是否位于可拖动标题栏区域 |
+| 7. 新拖动确认 | `move-start` | 新 Start WinEvent 是否收到、是否同 HWND、耗时、窗口 rect | Windows 是否真的重新建立原生拖动，而非仅按下鼠标 |
+| 8. 卡片接管 | `handoff-start` | beginWindowCardDrag 结果、capture 是否启动、strip/card key | 是否进入既有 Stage Manager 卡片流程 |
+| 9. 飞行动画/隐藏 | `handoff-frame`、`window-hide` | 首帧是否 ready、Hide/SetWindowPos 结果、窗口可见性 | 是否在动画首帧前隐藏导致闪烁 |
+| 10. 停放 | `park` | CancelMoveSize 结果、ParkImmediateFrom 结果、parkFrom/home rect | 原生循环取消与停放是否成功 |
+| 11. 完成 | `complete` | 最终 phase、窗口位置、卡片状态、总耗时 | 是否完整结束且无重复 drop |
+| 失败回滚 | `rollback` | 原失败步骤、错误码、是否补发 LEFTUP、窗口是否恢复可见 | 是否留下按键按住、窗口隐藏或 externalLayer 卡住 |
+
+### 事件时序与重复事件诊断
+
+- 每次状态变化记录 `phase-change from=... to=... cause=...`。
+- `EventSystemMoveSizeEnd` 在等待 UP 期间记录为原循环结束；在重新按下后记录为新循环开始。用 `seq` 和阶段区分，不能仅按 HWND 判断。
+- `EventObjectLocationChange` 在重启期间重复触发时记录 `strip-hit-ignored reason=restarting`，不要刷屏；同一阶段可做限频或只记录首次/计数。
+- 同一会话出现第二次 `handoff-start` 或第二次 `complete` 时输出 WARN，附带当前 phase。
+- 每个等待点记录开始与结束/超时，日志中包含 timeout 配置值和实际耗时。
+
+### 日志级别与隐私
+
+- 正常阶段使用 `debugf`；失败、超时、状态机非法转换、重复 handoff 使用 `debugf` 的显著 `WARN`/ `ERROR` 文本前缀（遵循项目现有日志设施，不另建日志依赖）。
+- 不记录窗口标题、完整路径、命令行或用户输入内容。
+- 鼠标注入、窗口恢复、隐藏/停放等改变系统状态的操作，必须同时记录调用结果与操作后的实际状态；不能只记录“准备执行”。
+- 每次拖动只生成一个 `seq`，便于从 `start` 到 `complete/rollback` 串起完整链路。
+
+### 通过日志定位问题的速查
+
+- 缺少 `strip-hit`：检查鼠标坐标、strip rect、display 命中与 WinEvent LocationChange。
+- 有 `mouse-up` 无 `move-end`：检查 SendInput 注入结果、原生循环退出等待及事件回调线程。
+- 有 `move-end` 无 `restore`：检查状态机调度/主线程 post。
+- `restore ok` 但 rect 不正确：检查 placement NormalPosition、DPI 与显示器坐标换算。
+- 有 `mouse-down` 无新 `move-start`：优先检查标题栏锚点、窗口 hit-test、输入注入和移动事件监听。
+- 有新 `move-start` 无 `handoff-start`：检查 catalog 刷新、strip 命中二次判定和状态机阶段。
+- 有 `handoff-start` 无 `handoff-frame`：检查窗口捕获、flight layer 初始化与回调。
+- 有 `handoff-frame` 无 `window-hide`/`park`：检查 flight 回调是否触发及隐藏/取消循环的结果。
+- 有 `rollback`：按其中的 `failed_step` 与 Win32 错误码定位，并确认 `left_button_released=true`、`window_visible=true`。
+
 ## 测试/验收矩阵
 
 ### 自动化（能纯逻辑覆盖的部分）

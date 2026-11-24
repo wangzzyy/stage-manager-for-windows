@@ -336,10 +336,17 @@ func (a *App) poll() {
 	}
 	cur := winapi.Cursor()
 	now := time.Now()
-	// Maximized windows restore as the native move loop begins, and some
-	// apps do not emit reliable location-change events while being dragged.
-	// Poll the pointer during a drag so entering a strip is detected even
-	// when the HWND's location events are sparse.
+	// Some maximized-window drag paths miss the move-size-start WinEvent.
+	// Recover the HWND directly from the foreground GUI thread's native
+	// move/size loop state before tracking the pointer.
+	if a.drag == nil {
+		if h := winapi.MoveSizeWindow(); h != 0 {
+			debugf("poll detected native move-size loop for %x", h)
+			a.startDrag(h)
+		}
+	}
+	// Location-change notifications can be sparse during native dragging;
+	// poll pointer position to detect entry into a strip reliably.
 	if a.drag != nil {
 		a.dragOver()
 	}

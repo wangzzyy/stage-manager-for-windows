@@ -4,9 +4,13 @@ package winapi
 
 import (
 	"syscall"
+	"time"
 )
 
-var procSendMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("SendMessageW")
+var (
+	procSendMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("SendMessageW")
+	procMouseEventDrag   = syscall.NewLazyDLL("user32.dll").NewProc("mouse_event")
+)
 
 // FullscreenRestoreRect reports the saved normal placement of a borderless
 // window that currently covers its monitor. It deliberately fails closed:
@@ -48,20 +52,29 @@ func abs32(v int32) int32 {
 	return v
 }
 
-// StartCaptionDrag asks the target window to process a real non-client
-// button-down. DefWindowProc starts the native move loop while handling this
-// message. That call does not return until the user releases the mouse, so it
-// must run on another goroutine rather than blocking Stage Manager's UI loop.
-// A posted WM_NCLBUTTONDOWN is not sufficient here: applications can ignore
-// synthetic posted mouse messages instead of entering the move loop.
+// StartCaptionDrag restarts the user's drag as a new mouse gesture. The
+// fullscreen move loop has already been cancelled and the window restored;
+// synthesize the button-up/button-down edge that a manual release and
+// re-press would produce before asking the window to enter its caption move
+// loop. SendMessageW blocks until that loop ends, so run it off the UI thread.
 func StartCaptionDrag(h HWND, p Point) bool {
 	const (
 		wmNCLButtonDown = 0x00A1
 		htCaption       = 2
+		mouseeventfLeftDown = 0x0002
+		mouseeventfLeftUp   = 0x0004
 	)
 	if !IsWindow(h) {
 		return false
 	}
+
+	// A held physical button does not create a new WM_*BUTTONDOWN transition.
+	// Explicitly end the old gesture, then begin a fresh one at the current
+	// pointer location, just as if the user had released and pressed again.
+	procMouseEventDrag.Call(mouseeventfLeftUp, 0, 0, 0, 0)
+	time.Sleep(15 * time.Millisecond)
+	procMouseEventDrag.Call(mouseeventfLeftDown, 0, 0, 0, 0)
+
 	lparam := uintptr(uint32(uint16(p.X)) | uint32(uint16(p.Y))<<16)
 	go procSendMessageWDrag.Call(
 		uintptr(h), wmNCLButtonDown, htCaption, lparam,

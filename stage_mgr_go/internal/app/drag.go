@@ -162,6 +162,15 @@ func (a *App) windowMoved(h winapi.HWND) {
 		a.refreshSoon()
 		return
 	}
+	if moved {
+		p := winapi.Cursor()
+		target := a.stripUnder(p)
+		if target == nil {
+			debugf("drag end hwnd=%v result=no-strip-target cursor=%+v maximized-at-start=%t", h, p, g.wasMaximized)
+		} else {
+			debugf("drag end hwnd=%v result=path-B-pending target=%s maximized-at-start=%t", h, target.mon.Device, g.wasMaximized)
+		}
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}

@@ -52,6 +52,7 @@ type parked struct {
 // Service parks and unparks windows. Use it from one goroutine.
 type Service struct {
 	parked  map[winapi.HWND]parked
+	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
 	homing  map[winapi.HWND]homing
@@ -74,7 +75,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -195,6 +196,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			winapi.SetCloaked(w, false)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -203,6 +205,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	for _, o := range catalog.OwnedWindows(h) {
 		if r := winapi.WindowRect(o); winapi.MostlyOffscreen(r) {
 			s.sendHome(o, reachable(r.Offset(dx, dy)))
+			winapi.SetCloaked(o, false)
 		}
 	}
 	return true
@@ -433,6 +436,7 @@ func (s *Service) RestoreAll() {
 		if winapi.IsWindow(h) {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+			winapi.SetCloaked(h, false)
 			winapi.Redraw(h)
 		}
 	}
@@ -445,7 +449,12 @@ func (s *Service) RestoreAll() {
 // windows something else moved back onto the desktop, as Windows does when
 // it re-maximizes windows after the work area changes.
 func (s *Service) CollectEscaped() []winapi.HWND {
+	// Retry windows that escaped on an earlier refresh until the app either
+	// re-parks them or decides the user intentionally brought them back.
 	var escaped []winapi.HWND
+	for h := range s.escaped {
+		escaped = append(escaped, h)
+	}
 	changed := false
 	for h, p := range s.parked {
 		if !winapi.IsWindow(h) {
@@ -474,6 +483,7 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 		delete(s.parked, h)
 		changed = true
 		if p.Owner == 0 && winapi.OnAnyMonitor(r) {
+			s.escaped[h] = p
 			escaped = append(escaped, h)
 		}
 	}
@@ -481,6 +491,34 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 		s.save()
 	}
 	return escaped
+}
+
+// ReparkEscaped puts a temporarily escaped window back at its original spot,
+// preserving the home recorded before it escaped. Calling Park here would
+// incorrectly make the escaped desktop position the new home.
+func (s *Service) ReparkEscaped(h winapi.HWND) bool {
+	p, ok := s.escaped[h]
+	if !ok || !winapi.IsWindow(h) || winapi.IsIconic(h) {
+		return false
+	}
+	if !moveImmediate(h, p.Spot) {
+		return false
+	}
+	p.At = time.Now()
+	s.parked[h] = p
+	delete(s.escaped, h)
+	s.logf("repark %x %q home %v spot %v", h, winapi.Title(h), p.Home, p.Spot)
+	s.save()
+	return true
+}
+
+// ForgetEscaped lets a window the user intentionally brought back become
+// an ordinary desktop window instead of retaining stale parking metadata.
+func (s *Service) ForgetEscaped(h winapi.HWND) {
+	if _, ok := s.escaped[h]; ok {
+		delete(s.escaped, h)
+		s.save()
+	}
 }
 
 type entry struct {

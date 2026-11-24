@@ -358,8 +358,15 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// The real HWND stayed hidden while the overlay and the real card
 		// were synchronized. If the app escaped its parking spot while the
 		// native move loop unwound, re-park it before making it visible.
-		if a.settings.HideInactive {
-			a.reparkEscaped()
+		if a.settings.HideInactive && a.park.IsParked(w.HWND) {
+			if !a.park.Repark(w.HWND) {
+				// Do not expose a parked HWND on the desktop if its app is
+				// still refusing the off-screen position. Unpark will show it
+				// again after moving it home if the user opens the card.
+				debugf("drag into card: could not re-park hidden window %v; leaving it hidden", w.HWND)
+				a.refreshSoon()
+				return
+			}
 		}
 		winapi.ShowNoActivate(w.HWND)
 		winapi.DwmFlush()

@@ -19,12 +19,17 @@ type drag struct {
 	h    winapi.HWND
 	from winapi.Rect // where it was as the move began
 	home *display    // the display it was on then
+	// Save this before the system move loop can automatically restore a
+	// borderless fullscreen window to its normal size on the first drag.
+	fullscreenNormal winapi.Rect
+	fullscreenFrame  winapi.Rect
+	fullscreen       bool
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
-	at, over *display
-	since    time.Time
-	stage    []string
-	dwell    *time.Timer
+	at, over  *display
+	since     time.Time
+	stage     []string
+	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
 }
 
@@ -34,7 +39,16 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	// The fullscreen test must happen at move-size start. Windows may restore
+	// the window as soon as the user pulls it away from the top edge; testing
+	// later, when the pointer reaches a strip, loses the original fullscreen
+	// geometry and cannot distinguish this gesture from an ordinary drag.
+	if normal, frame, ok := winapi.FullscreenRestoreRect(h); ok {
+		g.fullscreenNormal, g.fullscreenFrame, g.fullscreen = normal, frame, true
+		debugf("fullscreen drag detected %x frame %v normal %v", h, frame, normal)
+	}
+	a.drag = g
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -56,20 +70,19 @@ func (a *App) dragOver() {
 	// a visible strip. The ordinary stage switch owns the capture, flight,
 	// parking and card creation; mouse-up must not run the drop a second time.
 	if target := a.stripUnder(winapi.Cursor()); target != nil {
-		// A borderless fullscreen window may have no draggable caption. End
-		// its native move loop, restore its saved normal placement, then post
-		// a fresh caption drag so the ordinary strip/card handoff handles it.
-		// Do this before converting the window: the second move-size start
-		// must observe a normal-sized window and establish a fresh drag state.
-		if normal, fullscreen, ok := winapi.FullscreenRestoreRect(g.h); ok {
+		// Use the placement captured at move-size start: by the time the
+		// pointer reaches the strip, Windows may already have restored the
+		// fullscreen window and its current frame no longer identifies it.
+		if g.fullscreen {
 			cursor := winapi.Cursor()
 			original := winapi.WindowRect(g.h)
 			if winapi.CancelMoveSize(g.h) {
 				a.drag = nil
-				if winapi.SetWindowPos(g.h, 0, normal.Left, normal.Top, normal.W(), normal.H(),
+				if winapi.SetWindowPos(g.h, 0, g.fullscreenNormal.Left, g.fullscreenNormal.Top,
+					g.fullscreenNormal.W(), g.fullscreenNormal.H(),
 					winapi.SwpNoZOrder|winapi.SwpNoActivate|winapi.SwpFrameChanged) {
 					if winapi.StartCaptionDrag(g.h, cursor) {
-						debugf("fullscreen drag restart %x from %v (frame %v) to %v", g.h, original, fullscreen, normal)
+						debugf("fullscreen drag restart %x from %v (frame %v) to %v", g.h, original, g.fullscreenFrame, g.fullscreenNormal)
 						return
 					}
 				}
@@ -229,10 +242,10 @@ func (a *App) leave(d *display, w catalog.Window) {
 }
 
 // followMoved puts the app of the window in front on the stage of its
-// display, should it have moved there without a drag, as with
-// Win+Shift+Arrow or by itself: it takes the stage as a dropped window
-// does, rather than be parked for a stray once it loses the focus. It
-// reports whether it started a switch.
+// display, should it have moved there without a drag, as with Win+Shift+Arrow
+// or by itself: it takes the stage as a dropped window does, rather than be
+// parked for a stray once it loses the focus. It reports whether it started
+// a switch.
 func (a *App) followMoved() bool {
 	if !a.settings.HideInactive || a.drag != nil || a.fg.h != 0 || a.fg.timer != nil {
 		return false

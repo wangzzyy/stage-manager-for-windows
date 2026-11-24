@@ -56,6 +56,28 @@ func (a *App) dragOver() {
 	// a visible strip. The ordinary stage switch owns the capture, flight,
 	// parking and card creation; mouse-up must not run the drop a second time.
 	if target := a.stripUnder(winapi.Cursor()); target != nil {
+		// A borderless fullscreen window may have no draggable caption. End
+		// its native move loop, restore its saved normal placement, then post
+		// a fresh caption drag so the ordinary strip/card handoff handles it.
+		// Do this before converting the window: the second move-size start
+		// must observe a normal-sized window and establish a fresh drag state.
+		if normal, fullscreen, ok := winapi.FullscreenRestoreRect(g.h); ok {
+			cursor := winapi.Cursor()
+			original := winapi.WindowRect(g.h)
+			if winapi.CancelMoveSize(g.h) {
+				a.drag = nil
+				if winapi.SetWindowPos(g.h, 0, normal.Left, normal.Top, normal.W(), normal.H(),
+					winapi.SwpNoZOrder|winapi.SwpNoActivate|winapi.SwpFrameChanged) {
+					if winapi.PostCaptionDrag(g.h, cursor) {
+						debugf("fullscreen drag restart %x from %v (frame %v) to %v", g.h, original, fullscreen, normal)
+						return
+					}
+				}
+				debugf("fullscreen drag restart %x: restore or caption-drag post failed", g.h)
+				return
+			}
+			debugf("fullscreen drag restart %x: native move loop did not end", g.h)
+		}
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]
 			key := a.groupKey(w)

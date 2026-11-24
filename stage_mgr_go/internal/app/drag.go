@@ -62,10 +62,12 @@ func (a *App) dragOver() {
 	if d != g.at {
 		g.at, g.since = d, time.Now()
 	}
-	// Turn the dragged window into a real card as soon as the pointer enters
-	// a visible strip. The ordinary stage switch owns the capture, flight,
-	// parking and card creation; mouse-up must not run the drop a second time.
-	if target := a.stripUnder(winapi.Cursor()); target != nil {
+	// Ordinary windows can be handed off as soon as the pointer enters
+	// the strip. A maximized window must stay in the native move loop until
+	// mouse-up: Windows restores it while dragging, and it should follow the
+	// same drop path as an ordinary window rather than the early card handoff.
+	// Path B accepts its restore-induced size change using wasMaximized.
+	if target := a.stripUnder(winapi.Cursor()); target != nil && !g.wasMaximized {
 		debugf("drag path A candidate hwnd=%v maximized-at-start=%t target=%s home=%t", g.h, g.wasMaximized, target.mon.Device, target == g.home)
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]

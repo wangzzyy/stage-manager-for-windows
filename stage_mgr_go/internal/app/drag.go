@@ -26,6 +26,7 @@ type drag struct {
 	stage    []string
 	dwell    *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	caption   bool // the move began on the title bar, including a restore-and-move from maximized
 }
 
 // startDrag follows window h, which the user began to move.
@@ -34,7 +35,17 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	// A maximized window is restored by Windows before its native move loop
+	// settles. Its final rectangle can therefore differ from the one sampled
+	// at move-size start even though the gesture is a title-bar drag, not a
+	// resize. Remember the non-client hit-test at the start so mouse-up can
+	// still recognize that restore-and-move if no location event reached the
+	// strip while the native loop was running.
+	const htCaption = 2
+	a.drag = &drag{
+		h: h, from: winapi.WindowRect(h), home: home, at: home,
+		caption: winapi.NonClientHitTest(h, winapi.Cursor()) == htCaption,
+	}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -173,7 +184,8 @@ func (a *App) windowMoved(h winapi.HWND) {
 			return
 		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
 			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+			r := winapi.WindowRect(h)
+			if (r.W() == g.from.W() && r.H() == g.from.H()) || g.caption {
 				a.sendToStrip(d, w, g.from)
 				return
 			}

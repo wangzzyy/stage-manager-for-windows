@@ -648,7 +648,24 @@ func (a *App) refresh() {
 		return
 	}
 	a.reparkEscaped()
+	// Hidden windows parked by a drag-to-card handoff are intentionally
+	// absent from EnumWindows-based catalog enumeration. Keep their last
+	// catalog records while they remain parked, so their cards stay present
+	// until Unpark moves them home and makes them visible again.
+	previous := a.windows
 	a.windows = a.cat.Windows()
+	listed := make(map[winapi.HWND]bool, len(a.windows))
+	for _, w := range a.windows {
+		listed[w.HWND] = true
+	}
+	for _, w := range previous {
+		if listed[w.HWND] || !a.park.IsParked(w.HWND) ||
+			!winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) {
+			continue
+		}
+		a.windows = append(a.windows, w)
+		listed[w.HWND] = true
+	}
 	if a.followMoved() {
 		return
 	}

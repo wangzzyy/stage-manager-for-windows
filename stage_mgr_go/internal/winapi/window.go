@@ -279,6 +279,7 @@ func SetWindowPos(h, insertAfter HWND, x, y, w, ht int32, flags uint32) bool {
 }
 
 func ShowNoActivate(h HWND) { procShowWindowAsync.Call(uintptr(h), swShowNoActivate) }
+func Restore(h HWND)        { procShowWindow.Call(uintptr(h), swRestore) }
 func Hide(h HWND)           { procShowWindow.Call(uintptr(h), swHide) }
 func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 

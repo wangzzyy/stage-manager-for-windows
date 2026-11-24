@@ -393,37 +393,31 @@ func RestoredRect(h HWND) (r Rect, maximized bool, ok bool) {
 }
 
 
-// WindowNormalRect returns the window's saved normal rectangle in screen coordinates,
-// even while the window is maximized. Capture it before a native caption drag:
-// Windows rewrites the live placement as soon as the drag restores the window.
+// WindowNormalRect returns the raw WINDOWPLACEMENT.rcNormalPosition for h,
+// even while maximized. For ordinary top-level windows this rectangle is in
+// workspace coordinates, not screen coordinates. Keep it raw: converting it
+// through MonitorFromRect can select the wrong monitor because the workspace
+// origin differs from the screen origin.
 func WindowNormalRect(h HWND) (Rect, bool) {
 	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
 	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return Rect{}, false
 	}
 	n := wp.NormalPosition
-	mi := monitorInfo(MonitorFromRect(n))
-	if ExStyle(h)&WsExToolWindow == 0 {
-		n = n.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
-	}
 	return n, !n.Empty()
 }
 
-// ShowMaximizedAtNoActivate restores a hidden window maximized, first restoring
-// the normal rectangle captured before its native caption drag. NormalPosition
-// also selects the monitor whose work area Windows uses for maximization.
+// ShowMaximizedAtNoActivate restores a hidden window maximized, using the
+// raw workspace-coordinate rcNormalPosition captured before the native drag.
+// Do not convert this rectangle to screen coordinates: Windows uses its raw
+// workspace coordinates to choose the correct monitor and maximize bounds.
 func ShowMaximizedAtNoActivate(h HWND, normal Rect) bool {
 	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
 	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}
 	if !normal.Empty() {
-		n := normal
-		if ExStyle(h)&WsExToolWindow == 0 {
-			mi := monitorInfo(MonitorFromRect(n))
-			n = n.Offset(mi.Monitor.Left-mi.Work.Left, mi.Monitor.Top-mi.Work.Top)
-		}
-		wp.NormalPosition = n
+		wp.NormalPosition = normal
 	}
 	const swShowMaximized = 3
 	wp.ShowCmd = swShowMaximized

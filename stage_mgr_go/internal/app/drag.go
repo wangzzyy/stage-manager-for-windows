@@ -317,11 +317,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	card.externalFrom = pose{}
 	card.externalStarted = time.Time{}
 	a.windows = a.cat.Windows()
+	listed := slices.ContainsFunc(a.windows, func(window catalog.Window) bool { return window.HWND == w.HWND })
+	debugf("fullscreen-drag seq=%d step=refresh hwnd=%x phase=handoff listed=%t rect=%v frame=%v", seq, w.HWND, listed, winapi.WindowRect(w.HWND), winapi.FrameBounds(w.HWND))
 	a.refresh()
 
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
+	debugf("fullscreen-drag seq=%d step=capture-request hwnd=%x phase=capturing rect=%v", seq, w.HWND, winapi.WindowRect(w.HWND))
 	// Capture only the dragged HWND. A desktop BitBlt is not a window
 	// capture: it includes whichever windows happen to overlap its rectangle.
 	// Use the window's PrintWindow capture path and let its timeout keep a

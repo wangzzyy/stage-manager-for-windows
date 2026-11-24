@@ -801,7 +801,13 @@ func (a *App) reparkEscaped() {
 	fg := winapi.Foreground()
 	for _, h := range a.park.CollectEscaped() {
 		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
-		if i < 0 || h == fg || !a.settings.HideInactive {
+		until, handedOff := a.handoffHidden[h]
+		// A dragged-to-strip window can briefly reappear while Windows
+		// unwinds its native move loop. It is still the card's window, not
+		// a user move back onto the desktop: keep it parked even if Windows
+		// reports it as the foreground window during that interval.
+		keepParked := handedOff && time.Now().Before(until)
+		if i < 0 || (h == fg && !keepParked) || !a.settings.HideInactive {
 			continue
 		}
 		w := a.windows[i]

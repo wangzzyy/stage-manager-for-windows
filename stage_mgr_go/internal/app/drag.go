@@ -15,7 +15,7 @@ const dwell = 150 * time.Millisecond
 
 // maximizedBeforeMove remembers the last maximized state observed before
 // Windows restores a window as its native title-bar drag begins.
-var maximizedBeforeMove = map[winapi.HWND]bool{}
+var maximizedBeforeMove = map[winapi.HWND]time.Time{}
 
 // drag is a window the user is moving, from the start of the move to its
 // end.
@@ -38,7 +38,11 @@ func (a *App) startDrag(h winapi.HWND) {
 	if a.drag != nil && a.drag.dwell != nil {
 		a.drag.dwell.Stop()
 	}
-	wasMaximized := maximizedBeforeMove[h] || winapi.IsZoomed(h)
+	wasMaximized := winapi.IsZoomed(h)
+	if at, ok := maximizedBeforeMove[h]; ok {
+		wasMaximized = wasMaximized || time.Since(at) < time.Second
+		delete(maximizedBeforeMove, h)
+	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	if wasMaximized {
 		// Suppress DWM's restore transition for the remainder of this native
@@ -153,9 +157,11 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	a.drag = nil
-	if moved && g.wasMaximized {
-		winapi.SetTransitionsDisabled(h, false)
+	if moved {
 		delete(maximizedBeforeMove, h)
+		if g.wasMaximized {
+			winapi.SetTransitionsDisabled(h, false)
+		}
 	}
 	if moved && g.converted {
 		// The stage switch already owns this window and its card. The end of

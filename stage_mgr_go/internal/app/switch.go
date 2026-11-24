@@ -253,8 +253,12 @@ func (h *handover) land() {
 func (h *handover) stop() {
 	clear(h.d.landing)
 	h.a.busy, h.a.running = false, nil
-	if !h.a.runQueued(h.d) && h.d.strip != nil {
-		h.d.strip.setSwitching(false)
+	if !h.a.runQueued(h.d) {
+		h.a.refresh()
+		h.a.flushDraggedDrop()
+		if h.d.strip != nil {
+			h.d.strip.setSwitching(false)
+		}
 	}
 }
 
@@ -273,6 +277,7 @@ func (a *App) ended(d *display) {
 	if a.runQueued(d) {
 		return
 	}
+	a.flushDraggedDrop()
 	if d.strip != nil {
 		d.strip.setSwitching(false)
 	}

@@ -176,17 +176,18 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func(ready func(bool)) {
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
 					if !g.fullscreen {
-						ready(false)
-						return
+						return nil
 					}
-					if g.fullscreenCaptureDone {
-						ready(g.fullscreenCaptureOK)
-						return
+					return func(ready func(bool)) {
+						if g.fullscreenCaptureDone {
+							ready(g.fullscreenCaptureOK)
+							return
+						}
+						g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
 					}
-					g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
-				})
+				}())
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -205,17 +206,18 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func(ready func(bool)) {
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
 					if !g.fullscreen {
-						ready(false)
-						return
+						return nil
 					}
-					if g.fullscreenCaptureDone {
-						ready(g.fullscreenCaptureOK)
-						return
+					return func(ready func(bool)) {
+						if g.fullscreenCaptureDone {
+							ready(g.fullscreenCaptureOK)
+							return
+						}
+						g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
 					}
-					g.fullscreenCaptureWaiters = append(g.fullscreenCaptureWaiters, ready)
-				})
+				}())
 				return
 			}
 		}

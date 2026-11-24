@@ -36,7 +36,7 @@ func (a *App) startDrag(h winapi.HWND) {
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	from := winapi.WindowRect(h)
-	maximized := winapi.IsZoomed(h)
+	maximized := winapi.IsZoomed(h) || a.maximizedWindows[h]
 	if maximized {
 		// GetWindowRect now describes the maximized frame. Preserve the
 		// normal placement so the card uses the same geometry as an

@@ -99,7 +99,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
 				return
 			}
 		}

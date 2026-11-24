@@ -16,10 +16,10 @@ const dwell = 150 * time.Millisecond
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {
-	h        winapi.HWND
-	from     winapi.Rect // normal-size home rectangle, or drag-start rectangle
-	maximized bool       // the window was maximized before the native drag restored it
-	home     *display    // the display it was on then    // the display it was on then
+	h         winapi.HWND
+	from      winapi.Rect // normal-size home rectangle, or drag-start rectangle
+	maximized bool        // the window was maximized before the native drag restored it
+	home      *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over *display
@@ -355,22 +355,35 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if !handoffComplete {
 			return
 		}
-		// The real HWND stayed hidden while the overlay and the real card
-		// were synchronized. If the app escaped its parking spot while the
-		// native move loop unwound, re-park it before making it visible.
-		if a.settings.HideInactive && a.park.IsParked(w.HWND) {
-			if !a.park.Repark(w.HWND) {
-				// Do not expose a parked HWND on the desktop if its app is
-				// still refusing the off-screen position. Unpark will show it
-				// again after moving it home if the user opens the card.
-				debugf("drag into card: could not re-park hidden window %v; leaving it hidden", w.HWND)
-				a.refreshSoon()
-				return
+		if a.settings.HideInactive {
+			// Match the ordinary stage-switch lifecycle: a window belonging
+			// to a card stays parked and is not shown again at animation end.
+			// If the initial park did not stick, retry from its intended home.
+			if !a.park.IsParked(w.HWND) {
+				if a.park.ParkImmediateFrom(w.HWND, home) {
+					a.park.Rehome(w.HWND, home)
+				}
 			}
+			if a.park.IsParked(w.HWND) {
+				if !a.park.Repark(w.HWND) {
+					debugf("drag into card: parked window %v remains hidden; repark will be retried", w.HWND)
+					a.refreshSoon()
+					return
+				}
+				debugf("drag into card: real window %v remains parked and hidden after landing", w.HWND)
+			} else {
+				// Parking failed even on retry. Prefer a reachable real window
+				// over leaving an untracked hidden HWND behind.
+				winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
+					winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+				winapi.ShowNoActivate(w.HWND)
+				debugf("drag into card: parking failed for %v; restored it visibly at home", w.HWND)
+			}
+		} else {
+			winapi.ShowNoActivate(w.HWND)
+			debugf("drag into card: non-hidden window %v shown after landing", w.HWND)
 		}
-		winapi.ShowNoActivate(w.HWND)
 		winapi.DwmFlush()
-		debugf("drag into card: real window %v shown after card landing", w.HWND)
 		a.refreshSoon()
 	}
 	startFlight := func() bool {

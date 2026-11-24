@@ -2,9 +2,7 @@
 
 package winapi
 
-import (
-	"syscall"
-)
+import "syscall"
 
 var procPostMessageWDrag = syscall.NewLazyDLL("user32.dll").NewProc("PostMessageW")
 

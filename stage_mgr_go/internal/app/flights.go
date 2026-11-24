@@ -258,6 +258,7 @@ type cardLanding struct {
 	from    pose
 	started       time.Time
 	handoff       func()
+	done           func()
 	handoffPosted bool
 }
 
@@ -297,6 +298,21 @@ type flights struct {
 }
 
 func newFlights(a *App) *flights { return &flights{a: a, layers: map[string]*layer{}} }
+
+// hasLanding reports whether a native window is hidden for a window-to-card
+// flight. Refresh must wait until the real card is presented, or catalog
+// enumeration would drop the temporarily hidden HWND from its card.
+func (f *flights) hasLanding() bool {
+	if f == nil {
+		return false
+	}
+	for _, l := range f.layers {
+		if l != nil && l.landing != nil {
+			return true
+		}
+	}
+	return false
+}
 
 func (f *flights) layer(d *display) *layer {
 	l := f.layers[d.mon.Device]
@@ -839,7 +855,7 @@ func (f *flights) standByAll() {
 // flights, with its requested fixed duration.
 const dragIntoCardDuration = 420 * time.Millisecond
 
-func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff func()) bool {
+func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff, done func()) bool {
 	if d == nil || d.strip == nil || from.w <= 0 || from.h <= 0 {
 		return false
 	}
@@ -860,7 +876,7 @@ func (f *flights) dragIntoCard(d *display, w catalog.Window, from pose, handoff 
 	cs.externalAnimating = false
 	cs.externalFrom = pose{}
 	cs.externalStarted = time.Time{}
-	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), hwnd: w.HWND, still: st.fly, from: from, handoff: handoff}
+	l.landing = &cardLanding{d: d, key: f.a.groupKey(w), hwnd: w.HWND, still: st.fly, from: from, handoff: handoff, done: done}
 	l.win.Invalidate()
 	l.pace.frame(l.win)
 	return true
@@ -1035,8 +1051,12 @@ func (l *layer) view(c *ui.Context) {
 				st.externalPresented = false
 				l.landing = nil
 				// The strip has already presented the real card; now clear
-				// the overlay without exposing an intermediate frame.
+				// the overlay without exposing an intermediate frame. Only
+				// then may the real HWND become visible again.
 				l.win.Invalidate()
+				if landing.done != nil {
+					post(landing.done)
+				}
 				if l.owner != nil {
 					l.owner.hideLater(l)
 				}

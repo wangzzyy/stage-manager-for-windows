@@ -30,6 +30,7 @@ type drag struct {
 	// not the maximized monitor-sized rectangle from the start of the drag.
 	wasMaximized bool
 	maximizedNormal winapi.Rect
+	transitionsDisabled bool
 	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
@@ -49,7 +50,9 @@ func (a *App) startDrag(h winapi.HWND) {
 	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
 	if g.wasMaximized {
 		g.maximizedNormal, _ = winapi.WindowNormalRect(h)
-		debugf("maximized drag snapshot %x normal=%v", h, g.maximizedNormal)
+		winapi.SetTransitionsDisabled(h, true)
+		g.transitionsDisabled = true
+		debugf("maximized drag snapshot %x normal=%v; DWM transitions disabled", h, g.maximizedNormal)
 	}
 	debugf("move-size start %x class=%q style=%#x iconic=%v zoomed=%v rect=%v frame=%v",
 		h, winapi.ClassName(h), winapi.Style(h), winapi.IsIconic(h), winapi.IsZoomed(h), g.from, winapi.FrameBounds(h))
@@ -215,6 +218,9 @@ func (a *App) windowMoved(h winapi.HWND) {
 		a.refreshSoon()
 		return
 	}
+	if g.transitionsDisabled {
+		winapi.SetTransitionsDisabled(h, false)
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}
@@ -339,6 +345,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		if winapi.IsWindowVisible(w.HWND) {
 			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			debugf("drag into card: could not hide real window %v; aborting handoff", w.HWND)
 			return
 		}
@@ -348,6 +355,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
 			winapi.DwmFlush()
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
 			return
 		}
@@ -374,6 +382,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// and showing an off-screen window lets the app move it onto the desktop.
 		// listWindows retains cached metadata so the strip card survives SW_HIDE.
 		if !parked {
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
 		}

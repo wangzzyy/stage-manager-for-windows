@@ -217,7 +217,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 	if !a.ready || a.park.IsParked(h) {
 		return
 	}
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
 	if i < 0 {
 		return
@@ -361,14 +361,15 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 			winapi.SetCloaked(w.HWND, false)
 		}
-		// Keep successfully parked handoff windows cloaked. They remain
-		// WS_VISIBLE for catalog/enumeration, but DWM cannot flash them onto
-		// the desktop while the native move loop or the app changes geometry.
-		winapi.ShowNoActivate(w.HWND)
-		winapi.DwmFlush()
-		if a.settings.HideInactive && !parked {
+		// Keep a successfully parked handoff HWND hidden. DWM cloak is not
+		// reliable for arbitrary application windows (it failed on Notepad++),
+		// and showing an off-screen window lets the app move it onto the desktop.
+		// listWindows retains cached metadata so the strip card survives SW_HIDE.
+		if !parked {
+			winapi.ShowNoActivate(w.HWND)
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
 		}
+		winapi.DwmFlush()
 	}
 	// Switch the model first so refresh lays out the destination card. The
 	// window's last stage still is already available in the common case; use
@@ -387,7 +388,7 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	card.externalAnimating = false
 	card.externalFrom = pose{}
 	card.externalStarted = time.Time{}
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	a.refresh()
 
 	startFlight := func() bool {

@@ -3,7 +3,6 @@
 package winapi
 
 import (
-	"syscall"
 	"unsafe"
 )
 
@@ -25,7 +24,6 @@ type syntheticInput struct {
 	Mouse mouseInput
 }
 
-var procSendInput = syscall.NewLazyDLL("user32.dll").NewProc("SendInput")
 
 // ReleaseLeftButton releases the physical left-button drag with a real
 // injected mouse input. It is a no-op when the button is already up.

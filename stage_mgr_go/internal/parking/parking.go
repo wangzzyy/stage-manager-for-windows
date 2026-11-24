@@ -440,7 +440,16 @@ func (s *Service) RestoreAll() {
 			winapi.Redraw(h)
 		}
 	}
+	for h, p := range s.escaped {
+		if winapi.IsWindow(h) {
+			home := onDesktop(p.Home)
+			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+			winapi.SetCloaked(h, false)
+			winapi.Redraw(h)
+		}
+	}
 	s.parked = map[winapi.HWND]parked{}
+	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()
 }
@@ -449,6 +458,9 @@ func (s *Service) RestoreAll() {
 // windows something else moved back onto the desktop, as Windows does when
 // it re-maximizes windows after the work area changes.
 func (s *Service) CollectEscaped() []winapi.HWND {
+	if s.escaped == nil {
+		s.escaped = map[winapi.HWND]parked{}
+	}
 	// Retry windows that escaped on an earlier refresh until the app either
 	// re-parks them or decides the user intentionally brought them back.
 	var escaped []winapi.HWND
@@ -665,8 +677,11 @@ func (s *Service) save() {
 		os.Remove(s.journal)
 		return
 	}
-	entries := make([]entry, 0, len(s.parked))
+	entries := make([]entry, 0, len(s.parked)+len(s.escaped))
 	for h, p := range s.parked {
+		entries = append(entries, entry{uint64(h), p.Home.Left, p.Home.Top, p.Spot.X, p.Spot.Y})
+	}
+	for h, p := range s.escaped {
 		entries = append(entries, entry{uint64(h), p.Home.Left, p.Home.Top, p.Spot.X, p.Spot.Y})
 	}
 	data, _ := json.Marshal(entries)

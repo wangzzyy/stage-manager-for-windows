@@ -235,7 +235,7 @@ func (a *App) settleForeground() {
 		a.fg.h = 0
 		return
 	}
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == root })
 	if i < 0 {
 		// New windows often get their title, or show, a moment after

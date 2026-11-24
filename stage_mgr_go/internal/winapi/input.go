@@ -41,5 +41,6 @@ func ReleaseLeftButton() bool {
 		Type: inputMouse,
 		Mouse: mouseInput{Flags: mouseEventLeftUp},
 	}
-	return procSendInput.Call(1, uintptr(unsafe.Pointer(&in)), unsafe.Sizeof(in)) == 1
+	sent, _, _ := procSendInput.Call(1, uintptr(unsafe.Pointer(&in)), unsafe.Sizeof(in))
+	return sent == 1
 }

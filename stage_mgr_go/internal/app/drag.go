@@ -30,6 +30,7 @@ type drag struct {
 	// not the maximized monitor-sized rectangle from the start of the drag.
 	wasMaximized bool
 	maximizedPlacement winapi.WindowPlacementSnapshot
+	maximizedPlacementOK bool
 	transitionsDisabled bool
 	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
@@ -49,7 +50,10 @@ func (a *App) startDrag(h winapi.HWND) {
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	g := &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
 	if g.wasMaximized {
-		g.maximizedPlacement, _ = winapi.CaptureWindowPlacement(h)
+		g.maximizedPlacement, g.maximizedPlacementOK = winapi.CaptureWindowPlacement(h)
+		if !g.maximizedPlacementOK {
+			debugf("maximized drag snapshot %x failed; native maximize restore will not be overridden", h)
+		}
 		winapi.SetTransitionsDisabled(h, true)
 		g.transitionsDisabled = true
 		debugf("maximized drag snapshot %x placement=%+v; DWM transitions disabled", h, g.maximizedPlacement)
@@ -139,7 +143,7 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized, g.maximizedPlacement)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {

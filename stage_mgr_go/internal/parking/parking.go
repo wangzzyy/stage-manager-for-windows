@@ -52,6 +52,7 @@ type parked struct {
 // Service parks and unparks windows. Use it from one goroutine.
 type Service struct {
 	parked  map[winapi.HWND]parked
+	maximized map[winapi.HWND]bool // windows whose native maximize state was lost during caption drag
 	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
@@ -75,7 +76,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]bool{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -85,6 +86,13 @@ func (s *Service) IsParked(h winapi.HWND) bool { _, ok := s.parked[h]; return ok
 func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 	p, ok := s.parked[h]
 	return p.Home, ok
+}
+
+// RestoreMaximized marks a parked window to return maximized after its card is selected.
+func (s *Service) RestoreMaximized(h winapi.HWND) {
+	if s.IsParked(h) {
+		s.maximized[h] = true
+	}
 }
 
 // Count is how many windows are parked.
@@ -197,7 +205,12 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
 			winapi.SetCloaked(w, false)
-			winapi.ShowNoActivate(w)
+			if s.maximized[w] {
+				delete(s.maximized, w)
+				winapi.ShowMaximizedNoActivate(w)
+			} else {
+				winapi.ShowNoActivate(w)
+			}
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -456,6 +469,7 @@ func (s *Service) RestoreAll() {
 		}
 	}
 	s.parked = map[winapi.HWND]parked{}
+	s.maximized = map[winapi.HWND]bool{}
 	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()

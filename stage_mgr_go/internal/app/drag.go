@@ -136,7 +136,7 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.maximizedNormal)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized, g.maximizedNormal)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -155,7 +155,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.maximizedNormal)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized, g.maximizedNormal)
 				return
 			}
 		}
@@ -309,7 +309,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin, restoreMaximized winapi.Rect) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedNormal winapi.Rect) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -356,8 +356,8 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
 			if parked {
 				a.park.Rehome(w.HWND, home)
-				if !restoreMaximized.Empty() {
-					a.park.RestoreMaximized(w.HWND, restoreMaximized)
+				if restoreMaximized {
+					a.park.RestoreMaximized(w.HWND, maximizedNormal)
 				}
 			}
 		}

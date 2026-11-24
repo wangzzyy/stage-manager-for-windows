@@ -70,6 +70,15 @@ func (a *App) dragOver() {
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]
 			key := a.groupKey(w)
+			if target == g.home && slices.Contains(a.heading(target), key) {
+				origin := winapi.FrameBounds(g.h)
+				// Keep the existing window-to-card flight for same-display drops.
+				// The handoff callback owns hiding and parking the real HWND.
+				g.converted = true
+				a.beginWindowCardDrag(target, key)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				return
+			}
 			if target != g.home && a.settings.HideInactive {
 				origin := winapi.FrameBounds(g.h)
 				stage := g.stage

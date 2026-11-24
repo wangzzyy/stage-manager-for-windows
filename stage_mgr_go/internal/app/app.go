@@ -808,11 +808,16 @@ func (a *App) reparkEscaped() {
 		// reports it as the foreground window during that interval.
 		keepParked := handedOff && time.Now().Before(until)
 		if i < 0 || (h == fg && !keepParked) || !a.settings.HideInactive {
+			a.park.ForgetEscaped(h)
 			continue
 		}
 		w := a.windows[i]
 		if d := a.displayOf(w); d != nil && a.managed(d) && !d.model.OnStage(a.groupKey(w)) {
-			a.park.Park(h)
+			// Restore the existing parking record, not a new one: the
+			// original home must survive a transient escape during handoff.
+			a.park.ReparkEscaped(h)
+		} else {
+			a.park.ForgetEscaped(h)
 		}
 	}
 }

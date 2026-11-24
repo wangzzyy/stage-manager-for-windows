@@ -37,12 +37,21 @@ func (a *App) startDrag(h winapi.HWND) {
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	from := winapi.WindowRect(h)
 	homeRect := from
-	// GetWindowRect is the maximized frame, not the saved normal placement.
-	// Rehoming to it after cancelling the native move loop briefly maximizes
-	// the window again and can flash the full-screen rectangle before it settles.
-	if winapi.IsZoomed(h) {
+	// The move-size-start event can arrive after Windows has already restored
+	// a maximized window. Prefer the catalog's last pre-drag snapshot, which
+	// records both the maximized state and its saved normal placement.
+	if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h }); i >= 0 {
+		w := a.windows[i]
+		if w.Zoomed && !w.NormalRect.Empty() {
+			homeRect = w.NormalRect
+			debugf("fullscreen-drag step=start-snapshot hwnd=%x source=catalog zoomed=true rect=%v normal=%v current_zoomed=%t", h, w.Rect, w.NormalRect, winapi.IsZoomed(h))
+		}
+	}
+	// Fallback for a window that was not present in the last catalog snapshot.
+	if homeRect == from && winapi.IsZoomed(h) {
 		if normal, ok := winapi.NormalBounds(h); ok {
 			homeRect = normal
+			debugf("fullscreen-drag step=start-snapshot hwnd=%x source=live zoomed=true normal=%v", h, normal)
 		}
 	}
 	a.drag = &drag{h: h, from: from, homeRect: homeRect, home: home, at: home}

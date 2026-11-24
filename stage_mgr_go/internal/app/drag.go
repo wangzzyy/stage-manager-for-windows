@@ -287,11 +287,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		}
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
+		// Ending the native move loop is best-effort. Some applications
+		// do not acknowledge WM_CANCELMODE promptly after Windows restores
+		// a maximized window. Do not abandon the handoff in that case: keep
+		// the HWND hidden and park it at the sampled drag position. If the
+		// move loop later writes its final position back, CollectEscaped
+		// will detect and re-park it.
 		if !winapi.CancelMoveSize(w.HWND) {
-			winapi.ShowNoActivate(w.HWND)
-			winapi.DwmFlush()
-			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
-			return
+			debugf("drag into card: native move loop did not settle for %v; parking anyway", w.HWND)
 		}
 		parked := false
 		if a.settings.HideInactive {
@@ -344,11 +347,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// hung application from holding up the handoff.
 	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
 		if !startFlight() {
-			// No overlay will take over; restore the real card after a failed
-			// capture so externalLayer cannot leave it permanently invisible.
+			// A missing/failed still must not leave the real HWND behind
+			// while the model has already moved its app into the strip.
+			// Complete the same hide-and-park handoff, then reveal the
+			// ordinary card as a non-animated fallback.
+			handoff()
 			card.externalLayer = false
 			card.externalPresented = false
-			debugf("drag into card: capture produced no drawable animation; restored real card")
+			debugf("drag into card: capture produced no drawable animation; completed non-animated handoff")
 		}
 		a.redraw()
 	})

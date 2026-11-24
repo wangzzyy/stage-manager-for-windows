@@ -815,7 +815,9 @@ func (a *App) reparkEscaped() {
 		if d := a.displayOf(w); d != nil && a.managed(d) && !d.model.OnStage(a.groupKey(w)) {
 			// Restore the existing parking record, not a new one: the
 			// original home must survive a transient escape during handoff.
-			a.park.ReparkEscaped(h)
+			if !a.park.ReparkEscaped(h) {
+				debugf("repark escaped %x %q failed; will retry", h, w.Title)
+			}
 		} else {
 			a.park.ForgetEscaped(h)
 		}

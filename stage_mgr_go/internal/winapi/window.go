@@ -73,6 +73,7 @@ const (
 	HwndBottom    HWND = 1
 
 	swRestore         = 9
+	swShowMaximized   = 3
 	swShowNoActivate  = 4
 	swMinimize        = 6
 	swShowMinimized   = 2
@@ -279,6 +280,7 @@ func SetWindowPos(h, insertAfter HWND, x, y, w, ht int32, flags uint32) bool {
 }
 
 func ShowNoActivate(h HWND) { procShowWindowAsync.Call(uintptr(h), swShowNoActivate) }
+func Maximize(h HWND)        { procShowWindowAsync.Call(uintptr(h), swShowMaximized) }
 func Hide(h HWND)           { procShowWindow.Call(uintptr(h), swHide) }
 func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 
@@ -369,6 +371,23 @@ type windowPlacement struct {
 	MaxPosition    Point
 	NormalPosition Rect
 	Device         Rect
+}
+
+
+// NormalRect returns a window's saved non-maximized rectangle in screen
+// coordinates, even while it is currently maximized. The placement is in
+// workspace coordinates for ordinary windows, so convert it to screen space.
+func NormalRect(h HWND) (r Rect, ok bool) {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return Rect{}, false
+	}
+	r = wp.NormalPosition
+	if ExStyle(h)&WsExToolWindow == 0 {
+		mi := monitorInfo(MonitorFromRect(r))
+		r = r.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
+	}
+	return r, !r.Empty()
 }
 
 // RestoredRect returns where a minimized window goes back to, in screen

@@ -26,6 +26,7 @@ type drag struct {
 	stage    []string
 	dwell    *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	maximized bool // Windows restored this window from maximized as its title bar was dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -34,7 +35,17 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	from := winapi.WindowRect(h)
+	maximized := winapi.IsZoomed(h)
+	if maximized {
+		// GetWindowRect now describes the maximized frame. Preserve the
+		// normal placement so the card uses the same geometry as an
+		// ordinary window after Windows restores it for the native drag.
+		if normal, _, ok := winapi.RestoredRect(h); ok && !normal.Empty() {
+			from = normal
+		}
+	}
+	a.drag = &drag{h: h, from: from, home: home, at: home, maximized: maximized}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -244,6 +255,13 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // native move loop cancelled and the real window parked.
 func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
+	// Windows restores a maximized window to its saved normal bounds when
+	// its title bar is dragged. Remember the maximized presentation state
+	// separately; the native drag, parking and card animation all use the
+	// normal-size window geometry.
+	if g := a.drag; g != nil && g.h == w.HWND && g.maximized {
+		a.maximizeOnReturn[w.HWND] = true
+	}
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
 	handoff := func() {

@@ -13,6 +13,10 @@ import (
 // a third display or back, does not set it flying.
 const dwell = 150 * time.Millisecond
 
+// maximizedBeforeMove remembers the last maximized state observed before
+// Windows restores a window as its native title-bar drag begins.
+var maximizedBeforeMove = map[winapi.HWND]bool{}
+
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {

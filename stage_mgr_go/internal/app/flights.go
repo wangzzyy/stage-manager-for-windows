@@ -985,8 +985,13 @@ func (l *layer) view(c *ui.Context) {
 				to = targets[landing.hwnd]
 			}
 			if to.w <= 0 || to.h <= 0 {
-				// The strip may not have completed its first layout yet.
-				// Keep the landing alive and try again on the next frame.
+				// The destination layout may be deferred while another stage
+				// switch is busy. A frame retry alone cannot create the card:
+				// refresh is what rebuilds d.sets and its layout. Keep asking
+				// for that shared refresh until the ordinary card pose exists.
+				if l.owner != nil && l.owner.a != nil {
+					l.owner.a.refreshSoon()
+				}
 				l.pace.frame(l.win)
 				return
 			}

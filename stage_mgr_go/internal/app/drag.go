@@ -13,9 +13,26 @@ import (
 // a third display or back, does not set it flying.
 const dwell = 150 * time.Millisecond
 
-// maximizedBeforeMove remembers the last maximized state observed before
-// Windows restores a window as its native title-bar drag begins.
-var maximizedBeforeMove = map[winapi.HWND]time.Time{}
+// maximizedSnapshot remembers the last maximized state and the normal
+// (restored) bounds before Windows restores a window for a title-bar drag.
+type maximizedSnapshot struct {
+	at            time.Time
+	restoreBounds winapi.Rect
+}
+
+// draggedDrop is a window already being dragged into a strip while another
+// stage switch is running. Its model changes must wait for that switch's
+// commit, or the in-flight switch can overwrite the destination card.
+type draggedDrop struct {
+	d, from   *display
+	w         catalog.Window
+	next      []string
+	home      winapi.Rect
+	origin    winapi.Rect
+	maximized bool
+}
+
+var maximizedBeforeMove = map[winapi.HWND]maximizedSnapshot{}
 
 // drag is a window the user is moving, from the start of the move to its
 // end.
@@ -29,8 +46,9 @@ type drag struct {
 	since    time.Time
 	stage    []string
 	dwell         *time.Timer
-	wasMaximized bool // Windows restored this maximized window as its native move loop began
-	converted    bool // the window has already become a strip card while still being dragged
+	wasMaximized  bool // Windows restored this maximized window as its native move loop began
+	restoreBounds winapi.Rect // its normal size and position, before it was maximized
+	converted     bool // the window has already become a strip card while still being dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -39,9 +57,22 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	wasMaximized := winapi.IsZoomed(h)
-	if at, ok := maximizedBeforeMove[h]; ok {
-		wasMaximized = wasMaximized || time.Since(at) < time.Second
+	var restoreBounds winapi.Rect
+	if snapshot, ok := maximizedBeforeMove[h]; ok {
+		if time.Since(snapshot.at) < time.Second {
+			wasMaximized = true
+			restoreBounds = snapshot.restoreBounds
+		}
 		delete(maximizedBeforeMove, h)
+	}
+	// WINDOWPLACEMENT retains the normal rectangle while a window is
+	// maximized. Read it before the native move loop's restore gesture can
+	// replace the visible HWND bounds with the pointer-positioned rectangle.
+	if wasMaximized && restoreBounds.Empty() {
+		restoreBounds, _, _ = winapi.RestoredRect(h)
+	}
+	if wasMaximized && restoreBounds.Empty() {
+		restoreBounds = winapi.WindowRect(h)
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	if wasMaximized {
@@ -49,7 +80,7 @@ func (a *App) startDrag(h winapi.HWND) {
 		// move loop. Do not call Restore: Windows already owns the gesture.
 		winapi.SetTransitionsDisabled(h, true)
 	}
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: wasMaximized}
+	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: wasMaximized, restoreBounds: restoreBounds}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -79,12 +110,22 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
+				home := g.from
+				if g.wasMaximized && !g.restoreBounds.Empty() {
+					home = g.restoreBounds
+				}
+				next := slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key })
 				g.converted = true
-				// Start the card's external drag before the native move loop
-				// ends. The loop-end event may clear a.drag before the switch
-				// has finished arranging the new card.
+				// A pending drop must not start the strip's pointer-card drag:
+				// the user may release the mouse before the running switch ends.
+				// That pointer gesture would consume the placeholder before the
+				// real card is committed. The deferred handoff owns the drop.
+				if a.busy {
+					a.pendingDragDrop = &draggedDrop{d: target, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
+					return
+				}
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin, g.wasMaximized)
+				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -96,14 +137,23 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
-				g.converted = true
-				// Preserve the pointer gesture independently of a.drag: the
-				// native move-size-end event can arrive before card creation.
-				a.beginWindowCardDrag(target, key)
-				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
+				if g.wasMaximized && !g.restoreBounds.Empty() {
+					home = g.restoreBounds
+				}
+				next := slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key })
+				g.converted = true
+				// While a switch is running, keep only the native drop request.
+				// Starting a pointer-card drag here races mouse-up: its temporary
+				// card can be released before the real card exists.
+				if a.busy {
+					a.pendingDragDrop = &draggedDrop{d: target, from: g.home, w: w, next: next, home: home, origin: origin, maximized: g.wasMaximized}
+					return
+				}
+				a.beginWindowCardDrag(target, key)
+				a.leave(g.home, w)
+				a.sendDraggedToStrip(target, w, next, home, origin, g.wasMaximized)
 				return
 			}
 		}
@@ -258,6 +308,34 @@ func (a *App) stripUnder(p winapi.Point) *display {
 		return nil
 	}
 	return d
+}
+
+// flushDraggedDrop carries out a strip drop deferred while a stage switch
+// was running. Call only after the running and queued switches have ended.
+func (a *App) flushDraggedDrop() {
+	p := a.pendingDragDrop
+	if p == nil || a.busy {
+		return
+	}
+	a.pendingDragDrop = nil
+	// The native drag may have ended, or its window/display may have gone
+	// away, while another stage was switching. Do not create a card for a
+	// stale HWND or a strip that is no longer managed.
+	if a.quitting || !winapi.IsWindow(p.w.HWND) || !a.managed(p.d) || p.d.strip == nil {
+		return
+	}
+	a.windows = a.cat.Windows()
+	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == p.w.HWND })
+	if i < 0 {
+		return
+	}
+	p.w = a.windows[i]
+	if p.from != nil && a.managed(p.from) {
+		a.leave(p.from, p.w)
+	}
+	// Mouse-up only ends the pointer gesture. The deferred native drop still
+	// completes the same capture, hide/park, card creation and flight path.
+	a.sendDraggedToStrip(p.d, p.w, p.next, p.home, p.origin, p.maximized)
 }
 
 // sendDraggedToStrip prepares a card handoff. The real window stays visible

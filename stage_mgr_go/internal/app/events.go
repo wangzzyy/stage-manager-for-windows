@@ -116,7 +116,12 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 		// can arrive after IsZoomed has already become false.
 		if a.drag == nil || h != a.drag.h {
 			if winapi.IsZoomed(h) {
-				maximizedBeforeMove[h] = time.Now()
+				restoreBounds, _, ok := winapi.RestoredRect(h)
+				if ok && !restoreBounds.Empty() {
+					maximizedBeforeMove[h] = maximizedSnapshot{at: time.Now(), restoreBounds: restoreBounds}
+				} else {
+					maximizedBeforeMove[h] = maximizedSnapshot{at: time.Now()}
+				}
 			}
 		}
 		if a.drag != nil && h == a.drag.h {

@@ -87,10 +87,17 @@ func (a *App) start(r *switchRequest) {
 		if activate && focus != 0 {
 			winapi.Activate(focus)
 		}
-		a.refresh()
+		// End the strip's switching state before laying out a deferred drop.
+		// The drop starts its card flight immediately and needs the final,
+		// non-switching strip layout to exist before its first landing frame.
 		if d.strip != nil {
 			d.strip.setSwitching(false)
 		}
+		a.refresh()
+		// A deferred native drop may be waiting for this switch to settle.
+		// The no-flight fast path must release it too; otherwise no handover
+		// callback will ever arrive to flush the pending card creation.
+		a.flushDraggedDrop()
 		return
 	}
 	a.busy = true
@@ -253,8 +260,14 @@ func (h *handover) land() {
 func (h *handover) stop() {
 	clear(h.d.landing)
 	h.a.busy, h.a.running = false, nil
-	if !h.a.runQueued(h.d) && h.d.strip != nil {
-		h.d.strip.setSwitching(false)
+	if !h.a.runQueued(h.d) {
+		// Make the strip ready for ordinary card layout before starting the
+		// deferred window-to-card handoff.
+		if h.d.strip != nil {
+			h.d.strip.setSwitching(false)
+		}
+		h.a.refresh()
+		h.a.flushDraggedDrop()
 	}
 }
 
@@ -273,9 +286,14 @@ func (a *App) ended(d *display) {
 	if a.runQueued(d) {
 		return
 	}
+	// A deferred drop must see the settled strip layout. In particular,
+	// starting its flight while switching is still set can leave the landing
+	// waiting on a card pose that will not be requested again.
 	if d.strip != nil {
 		d.strip.setSwitching(false)
 	}
+	a.refresh()
+	a.flushDraggedDrop()
 	if a.fg.h != 0 && a.fg.timer == nil {
 		a.fg.timer = after(10*time.Millisecond, a.settleForeground)
 	}

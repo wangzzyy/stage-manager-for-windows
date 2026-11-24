@@ -68,7 +68,7 @@ func (a *App) dragOver() {
 				a.drag = nil
 				if winapi.SetWindowPos(g.h, 0, normal.Left, normal.Top, normal.W(), normal.H(),
 					winapi.SwpNoZOrder|winapi.SwpNoActivate|winapi.SwpFrameChanged) {
-					if winapi.PostCaptionDrag(g.h, cursor) {
+					if winapi.StartCaptionDrag(g.h, cursor) {
 						debugf("fullscreen drag restart %x from %v (frame %v) to %v", g.h, original, fullscreen, normal)
 						return
 					}

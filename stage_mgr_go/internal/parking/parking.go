@@ -238,9 +238,15 @@ func (s *Service) unpark(h winapi.HWND) bool {
 			if snapped, ok := s.snapped[w]; ok {
 				delete(s.snapped, w)
 				delete(s.homing, w)
-				winapi.SetCloaked(w, false)
+				// SW_HIDE, not DWM cloak, is what keeps the parked HWND out of
+				// composition. Remove the cloak while it is still SW_HIDE'd.
+				beforeRect, beforeVisible := winapi.WindowRect(w), winapi.IsWindowVisible(w)
+				uncloaked := winapi.SetCloaked(w, false)
+				s.logf("restore snapped begin %x visible=%v rect=%v uncloaked=%v target=%v placement=%+v",
+					w, beforeVisible, beforeRect, uncloaked, snapped.rect, snapped.placement)
 				restored := winapi.ShowSnappedPlacementNoActivate(w, snapped.placement, snapped.rect)
-				s.logf("restore snapped %x ok=%v rect=%v saved=%v", w, restored, winapi.WindowRect(w), snapped.rect)
+				s.logf("restore snapped end %x ok=%v visible=%v rect=%v target=%v",
+					w, restored, winapi.IsWindowVisible(w), winapi.WindowRect(w), snapped.rect)
 				if !restored {
 					s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
 					winapi.ShowNoActivate(w)
@@ -506,12 +512,17 @@ func (s *Service) RestoreAll() {
 		}
 		if snapped, ok := s.snapped[h]; ok {
 			delete(s.homing, h)
-			winapi.SetCloaked(h, false)
+			beforeRect, beforeVisible := winapi.WindowRect(h), winapi.IsWindowVisible(h)
+			uncloaked := winapi.SetCloaked(h, false)
+			s.logf("restore-all snapped begin %x visible=%v rect=%v uncloaked=%v target=%v placement=%+v",
+				h, beforeVisible, beforeRect, uncloaked, snapped.rect, snapped.placement)
 			if !winapi.ShowSnappedPlacementNoActivate(h, snapped.placement, snapped.rect) {
 				home := onDesktop(p.Home)
 				s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
 				winapi.ShowNoActivate(h)
 			}
+			s.logf("restore-all snapped end %x visible=%v rect=%v target=%v",
+				h, winapi.IsWindowVisible(h), winapi.WindowRect(h), snapped.rect)
 			delete(s.snapped, h)
 		} else if placement, maximized := s.maximized[h]; maximized {
 			delete(s.homing, h)

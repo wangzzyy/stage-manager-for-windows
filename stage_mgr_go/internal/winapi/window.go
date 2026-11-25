@@ -435,7 +435,7 @@ func ShowMaximizedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot) 
 	wp := windowPlacement{
 		Length: uint32(unsafe.Sizeof(windowPlacement{})),
 		Flags: snapshot.Flags,
-		ShowCmd: swHide,
+		ShowCmd: 1, // SW_SHOWNORMAL
 		MinPosition: snapshot.MinPosition,
 		MaxPosition: snapshot.MaxPosition,
 		NormalPosition: snapshot.NormalPosition,
@@ -469,15 +469,15 @@ func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, re
 	wp := windowPlacement{
 		Length: uint32(unsafe.Sizeof(windowPlacement{})),
 		Flags: snapshot.Flags,
-		ShowCmd: 1, // SW_SHOWNORMAL
+		ShowCmd: swHide,
 		MinPosition: snapshot.MinPosition,
 		MaxPosition: snapshot.MaxPosition,
 		NormalPosition: snapshot.NormalPosition,
 	}
-	// Keep the HWND hidden throughout both geometry updates. A parked window
-	// is SW_HIDE'd; using SW_SHOWNORMAL here exposes NormalPosition for a frame
-	// before SetWindowPos can put it back in its snap cell, which produces a
-	// one-frame flash of the pre-snap rectangle.
+	// Ordinary stage switches park windows off-screen but leave them visible.
+	// Hide explicitly before changing WINDOWPLACEMENT so neither its saved
+	// NormalPosition nor the intermediate SetWindowPos can be composed.
+	Hide(h)
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}

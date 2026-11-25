@@ -241,9 +241,13 @@ func (h *handover) land() {
 	arrived := h.arriving
 	after(700*time.Millisecond, func() {
 		for _, w := range arrived {
-			if winapi.IsWindow(w.HWND) {
-				winapi.SetTransitionsDisabled(w.HWND, false)
+			if !winapi.IsWindow(w.HWND) {
+				continue
 			}
+			before := winapi.WindowRect(w.HWND)
+			winapi.SetTransitionsDisabled(w.HWND, false)
+			debugf("switch transition reset %x visible=%v zoomed=%v rect-before=%v rect-after=%v",
+				w.HWND, winapi.IsWindowVisible(w.HWND), winapi.IsZoomed(w.HWND), before, winapi.WindowRect(w.HWND))
 		}
 	})
 }

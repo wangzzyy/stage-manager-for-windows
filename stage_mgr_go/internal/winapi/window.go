@@ -457,6 +457,30 @@ func ShowMaximizedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot) 
 		SwpNoSize|SwpNoMove|SwpNoZOrder|SwpNoActivate|SwpShowWindow)
 }
 
+// ShowSnappedPlacementNoActivate restores a previously snapped window's
+// native placement and then reapplies its exact visible rectangle. Windows
+// can discard snap-cell geometry when a window is moved off the virtual
+// desktop; WINDOWPLACEMENT alone may contain the pre-snap restore rectangle,
+// so both pieces are needed.
+func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, rect Rect) bool {
+	if snapshot.NormalPosition.Empty() || rect.Empty() {
+		return false
+	}
+	wp := windowPlacement{
+		Length: uint32(unsafe.Sizeof(windowPlacement{})),
+		Flags: snapshot.Flags,
+		ShowCmd: 1, // SW_SHOWNORMAL
+		MinPosition: snapshot.MinPosition,
+		MaxPosition: snapshot.MaxPosition,
+		NormalPosition: snapshot.NormalPosition,
+	}
+	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	return SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
+		SwpNoZOrder|SwpNoActivate|SwpFrameChanged|SwpShowWindow)
+}
+
 // ShowMaximizedAtNoActivate is retained for callers that only have a normal
 // rectangle. New drag handoffs should use the full placement snapshot.
 func ShowMaximizedAtNoActivate(h HWND, normal Rect) bool {

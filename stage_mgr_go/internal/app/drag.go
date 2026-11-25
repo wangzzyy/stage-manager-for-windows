@@ -64,6 +64,9 @@ func (a *App) startDrag(h winapi.HWND) {
 		g = previous
 		g.from, g.home, g.at = winapi.WindowRect(h), home, home
 		g.wasMaximized = winapi.IsZoomed(h)
+		g.wasSnapped = false
+		g.snappedPlacementOK = false
+		g.snappedRect = winapi.Rect{}
 		g.fullscreen = false
 		g.fullscreenNormal, g.fullscreenFrame = winapi.Rect{}, winapi.Rect{}
 		g.restoredRect = winapi.Rect{}
@@ -462,7 +465,10 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 				if restoreMaximized {
 					a.park.RestoreMaximized(w.HWND, maximizedPlacement)
 				} else if restoreSnapped {
-					a.park.RestoreSnapped(w.HWND, snappedPlacement, snappedRect)
+					// Keep the original snap-cell size and move it with the
+					// card's chosen home when the drop targets another display.
+					targetRect := snappedRect.Offset(home.Left-snappedRect.Left, home.Top-snappedRect.Top)
+					a.park.RestoreSnapped(w.HWND, snappedPlacement, targetRect)
 				}
 			}
 		}

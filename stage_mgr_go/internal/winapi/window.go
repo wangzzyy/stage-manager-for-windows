@@ -474,11 +474,21 @@ func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, re
 		MaxPosition: snapshot.MaxPosition,
 		NormalPosition: snapshot.NormalPosition,
 	}
+	// Keep the HWND hidden throughout both geometry updates. A parked window
+	// is SW_HIDE'd; using SW_SHOWNORMAL here exposes NormalPosition for a frame
+	// before SetWindowPos can put it back in its snap cell, which produces a
+	// one-frame flash of the pre-snap rectangle.
+	wp.ShowCmd = swHide
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}
-	return SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
-		SwpNoZOrder|SwpNoActivate|SwpFrameChanged|SwpShowWindow)
+	if !SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
+		SwpNoZOrder|SwpNoActivate|SwpFrameChanged) {
+		return false
+	}
+	// Only reveal the HWND after its final snapped rectangle is in place.
+	ShowNoActivate(h)
+	return true
 }
 
 // ShowMaximizedAtNoActivate is retained for callers that only have a normal

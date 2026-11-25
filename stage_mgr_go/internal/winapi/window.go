@@ -481,13 +481,11 @@ func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, re
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}
-	if !SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
-		SwpNoZOrder|SwpNoActivate|SwpFrameChanged) {
-		return false
-	}
-	// Only reveal the HWND after its final snapped rectangle is in place.
-	ShowNoActivate(h)
-	return true
+	// SWP_SHOWWINDOW reveals the HWND at the rectangle just assigned.
+	// Do not use ShowWindowAsync(SW_SHOWNOACTIVATE) here: that show command
+	// can reapply WINDOWPLACEMENT.NormalPosition and undo the snap rectangle.
+	return SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
+		SwpNoZOrder|SwpNoActivate|SwpFrameChanged|SwpShowWindow)
 }
 
 // ShowMaximizedAtNoActivate is retained for callers that only have a normal

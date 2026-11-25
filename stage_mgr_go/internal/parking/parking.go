@@ -50,9 +50,15 @@ type parked struct {
 }
 
 // Service parks and unparks windows. Use it from one goroutine.
+type snappedPlacement struct {
+	placement winapi.WindowPlacementSnapshot
+	rect      winapi.Rect
+}
+
 type Service struct {
-	parked  map[winapi.HWND]parked
-	maximized map[winapi.HWND]winapi.WindowPlacementSnapshot // pre-drag normal rectangles for windows whose maximize state was lost
+	parked    map[winapi.HWND]parked
+	maximized map[winapi.HWND]winapi.WindowPlacementSnapshot // pre-drag placement for windows whose maximize state was lost
+	snapped   map[winapi.HWND]snappedPlacement
 	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
@@ -76,7 +82,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.WindowPlacementSnapshot{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.WindowPlacementSnapshot{}, snapped: map[winapi.HWND]snappedPlacement{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -86,6 +92,27 @@ func (s *Service) IsParked(h winapi.HWND) bool { _, ok := s.parked[h]; return ok
 func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 	p, ok := s.parked[h]
 	return p.Home, ok
+}
+
+// RestoreSnapped marks a parked window to return to its saved snap cell.
+func (s *Service) RestoreSnapped(h winapi.HWND, placement winapi.WindowPlacementSnapshot, rect winapi.Rect) {
+	if s.IsParked(h) && !rect.Empty() {
+		s.snapped[h] = snappedPlacement{placement: placement, rect: rect}
+		s.logf("parked %x will restore snapped placement=%+v rect=%v", h, placement, rect)
+	}
+}
+
+// rememberSnapped captures a window's snap placement before moving it off-screen.
+func (s *Service) rememberSnapped(h winapi.HWND) {
+	if !winapi.IsSnapped(h) {
+		return
+	}
+	placement, ok := winapi.CaptureWindowPlacement(h)
+	rect := winapi.WindowRect(h)
+	if ok && !rect.Empty() {
+		s.snapped[h] = snappedPlacement{placement: placement, rect: rect}
+		s.logf("parked %x will restore snapped placement=%+v rect=%v", h, placement, rect)
+	}
 }
 
 // RestoreMaximized marks a parked window to return maximized after its card is selected.
@@ -120,7 +147,9 @@ func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
 	}
 	home := onDesktop(from)
 	spot := spotFor(home)
+	s.rememberSnapped(h)
 	if !moveImmediate(h, spot) {
+		delete(s.snapped, h)
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, At: time.Now()}
@@ -206,7 +235,17 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	for w, p := range s.parked {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
-			if placement, maximized := s.maximized[w]; maximized {
+			if snapped, ok := s.snapped[w]; ok {
+				delete(s.snapped, w)
+				delete(s.homing, w)
+				winapi.SetCloaked(w, false)
+				restored := winapi.ShowSnappedPlacementNoActivate(w, snapped.placement, snapped.rect)
+				s.logf("restore snapped %x ok=%v rect=%v saved=%v", w, restored, winapi.WindowRect(w), snapped.rect)
+				if !restored {
+					s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+					winapi.ShowNoActivate(w)
+				}
+			} else if placement, maximized := s.maximized[w]; maximized {
 				delete(s.maximized, w)
 				// A maximized window must not enter the ordinary sendHome/Chase
 				// path. Those routines keep applying SetWindowPos to its outer
@@ -465,7 +504,16 @@ func (s *Service) RestoreAll() {
 		if !winapi.IsWindow(h) {
 			continue
 		}
-		if placement, maximized := s.maximized[h]; maximized {
+		if snapped, ok := s.snapped[h]; ok {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			if !winapi.ShowSnappedPlacementNoActivate(h, snapped.placement, snapped.rect) {
+				home := onDesktop(p.Home)
+				s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+				winapi.ShowNoActivate(h)
+			}
+			delete(s.snapped, h)
+		} else if placement, maximized := s.maximized[h]; maximized {
 			delete(s.homing, h)
 			winapi.SetCloaked(h, false)
 			winapi.ShowMaximizedPlacementNoActivate(h, placement)
@@ -482,7 +530,16 @@ func (s *Service) RestoreAll() {
 		if !winapi.IsWindow(h) {
 			continue
 		}
-		if placement, maximized := s.maximized[h]; maximized {
+		if snapped, ok := s.snapped[h]; ok {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			if !winapi.ShowSnappedPlacementNoActivate(h, snapped.placement, snapped.rect) {
+				home := onDesktop(p.Home)
+				s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+				winapi.ShowNoActivate(h)
+			}
+			delete(s.snapped, h)
+		} else if placement, maximized := s.maximized[h]; maximized {
 			delete(s.homing, h)
 			winapi.SetCloaked(h, false)
 			winapi.ShowMaximizedPlacementNoActivate(h, placement)
@@ -497,6 +554,7 @@ func (s *Service) RestoreAll() {
 	}
 	s.parked = map[winapi.HWND]parked{}
 	s.maximized = map[winapi.HWND]winapi.WindowPlacementSnapshot{}
+	s.snapped = map[winapi.HWND]snappedPlacement{}
 	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()
@@ -671,6 +729,7 @@ func (s *Service) parkOneUsing(h, owner winapi.HWND, place func(r winapi.Rect) (
 		return false
 	}
 	home, spot := place(r)
+	s.rememberSnapped(h)
 	// A normal stage switch uses Park rather than the drag handoff path.
 	// Moving a maximized window off-screen can make Windows forget its
 	// maximized show state, so preserve the complete placement before the
@@ -681,6 +740,7 @@ func (s *Service) parkOneUsing(h, owner winapi.HWND, place func(r winapi.Rect) (
 		maximizedPlacement, wasMaximized = winapi.CaptureWindowPlacement(h)
 	}
 	if !mover(h, spot) {
+		delete(s.snapped, h)
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, Owner: owner, At: time.Now()}

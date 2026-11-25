@@ -577,6 +577,8 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 	for h, p := range s.parked {
 		if !winapi.IsWindow(h) {
 			delete(s.parked, h)
+			delete(s.maximized, h)
+			delete(s.snapped, h)
 			changed = true
 			continue
 		}
@@ -635,6 +637,8 @@ func (s *Service) ReparkEscaped(h winapi.HWND) bool {
 func (s *Service) ForgetEscaped(h winapi.HWND) {
 	if _, ok := s.escaped[h]; ok {
 		delete(s.escaped, h)
+		delete(s.maximized, h)
+		delete(s.snapped, h)
 		s.save()
 	}
 }

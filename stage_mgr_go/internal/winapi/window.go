@@ -435,7 +435,7 @@ func ShowMaximizedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot) 
 	wp := windowPlacement{
 		Length: uint32(unsafe.Sizeof(windowPlacement{})),
 		Flags: snapshot.Flags,
-		ShowCmd: 1, // SW_SHOWNORMAL
+		ShowCmd: swHide,
 		MinPosition: snapshot.MinPosition,
 		MaxPosition: snapshot.MaxPosition,
 		NormalPosition: snapshot.NormalPosition,
@@ -478,7 +478,6 @@ func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, re
 	// is SW_HIDE'd; using SW_SHOWNORMAL here exposes NormalPosition for a frame
 	// before SetWindowPos can put it back in its snap cell, which produces a
 	// one-frame flash of the pre-snap rectangle.
-	wp.ShowCmd = swHide
 	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
 		return false
 	}

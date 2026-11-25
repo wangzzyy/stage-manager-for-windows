@@ -504,7 +504,7 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	// before rebuilding the merged card: groupsOf reads a.windows, and
 	// keeping its pre-merge snapshot would briefly draw the old stack order
 	// until the next scheduled refresh.
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	debugf("merge card %q into %q on %s", source.title(), target, d.mon.Device)
 	a.arrange(d, a.groupsOf(d), time.Now())
 	a.redraw()

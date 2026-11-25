@@ -31,6 +31,10 @@ type drag struct {
 	wasMaximized bool
 	maximizedPlacement winapi.WindowPlacementSnapshot
 	maximizedPlacementOK bool
+	wasSnapped bool
+	snappedPlacement winapi.WindowPlacementSnapshot
+	snappedPlacementOK bool
+	snappedRect winapi.Rect
 	transitionsDisabled bool
 	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
@@ -68,6 +72,16 @@ func (a *App) startDrag(h winapi.HWND) {
 		g.since = time.Now()
 	} else {
 		g = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
+		g.wasSnapped = winapi.IsSnapped(h)
+		if g.wasSnapped {
+			g.snappedPlacement, g.snappedPlacementOK = winapi.CaptureWindowPlacement(h)
+			g.snappedRect = winapi.WindowRect(h)
+			if !g.snappedPlacementOK {
+				debugf("snapped drag snapshot %x failed; snap geometry will use the live rectangle fallback", h)
+			} else {
+				debugf("snapped drag snapshot %x placement=%+v rect=%v", h, g.snappedPlacement, g.snappedRect)
+			}
+		}
 	}
 	if g.wasMaximized {
 		g.maximizedPlacement, g.maximizedPlacementOK = winapi.CaptureWindowPlacement(h)
@@ -198,7 +212,7 @@ func (a *App) dragOver() {
 				if g.wasMaximized && !g.restoredRect.Empty() {
 					home = g.restoredRect
 				}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, g.wasSnapped && g.snappedPlacementOK, g.snappedPlacement, g.snappedRect, func() func(func(bool)) {
 					if !g.captureAtDragStart {
 						return nil
 					}
@@ -228,7 +242,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, func() func(func(bool)) {
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, g.wasSnapped && g.snappedPlacementOK, g.snappedPlacement, g.snappedRect, func() func(func(bool)) {
 					if !g.captureAtDragStart {
 						return nil
 					}
@@ -396,7 +410,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedPlacement winapi.WindowPlacementSnapshot, awaitCapture func(func(bool))) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedPlacement winapi.WindowPlacementSnapshot, restoreSnapped bool, snappedPlacement winapi.WindowPlacementSnapshot, snappedRect winapi.Rect, awaitCapture func(func(bool))) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -447,6 +461,8 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 				a.park.Rehome(w.HWND, home)
 				if restoreMaximized {
 					a.park.RestoreMaximized(w.HWND, maximizedPlacement)
+				} else if restoreSnapped {
+					a.park.RestoreSnapped(w.HWND, snappedPlacement, snappedRect)
 				}
 			}
 		}

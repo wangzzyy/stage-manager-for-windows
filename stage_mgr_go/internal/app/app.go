@@ -147,6 +147,8 @@ type display struct {
 type App struct {
 	settings settings.Settings
 	store    settings.Store
+	// sessionCompanions are exceptions added from a card for this run only.
+	sessionCompanions map[string]bool
 	cat      *catalog.Catalog
 	park     *parking.Service
 	media    *media
@@ -394,6 +396,19 @@ func (a *App) groupsOf(d *display) []*group {
 
 func showing(a *App, g *group) bool {
 	return slices.ContainsFunc(g.windows, func(w catalog.Window) bool { return !a.hidden(w) })
+}
+
+// companion reports whether an executable is a saved or session-only exception.
+func (a *App) companion(exe string) bool {
+	if a.settings.Companion(exe) {
+		return true
+	}
+	for entry := range a.sessionCompanions {
+		if settings.CompanionMatches(entry, exe) {
+			return true
+		}
+	}
+	return false
 }
 
 // syncDisplays matches the displays and their strips to the monitors.

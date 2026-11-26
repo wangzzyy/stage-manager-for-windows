@@ -42,7 +42,7 @@ var zhHant = Strings{
 	Spacing:      "卡片間距",
 	CardsAt:      "卡片垂直位置",
 	Tilt:         "透視強度",
-	TiltDesc:     "控制透視強度：0 為不變形，數值越大，匯聚點越靠近卡片。",
+	TiltDesc:     "控制側邊欄向螢幕內旋轉的幅度：0 為不旋轉，數值越大，卡片旋轉越明顯、投影寬度越窄。",
 	TiltOff:      "無",
 	DefaultValue: "預設值：%s，按一下還原",
 

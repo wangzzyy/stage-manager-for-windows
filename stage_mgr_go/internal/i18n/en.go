@@ -40,9 +40,9 @@ var en = Strings{
 	IconSize:     "Icon size",
 	Spacing:      "Card spacing",
 	CardsAt:      "Vertical position",
-	Tilt:         "3D perspective",
-	TiltDesc:     "Cards turn sideways as on macOS and face you when hovered. Higher values tilt them more; 0 turns it off.",
-	TiltOff:      "Off",
+	Tilt:         "Inward rotation",
+	TiltDesc:     "Controls how far the strip turns inward: 0 is flat, and higher values turn the cards farther into the screen.",
+	TiltOff:      "None",
 	DefaultValue: "Default: %s. Click to restore.",
 
 	CardsAtTip:       "Where the middle of the column of cards sits in the sidebar, from top to bottom.",

@@ -142,9 +142,6 @@ var (
 	badgePerspective = float32(160)
 )
 
-// checkIcon is the mark in the badge: a bold check, in the text color.
-var checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.6l4.4 4.4 7.8-9"/></svg>`))
-
 // stageBadge draws the badge of the card of the stage in r, grown to its size
 // by pop, from 0 to 1, and turned about its own middle by turn degrees. It
 // turns itself, rather than ride in the layer of the card's windows and be
@@ -171,8 +168,8 @@ func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
 		// lit disc, and its copy a little below it.
 		mark := d * 0.6
 		x, y := (d-mark)/2, (d-mark)/2+d*0.02
-		ui.Icon(c.Key("emboss"), checkIcon).Absolute().Left(x).Top(y + d*0.05).FontSize(mark).TextColor(badgeEmboss).PassThrough()
-		ui.Icon(c.Key("check"), checkIcon).Absolute().Left(x).Top(y).FontSize(mark).TextColor(badgeCheck).PassThrough()
+		ui.Text(c, "✓").Absolute().Left(x).Top(y + d*0.05).Size(mark, mark).FontSize(mark*0.9).TextColor(ui.RGB(16, 120, 50)).Bold().PassThrough()
+		ui.Text(c, "✓").Absolute().Left(x).Top(y).Size(mark, mark).FontSize(mark*0.9).TextColor(badgeCheck).Bold().PassThrough()
 	})
 }
 
@@ -429,35 +426,29 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint puts the perspective's vanishing point at the middle of the
-// opposite vertical edge of the display. The outer edge remains the card's
-// fixed base; its top and bottom edges run toward that distant point, while
-// the inner edge is foreshortened without being turned around its own axis.
-func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
+// cardViewpoint keeps the card's vertical convergence centered while the
+// slider controls perspective strength. Zero uses an effectively infinite
+// perspective distance (no distortion); larger values bring the vanishing
+// point closer to the card.
+func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, perspective float32) {
 	if s.scale <= 0 {
-		return 0.5, cardPerspective
+		return 0.5, 1_000_000
 	}
 	work := s.d.mon.Work
 	scale := float64(s.scale)
-	outerX := float64(s.rect.Left) + float64(card.X)*scale
-	farX := float64(work.Right)
-	if s.right() {
-		outerX = float64(s.rect.Left) + float64(card.X+card.W)*scale
-		farX = float64(work.Left)
-	}
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
 	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
-	// With a Y rotation, parallel lines converge at p/sin(tilt).
-	// Set p so that the vanishing point lands on the opposite display edge,
-	// rather than beyond it; using the full edge distance here made the
-	// perspective too weak and the cards looked almost flat.
-	angle := math.Abs(float64(tilt)) * math.Pi / 180
-	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle))
-	if perspective < 1 {
-		perspective = cardPerspective
+
+	level = min(max(level, 0), settings.MaxTilt)
+	// Keep the camera distance fixed: the slider changes the card's inward
+	// rotation, and the perspective projection itself determines its visible
+	// width. With no rotation, use an effectively infinite distance so the
+	// card is exactly flat.
+	if level == 0 {
+		return originY, 1_000_000
 	}
-	return originY, perspective
+	return originY, cardPerspective
 }
 
 // cardDrawOrder returns the cards in layout order, with the previously
@@ -809,7 +800,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
 	// drive it toward zero, then abruptly fall back to cardPerspective.
-	originY, perspective := s.cardViewpoint(box, restTilt)
+	originY, perspective := s.cardViewpoint(box, restTilt, a.settings.Tilt)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement
 	// so hovering enlarges a card in place instead of pulling it toward the
@@ -889,7 +880,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
+			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, perspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()

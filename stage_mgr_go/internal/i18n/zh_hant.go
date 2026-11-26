@@ -41,9 +41,9 @@ var zhHant = Strings{
 	IconSize:     "圖示大小",
 	Spacing:      "卡片間距",
 	CardsAt:      "卡片垂直位置",
-	Tilt:         "立體透視",
-	TiltDesc:     "卡片像 macOS 一樣側向轉動，懸停時轉向你。數值越大越傾斜，0 為關閉。",
-	TiltOff:      "關閉",
+	Tilt:         "向內旋轉",
+	TiltDesc:     "控制側邊欄向螢幕內旋轉的幅度：0 為不旋轉，數值越大，卡片旋轉越明顯、投影寬度越窄。",
+	TiltOff:      "無",
 	DefaultValue: "預設值：%s，按一下還原",
 
 	CardsAtTip:       "整列卡片的中心放在側邊欄從上到下的哪個位置。",

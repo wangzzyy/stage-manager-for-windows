@@ -132,6 +132,9 @@ func TestNoCompanionsStaysEmpty(t *testing.T) {
 }
 
 func TestTilt(t *testing.T) {
+	if Default().Tilt != 3 || DefaultTilt != 3 {
+		t.Fatalf("default tilt = %d, want 3", Default().Tilt)
+	}
 	if s := (Settings{Tilt: 99}).Normalize(); s.Tilt != MaxTilt {
 		t.Fatalf("tilt 99 normalized to %d", s.Tilt)
 	}

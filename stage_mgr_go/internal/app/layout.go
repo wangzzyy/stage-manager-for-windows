@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo/ui"
 )
@@ -21,8 +22,8 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	tiltStep        = 4 // degrees a resting card turns for each step of the tilt setting: the default 6 turns it 24°
-	cardPerspective = 640
+	cardPerspectiveTilt = 24 // Maximum inward rotation at the slider maximum.
+	cardPerspective     = 120
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the
@@ -35,11 +36,11 @@ const (
 // give it: its width a share of the cards', and its height in DIPs.
 type panel struct{ share, h float32 }
 
-// cardTilts returns the degrees a resting card turns at a tilt setting.
-// A hovered card faces the user squarely.
+// cardTilts turns cards inward as the setting rises. Hovering turns a card
+// back toward the user; the perspective distance stays fixed.
 func cardTilts(level int) (rest, hover float32) {
-	rest = float32(level) * tiltStep
-	return rest, 0
+	level = min(max(level, 0), settings.MaxTilt)
+	return cardPerspectiveTilt * float32(level) / float32(settings.MaxTilt), 0
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

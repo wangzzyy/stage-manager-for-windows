@@ -22,7 +22,7 @@ const (
 	stripMargin     = 28
 	minCardScale    = 0.46
 	cardPerspectiveTilt = 24 // Fixed angle; the slider moves the vanishing point, not the card.
-	cardPerspective     = 640
+	cardPerspective     = 120
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the

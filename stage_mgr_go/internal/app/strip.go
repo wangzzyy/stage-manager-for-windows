@@ -180,6 +180,13 @@ func (s *strip) zOrder() winapi.HWND {
 	if s.switching {
 		return winapi.HwndTopmost
 	}
+	// Once a fully covered strip has been revealed from the screen edge,
+	// keep it topmost for the whole reveal lifetime. In particular, do not
+	// let the covered-sidebar policy lower it while the slide-out is running;
+	// poll clears edgeRevealZOrder only after the final frame has settled.
+	if s.edgeRevealZOrder && !s.away {
+		return winapi.HwndTopmost
+	}
 	// With covered-sidebar auto-hide disabled, keep the strip below the
 	// covering window until the pointer is over a part of the strip that is
 	// not covered by another window. Otherwise, PR #18's original rules apply.

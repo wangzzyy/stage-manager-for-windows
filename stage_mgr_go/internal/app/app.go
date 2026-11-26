@@ -213,6 +213,8 @@ type App struct {
 	sysLang    i18n.Lang // the language of Windows, for settings that follow it
 	settingsUI *settingsWindow
 	flights    *flights
+	// excludedWindows lasts only as long as this Stage Manager process.
+	excludedWindows map[winapi.HWND]bool
 	// latest is a release newer than the one running, found by
 	// checkUpdate (update.go), and published the newest release it has
 	// found at all, newer or not, for the about pane to show; checking is
@@ -356,6 +358,25 @@ func (a *App) displayOf(w catalog.Window) *display {
 // windows are not listed at all, so they never reach here.
 func (a *App) hidden(w catalog.Window) bool { return a.park.IsParked(w.HWND) }
 
+func (a *App) excluded(w catalog.Window) bool {
+	return a.settings.ExcludedExe(w.Exe) || a.excludedWindows[w.HWND]
+}
+
+// exclude leaves the selected card's windows on the desktop and removes
+// them from the model. Permanent exclusions are keyed by executable;
+// session exclusions are keyed by HWND and disappear when this process exits.
+func (a *App) exclude(g *group, permanent bool) {
+	if g == nil || len(g.windows) == 0 { return }
+	if permanent {
+		a.applySettings(a.settings.WithExcluded(g.front().Exe, true))
+	} else {
+		if a.excludedWindows == nil { a.excludedWindows = make(map[winapi.HWND]bool) }
+		for _, w := range g.windows { a.excludedWindows[w.HWND] = true }
+	}
+	a.park.RestoreAll()
+	a.refresh()
+}
+
 // groupKey is the stage identity of a window. App remains the executable
 // identity for icons and companion matching; only the model's opaque key
 // changes when independent-window mode is enabled.
@@ -373,7 +394,7 @@ func (a *App) groupsOf(d *display) []*group {
 	var out []*group
 	by := map[string]*group{}
 	for _, w := range a.windows {
-		if a.displayOf(w) != d {
+		if a.displayOf(w) != d || a.excluded(w) {
 			continue
 		}
 		key := a.groupKey(w)

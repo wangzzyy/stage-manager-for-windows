@@ -452,7 +452,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 			tilt, lift = st.tilt, st.lift
 		}
 		card := l.cards[i]
-		originY, perspective := s.cardViewpoint(card, rest)
+		originY, perspective := s.cardViewpoint(card, rest, f.a.settings.Tilt)
 		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
 		pivotY := card.Y - verticalCompensation + originY*card.H
 		for j, r := range f.a.stack(set, card, right) {

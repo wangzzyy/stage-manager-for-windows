@@ -30,7 +30,7 @@ var en = Strings{
 	StripShows: "Contents",
 
 	HideWhenCovered:     "Hide sidebar when covered",
-	HideWhenCoveredDesc: "Automatically hide the sidebar when a stage window overlaps its cards. Move the pointer to the screen edge to bring it back. When off, the sidebar stays visible underneath the window.",
+	HideWhenCoveredDesc: "Automatically hide the sidebar when a stage window overlaps its cards. Move the pointer to the screen edge to bring it back. When off, an idle sidebar stays underneath the window; hovering or interacting follows the existing sidebar z-order.",
 
 	Mode:         "Style",
 	ModeDesc:     "How the sidebar shares the screen with windows.",

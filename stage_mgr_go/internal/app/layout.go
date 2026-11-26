@@ -649,7 +649,6 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 	return ui.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
 }
 
-// turnedPoint is where the point (x, y) of a w×h card shows once the card is
 // tiltTargetOrigin moves a card's vertical transform origin from its own
 // midpoint toward the display's centerline as the tilt setting increases.
 // strength is normalized to 0..1, so a flat card keeps its original pivot.

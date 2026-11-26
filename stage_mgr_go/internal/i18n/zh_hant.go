@@ -41,9 +41,9 @@ var zhHant = Strings{
 	IconSize:     "圖示大小",
 	Spacing:      "卡片間距",
 	CardsAt:      "卡片垂直位置",
-	Tilt:         "透視匯聚點",
-	TiltDesc:     "水平調整卡片匯聚的目標點：0 為螢幕中心，10 為對側螢幕邊緣。",
-	TiltOff:      "螢幕中心",
+	Tilt:         "透視強度",
+	TiltDesc:     "控制透視強度：0 為不變形，數值越大，匯聚點越靠近卡片。",
+	TiltOff:      "無",
 	DefaultValue: "預設值：%s，按一下還原",
 
 	CardsAtTip:       "整列卡片的中心放在側邊欄從上到下的哪個位置。",

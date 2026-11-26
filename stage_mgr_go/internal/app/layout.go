@@ -21,8 +21,7 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	tiltStep            = 0  // Settings-driven card tilt is disabled.
-	cardPerspectiveTilt  = 24 // Fixed angle that preserves the screen-centered perspective.
+	cardPerspectiveTilt = 24 // Fixed angle; the slider moves the vanishing point, not the card.
 	cardPerspective     = 640
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
@@ -36,11 +35,10 @@ const (
 // give it: its width a share of the cards', and its height in DIPs.
 type panel struct{ share, h float32 }
 
-// cardTilts returns the degrees a resting card turns at a tilt setting.
-// A hovered card faces the user squarely.
-func cardTilts(level int) (rest, hover float32) {
-	rest = float32(level) * tiltStep
-	return rest, 0
+// cardTilts keeps the perspective angle fixed while a hovered card faces the
+// user squarely. The setting moves the vanishing point, not this angle.
+func cardTilts(_ int) (rest, hover float32) {
+	return cardPerspectiveTilt, 0
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

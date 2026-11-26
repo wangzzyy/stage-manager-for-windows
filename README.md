@@ -36,6 +36,7 @@ Only the app you're using stays on the desktop. Everything else shrinks into car
 - Drag a card to the desktop, or Shift-click it, for two apps side by side.
 - The card of the stage you just left gets a dashed outline in the accent color, so after a detour to another app you can see at a glance what you were in the middle of. It can be turned off in Settings → Strip.
 - Cards that stay put: turn on "List every stage in the strip" (Settings → Strip, off by default) and the cards stop trading places as you switch. The app on the stage keeps its card in the strip, as a faint gray ghost with a green check on its corner, whose opacity and grayscale you can set, and moving the pointer onto it, or a click, shakes it to say that this is the one open; the app you leave goes back to its own slot rather than the one you clicked, and new apps join at the bottom. If that slot is out of sight, the strip scrolls to it.
+- Flat cards use live DWM thumbnails for their window contents; when a card tilts, its cached stills remain in use so the perspective and overlays stay aligned.
 - List of the stage's windows: when the stage holds more than one window, small live thumbnails of them are listed top to bottom at the top of the strip, numbered 1/N, the active one highlighted, each tile tinted with the main color its window shows (black, white and gray left out), so windows of one app, such as VS Code windows with different title bar colors, tell apart at a glance. Click one to bring it to the front, hover to close it, or right-click to send its app to the strip. It can be turned off in Settings → Strip.
 - Overview of every window on a display: click one to switch, or hover it to close it. Win+Tab opens it on every display at once, as Task View does, and so does a button over the display's bottom-left corner. With the strip on the left, that button and the panel at the bottom of the strip join into one big rounded button, flush with the screen's left and bottom edges, that lights up as one. The panel is frosted glass: its opacity and how much it blurs what is behind it are in the settings.
 - Drag a window to another monitor and it joins the stage there.
@@ -70,7 +71,7 @@ Works on Windows 10 and 11 (64-bit).
 
 ## Known issues
 
-- Cards show a snapshot from the moment the window was tucked away; they don't update live.
+- Tilted cards still show the snapshot captured when the window was tucked away; flat cards switch to live DWM content.
 - Some games and DRM-protected video can't be captured, so their card shows only the icon.
 - Apps running as administrator may not be manageable.
 

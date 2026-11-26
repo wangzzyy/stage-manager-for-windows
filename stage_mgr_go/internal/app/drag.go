@@ -18,6 +18,7 @@ const dwell = 150 * time.Millisecond
 type drag struct {
 	h    winapi.HWND
 	from winapi.Rect // where it was as the move began
+	homeRect winapi.Rect // normal placement to restore after a strip handoff
 	home *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
@@ -34,7 +35,26 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	from := winapi.WindowRect(h)
+	homeRect := from
+	// The move-size-start event can arrive after Windows has already restored
+	// a maximized window. Prefer the catalog's last pre-drag snapshot, which
+	// records both the maximized state and its saved normal placement.
+	if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h }); i >= 0 {
+		w := a.windows[i]
+		if w.Zoomed && !w.NormalRect.Empty() {
+			homeRect = w.NormalRect
+			debugf("fullscreen-drag step=start-snapshot hwnd=%x source=catalog zoomed=true rect=%v normal=%v current_zoomed=%t", h, w.Rect, w.NormalRect, winapi.IsZoomed(h))
+		}
+	}
+	// Fallback for a window that was not present in the last catalog snapshot.
+	if homeRect == from && winapi.IsZoomed(h) {
+		if normal, ok := winapi.NormalBounds(h); ok {
+			homeRect = normal
+			debugf("fullscreen-drag step=start-snapshot hwnd=%x source=live zoomed=true normal=%v", h, normal)
+		}
+	}
+	a.drag = &drag{h: h, from: from, homeRect: homeRect, home: home, at: home}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -69,7 +89,7 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.homeRect, origin)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -255,6 +275,26 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		// dragged HWND on some app/window combinations. Hide the real HWND
 		// explicitly for the short handoff, and ignore its corresponding
 		// WinEvent hide/show so it is not mistaken for an app closing.
+		// End the user's physical drag before hiding or parking the HWND.
+		// WM_CANCELMODE alone ends the modal loop but leaves the left button
+		// logically down; some applications continue repositioning themselves
+		// in response to that held input after the window has been parked.
+		if !winapi.ReleaseLeftButton() {
+			// Roll back the external card drag as well: the real HWND is
+			// still visible and remains under the user's native drag.
+			st := d.card(a.groupKey(w))
+			st.external, st.externalLayer, st.externalPresented = false, false, false
+			st.externalAnimating, st.dragging = false, false
+			a.setCardDrag(nil)
+			if d.strip != nil {
+				d.strip.setDragging(false)
+				d.strip.win.Invalidate()
+			}
+			a.redraw()
+			debugf("fullscreen-drag step=rollback hwnd=%x phase=handoff failed_step=mouse-up reason=SendInput-failed window_visible=%t", w.HWND, winapi.IsWindowVisible(w.HWND))
+			return
+		}
+		debugf("fullscreen-drag step=mouse-up hwnd=%x phase=handoff ok=true", w.HWND)
 		if a.handoffHidden == nil {
 			a.handoffHidden = make(map[winapi.HWND]time.Time)
 		}
@@ -317,11 +357,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	card.externalFrom = pose{}
 	card.externalStarted = time.Time{}
 	a.windows = a.cat.Windows()
+	listed := slices.ContainsFunc(a.windows, func(window catalog.Window) bool { return window.HWND == w.HWND })
+	debugf("fullscreen-drag step=refresh hwnd=%x phase=handoff listed=%t rect=%v frame=%v", w.HWND, listed, winapi.WindowRect(w.HWND), winapi.FrameBounds(w.HWND))
 	a.refresh()
 
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
+	debugf("fullscreen-drag step=capture-request hwnd=%x phase=capturing rect=%v", w.HWND, winapi.WindowRect(w.HWND))
 	// Capture only the dragged HWND. A desktop BitBlt is not a window
 	// capture: it includes whichever windows happen to overlap its rectangle.
 	// Use the window's PrintWindow capture path and let its timeout keep a

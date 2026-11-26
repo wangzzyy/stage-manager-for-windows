@@ -23,7 +23,8 @@ type Window struct {
 	PID uint32
 	// Rect is the window rectangle, invisible resize borders included,
 	// and Frame the visible frame DWM draws.
-	Rect, Frame winapi.Rect
+	Rect, Frame, NormalRect winapi.Rect
+	Zoomed      bool
 	Foreground  bool
 	// Z is where the window is in the z-order among those listed with it,
 	// 0 in front.
@@ -189,6 +190,13 @@ func (c *Catalog) inspect(h, fg winapi.HWND, floating bool) (Window, bool) {
 	}
 	w := Window{HWND: h, Title: title, Foreground: h == fg}
 	w.Rect, w.Frame = winapi.WindowRect(h), winapi.FrameBounds(h)
+	// Keep the pre-drag placement in the catalog snapshot. Windows may
+	// restore a maximized window before it delivers EVENT_SYSTEM_MOVESIZESTART,
+	// so querying IsZoomed/NormalBounds only in startDrag can be too late.
+	w.Zoomed = winapi.IsZoomed(h)
+	if w.Zoomed {
+		w.NormalRect, _ = winapi.NormalBounds(h)
+	}
 	if w.Frame.W() < 40 || w.Frame.H() < 30 {
 		return Window{}, false
 	}

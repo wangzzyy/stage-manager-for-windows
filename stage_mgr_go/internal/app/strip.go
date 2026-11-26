@@ -177,10 +177,9 @@ func (s *strip) zOrder() winapi.HWND {
 	if s.switching {
 		return winapi.HwndTopmost
 	}
-	// With covered-sidebar auto-hide disabled, keep an idle strip below
-	// the covering window. Once the pointer hovers over it, a click/drag is
-	// held, or a stage transition starts, fall through to PR #18's original
-	// z-order rules unchanged.
+	// With covered-sidebar auto-hide disabled, keep the strip below the
+	// covering window until the pointer actually hovers a card. Otherwise,
+	// PR #18's original z-order rules apply unchanged.
 	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnCard {
 		return winapi.HwndBottom
 	}
@@ -507,23 +506,25 @@ func (s *strip) hardEdge(p winapi.Point) bool {
 // over reports whether a screen point is over a card, or the band of the
 // overview's button: the strip takes the pointer there.
 func (s *strip) over(p winapi.Point) bool {
-	if s.overCard(p) {
-		return true
-	}
-	f := s.footerHit
-	return f.W > 0 && float32(float64(p.X-s.rect.Left)/s.scale) >= f.X &&
-		float32(float64(p.X-s.rect.Left)/s.scale) < f.X+f.W &&
-		float32(float64(p.Y-s.rect.Top)/s.scale) >= f.Y &&
-		float32(float64(p.Y-s.rect.Top)/s.scale) < f.Y+f.H
-}
-
-// overCard reports whether a screen point is over an actual card.
-func (s *strip) overCard(p winapi.Point) bool {
 	x := float32(float64(p.X-s.rect.Left) / s.scale)
 	y := float32(float64(p.Y-s.rect.Top) / s.scale)
 	const slop = 6
 	for _, r := range s.hits {
 		if x >= r.X-slop && x < r.X+r.W+slop && y >= r.Y-slop && y < r.Y+r.H+slop {
+			return true
+		}
+	}
+	f := s.footerHit
+	return f.W > 0 && x >= f.X && x < f.X+f.W && y >= f.Y && y < f.Y+f.H
+}
+
+// overCard reports whether a screen point is inside an actual card, without
+// the extra hit-test margin used for normal card interaction.
+func (s *strip) overCard(p winapi.Point) bool {
+	x := float32(float64(p.X-s.rect.Left) / s.scale)
+	y := float32(float64(p.Y-s.rect.Top) / s.scale)
+	for _, r := range s.hits {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
 			return true
 		}
 	}

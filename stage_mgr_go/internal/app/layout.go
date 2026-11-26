@@ -649,6 +649,15 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 	return ui.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
 }
 
+// tiltTargetStrength makes low tilt settings move the perspective target
+// more noticeably, while keeping the full-setting target 25% of the way
+// back from the display centerline toward the card. The square-root curve
+// is shared by both directions of the animated geometry.
+func tiltTargetStrength(normalized float32) float32 {
+	normalized = min(max(normalized, 0), 1)
+	return 0.75 * float32(math.Sqrt(float64(normalized)))
+}
+
 // tiltTargetOrigin moves a card's vertical transform origin from its own
 // midpoint toward the display's centerline as the tilt setting increases.
 // strength is normalized to 0..1, so a flat card keeps its original pivot.

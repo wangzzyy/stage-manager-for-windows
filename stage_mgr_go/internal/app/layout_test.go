@@ -483,7 +483,6 @@ func TestTurnedPoint(t *testing.T) {
 		t.Fatalf("the mirrored adjusted vertical pivot moved to %v", y)
 	}
 }
-}
 
 func TestStageWindowLayoutRightIsMirrorOfLeft(t *testing.T) {
 	card := ui.Rect{X: 30, Y: 40, W: 280, H: 180}

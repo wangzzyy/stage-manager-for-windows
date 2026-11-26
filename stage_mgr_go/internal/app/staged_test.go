@@ -380,6 +380,8 @@ func TestCardViewpointMovesTowardOppositeEdge(t *testing.T) {
 		s, _, _ := testStrip(t)
 		if right {
 			s.a.settings.Sides = map[string]settings.Side{s.d.mon.Device: settings.Right}
+			s.rect.Left = s.d.mon.Work.Right - s.rect.Right
+			s.rect.Right = s.d.mon.Work.Right
 		}
 		card := s.d.layout.cards[0]
 		work := s.d.mon.Work

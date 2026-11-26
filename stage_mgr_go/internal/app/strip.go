@@ -399,6 +399,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 			} else if s.shown {
 				// A partly exposed strip remains visible underneath the
 				// covering window, so its uncovered area can still be hovered.
+				s.edgeReveal = false
 				want = true
 			}
 		} else {

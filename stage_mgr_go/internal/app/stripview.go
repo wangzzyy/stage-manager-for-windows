@@ -142,14 +142,6 @@ var (
 	badgePerspective = float32(160)
 )
 
-// The SVG strokes use explicit colors: the icon renderer does not reliably
-// inherit currentColor from TextColor, which could leave the badge without
-// its white check.
-var (
-	checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.6l4.4 4.4 7.8-9"/></svg>`))
-	embossIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#107832" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.6l4.4 4.4 7.8-9"/></svg>`))
-)
-
 // stageBadge draws the badge of the card of the stage in r, grown to its size
 // by pop, from 0 to 1, and turned about its own middle by turn degrees. It
 // turns itself, rather than ride in the layer of the card's windows and be
@@ -176,8 +168,8 @@ func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
 		// lit disc, and its copy a little below it.
 		mark := d * 0.6
 		x, y := (d-mark)/2, (d-mark)/2+d*0.02
-		ui.Icon(c.Key("emboss"), embossIcon).Absolute().Left(x).Top(y + d*0.05).FontSize(mark).PassThrough()
-		ui.Icon(c.Key("check"), checkIcon).Absolute().Left(x).Top(y).FontSize(mark).PassThrough()
+		ui.Text(c, "✓").Absolute().Left(x).Top(y + d*0.05).Size(mark, mark).FontSize(mark*0.9).TextColor(ui.RGB(16, 120, 50)).Bold().PassThrough()
+		ui.Text(c, "✓").Absolute().Left(x).Top(y).Size(mark, mark).FontSize(mark*0.9).TextColor(badgeCheck).Bold().PassThrough()
 	})
 }
 

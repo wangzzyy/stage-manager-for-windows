@@ -61,7 +61,7 @@ func iconShadow(img *image.NRGBA) *image.NRGBA {
 		radius        = 24
 		passes        = 3
 		offsetY       = 5
-		blurStrength  = 90
+		blurStrength  = 50
 		padding       = radius*passes + offsetY
 	)
 	bounds := img.Bounds()

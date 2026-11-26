@@ -434,7 +434,8 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		local := ui.Rect{W: card.W, H: card.H}
 		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
 		deg, _ := cardTilts(s.a.settings.Tilt)
-		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right)
+		originY, _ := s.cardViewpoint(card, deg)
+		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right, originY)
 		img := tt.Image()
 		x0, y0, x1, y1 := 1<<30, 1<<30, -1, -1
 		for y := 0; y < img.Bounds().Dy(); y++ {

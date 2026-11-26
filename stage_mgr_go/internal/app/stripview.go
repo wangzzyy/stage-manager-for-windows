@@ -429,10 +429,10 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint puts the perspective's vanishing point at the middle of the
-// opposite vertical edge of the display. The outer edge remains the card's
-// fixed base; its top and bottom edges run toward that distant point, while
-// the inner edge is foreshortened without being turned around its own axis.
+// cardViewpoint moves the perspective's vertical target from the card's
+// midpoint toward the centerline of the opposite display edge as the tilt
+// setting increases. The outer edge remains the card's fixed base; its inner
+// edge recedes toward the display, without the card turning around its own axis.
 func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
 	if s.scale <= 0 {
 		return 0.5, cardPerspective
@@ -447,7 +447,12 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	}
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
-	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	// At zero tilt the card keeps its own midpoint as the pivot. Increasing
+	// the existing tilt slider progressively moves that pivot toward the
+	// opposite-edge centerline, making the card recede into the display.
+	normalizedTilt := float32(math.Abs(float64(tilt))) / float32(settings.MaxTilt*tiltStep)
+	strength := tiltTargetStrength(normalizedTilt)
+	originY = tiltTargetOrigin(card.Y, card.H, float32(localCenterY), strength)
 	// With a Y rotation, parallel lines converge at p/sin(tilt).
 	// Set p so that the vanishing point lands on the opposite display edge,
 	// rather than beyond it; using the full edge distance here made the
@@ -889,7 +894,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
+			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right, originY)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()

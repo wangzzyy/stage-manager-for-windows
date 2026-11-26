@@ -379,7 +379,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		}
 		// Keep the strip above the covering window through the entire
 		// slide-out. view() marks away only after its final frame settles.
-		if s.away || !s.d.covered {
+		if !s.d.covered || s.away && !s.edgeReveal && !edgeWake {
 			s.edgeRevealZOrder = false
 		}
 		// Keep the edge reveal raised while its slide-in animation runs.

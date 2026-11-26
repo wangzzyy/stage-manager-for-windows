@@ -52,6 +52,11 @@ type parked struct {
 // Service parks and unparks windows. Use it from one goroutine.
 type Service struct {
 	parked  map[winapi.HWND]parked
+	// protected windows belong to cards whose real HWND must remain parked.
+	// Some applications asynchronously restore/reposition a maximized HWND
+	// after the native move loop ends; keep enforcing its parked spot until
+	// the card is explicitly unparked.
+	protected map[winapi.HWND]bool
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
 	homing  map[winapi.HWND]homing
@@ -74,11 +79,21 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, protected: map[winapi.HWND]bool{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
 func (s *Service) IsParked(h winapi.HWND) bool { _, ok := s.parked[h]; return ok }
+
+// Protect keeps a parked window off the desktop even if its application
+// asynchronously changes its position after a native drag. Protection ends
+// only when the card is explicitly unparked or the window is gone.
+func (s *Service) Protect(h winapi.HWND) {
+	if s.IsParked(h) && winapi.IsWindow(h) {
+		s.protected[h] = true
+		s.Repark(h)
+	}
+}
 
 // Home returns where a parked window goes back to.
 func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
@@ -101,6 +116,29 @@ func (s *Service) ParkImmediate(h winapi.HWND) bool { return s.park(h, moveImmed
 // before a native move loop is cancelled. That loop can restore its starting
 // rectangle as it exits; sampling WindowRect afterwards would then both add
 // latency before moving the window and record the wrong place as its home.
+// Repark immediately returns a parked window to its recorded off-desktop
+// spot if its application moved it while the native move loop was unwinding.
+// Unlike CollectEscaped, this deliberately does not wait for the settle period:
+// a temporarily hidden handoff window must be safe before it is shown again.
+func (s *Service) Repark(h winapi.HWND) bool {
+	p, ok := s.parked[h]
+	if !ok || !winapi.IsWindow(h) || winapi.IsIconic(h) {
+		return false
+	}
+	r := winapi.WindowRect(h)
+	if r.Left == p.Spot.X && r.Top == p.Spot.Y {
+		return true
+	}
+	if !moveImmediate(h, p.Spot) {
+		return false
+	}
+	p.At = time.Now()
+	s.parked[h] = p
+	s.logf("repark %x %q from %v to %v", h, winapi.Title(h), r, p.Spot)
+	s.save()
+	return true
+}
+
 func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
 	if s.IsParked(h) || !winapi.IsWindow(h) || winapi.IsIconic(h) ||
 		from.Empty() || !winapi.OnAnyMonitor(from) {
@@ -193,8 +231,12 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	shiftX, shiftY := home.Left-root.Home.Left, home.Top-root.Home.Top
 	for w, p := range s.parked {
 		if w == h || p.Owner == h {
+			delete(s.protected, w)
 			delete(s.parked, w)
 			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			// A window may have remained hidden through a drag-to-card
+			// animation. Make it visible again only after it has been moved home.
+			winapi.ShowNoActivate(w)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -437,6 +479,7 @@ func (s *Service) RestoreAll() {
 		}
 	}
 	s.parked = map[winapi.HWND]parked{}
+	clear(s.protected)
 	clear(s.lifted)
 	s.save()
 }
@@ -450,7 +493,22 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 	for h, p := range s.parked {
 		if !winapi.IsWindow(h) {
 			delete(s.parked, h)
+			delete(s.protected, h)
 			changed = true
+			continue
+		}
+		if s.protected[h] {
+			r := winapi.WindowRect(h)
+			if r.Left != p.Spot.X || r.Top != p.Spot.Y {
+				if moveImmediate(h, p.Spot) {
+					p.At = time.Now()
+					s.parked[h] = p
+					s.logf("protected parked %x %q returned from %v to %v", h, winapi.Title(h), r, p.Spot)
+					changed = true
+				} else {
+					s.logf("protected parked %x %q could not return from %v to %v; will retry", h, winapi.Title(h), r, p.Spot)
+				}
+			}
 			continue
 		}
 		if time.Since(p.At) < settle {

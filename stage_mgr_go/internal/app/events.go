@@ -336,6 +336,20 @@ func (a *App) poll() {
 	}
 	cur := winapi.Cursor()
 	now := time.Now()
+	// Some maximized-window drag paths miss the move-size-start WinEvent.
+	// Recover the HWND directly from the foreground GUI thread's native
+	// move/size loop state before tracking the pointer.
+	if a.drag == nil {
+		if h := winapi.MoveSizeWindow(); h != 0 {
+			debugf("poll detected native move-size loop for %x", h)
+			a.startDrag(h)
+		}
+	}
+	// Location-change notifications can be sparse during native dragging;
+	// poll pointer position to detect entry into a strip reliably.
+	if a.drag != nil {
+		a.dragOver()
+	}
 	a.watchTaskbar(cur)
 	for _, d := range a.displays {
 		if d.strip != nil {

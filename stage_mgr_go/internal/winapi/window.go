@@ -73,6 +73,7 @@ const (
 	HwndBottom    HWND = 1
 
 	swRestore         = 9
+	swShowMaximized   = 3
 	swShowNoActivate  = 4
 	swMinimize        = 6
 	swShowMinimized   = 2
@@ -279,6 +280,7 @@ func SetWindowPos(h, insertAfter HWND, x, y, w, ht int32, flags uint32) bool {
 }
 
 func ShowNoActivate(h HWND) { procShowWindowAsync.Call(uintptr(h), swShowNoActivate) }
+func Maximize(h HWND)        { procShowWindowAsync.Call(uintptr(h), swShowMaximized) }
 func Hide(h HWND)           { procShowWindow.Call(uintptr(h), swHide) }
 func Minimize(h HWND)       { procShowWindowAsync.Call(uintptr(h), swMinimize) }
 
@@ -306,6 +308,30 @@ type guiThreadInfo struct {
 	MoveSize  HWND
 	Caret     HWND
 	CaretRect Rect
+}
+
+// MoveSizeWindow finds the HWND participating in any thread's native move/size
+// loop. The foreground thread is not necessarily the owner of the dragged window
+// (for example, when a shell or helper window temporarily owns activation), so
+// inspect top-level windows and deduplicate their GUI threads.
+func MoveSizeWindow() HWND {
+	getInfo := syscall.NewLazyDLL("user32.dll").NewProc("GetGUIThreadInfo")
+	seen := make(map[uint32]bool)
+	var moving HWND
+	EnumWindows(func(h HWND) bool {
+		_, tid := ProcessID(h)
+		if tid == 0 || seen[tid] {
+			return true
+		}
+		seen[tid] = true
+		info := guiThreadInfo{Size: uint32(unsafe.Sizeof(guiThreadInfo{}))}
+		if r, _, _ := getInfo.Call(uintptr(tid), uintptr(unsafe.Pointer(&info))); r != 0 && info.MoveSize != 0 {
+			moving = Root(info.MoveSize)
+			return false
+		}
+		return true
+	})
+	return moving
 }
 
 // CancelMoveSize asks Windows to end its native modal move/size loop and
@@ -369,6 +395,23 @@ type windowPlacement struct {
 	MaxPosition    Point
 	NormalPosition Rect
 	Device         Rect
+}
+
+
+// NormalRect returns a window's saved non-maximized rectangle in screen
+// coordinates, even while it is currently maximized. The placement is in
+// workspace coordinates for ordinary windows, so convert it to screen space.
+func NormalRect(h HWND) (r Rect, ok bool) {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return Rect{}, false
+	}
+	r = wp.NormalPosition
+	if ExStyle(h)&WsExToolWindow == 0 {
+		mi := monitorInfo(MonitorFromRect(r))
+		r = r.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
+	}
+	return r, !r.Empty()
 }
 
 // RestoredRect returns where a minimized window goes back to, in screen

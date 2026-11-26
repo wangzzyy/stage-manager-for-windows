@@ -190,6 +190,9 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
+	// maximizeOnReturn remembers maximized windows converted into cards.
+	// They use the ordinary card flight and are maximized only after landing.
+	maximizeOnReturn map[winapi.HWND]bool
 	// handoffHidden marks windows temporarily hidden while a native drag is
 	// being converted into a card; their WinEvent hide/show is not a close.
 	handoffHidden map[winapi.HWND]time.Time
@@ -245,7 +248,8 @@ func Start(o Options) *App {
 		media:     newMedia(),
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
-		dropHomes:     map[winapi.HWND]winapi.Rect{},
+		dropHomes:        map[winapi.HWND]winapi.Rect{},
+		maximizeOnReturn: map[winapi.HWND]bool{},
 		handoffHidden: map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},
 		trayIcon:  o.TrayIcon,
@@ -640,11 +644,28 @@ func (a *App) refresh() {
 	}
 	// While a peek shows, the parked windows are home on purpose and must
 	// not be taken for strays.
-	if !a.ready || a.busy || a.quitting || a.peek != 0 {
+	if !a.ready || a.busy || a.quitting || a.peek != 0 || a.flights.hasLanding() {
 		return
 	}
 	a.reparkEscaped()
+	// Hidden windows parked by a drag-to-card handoff are intentionally
+	// absent from EnumWindows-based catalog enumeration. Keep their last
+	// catalog records while they remain parked, so their cards stay present
+	// until Unpark moves them home and makes them visible again.
+	previous := a.windows
 	a.windows = a.cat.Windows()
+	listed := make(map[winapi.HWND]bool, len(a.windows))
+	for _, w := range a.windows {
+		listed[w.HWND] = true
+	}
+	for _, w := range previous {
+		if listed[w.HWND] || !a.park.IsParked(w.HWND) ||
+			!winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) {
+			continue
+		}
+		a.windows = append(a.windows, w)
+		listed[w.HWND] = true
+	}
 	if a.followMoved() {
 		return
 	}
@@ -801,7 +822,12 @@ func (a *App) reparkEscaped() {
 	fg := winapi.Foreground()
 	for _, h := range a.park.CollectEscaped() {
 		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
-		if i < 0 || h == fg || !a.settings.HideInactive {
+		// A maximized window converted from a native drag is still intended
+		// to be a strip card. Some apps (including Notepad++) move their
+		// restored window back onto the desktop after the handoff. Do not
+		// mistake its stale foreground state for a user-initiated move:
+		// re-park it so followMoved cannot put it straight back on the stage.
+		if i < 0 || h == fg && !a.maximizeOnReturn[h] || !a.settings.HideInactive {
 			continue
 		}
 		w := a.windows[i]

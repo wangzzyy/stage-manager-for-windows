@@ -352,6 +352,11 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 			a.requestMove(c.to, g, c.at, winapi.Rect{Left: int32(x), Top: int32(y), Right: int32(x + w), Bottom: int32(y + h)})
 			a.flights.endDrag(c.to, moveDrop)
 		case aimJoin:
+			// The strip may not have drawn a frame after the last pointer
+			// event. Rebuild the drop poses from the final drag offset so
+			// the arriving windows fly out from where the pointer let go,
+			// not from the card's last rendered (or resting) position.
+			st.poses = s.dragPoses(g, box, st.dx, st.dy, st.lift, st.tilt)
 			// The windows stay on the layer where they were let go until
 			// the switch flies them on.
 			a.setCardDrag(nil)

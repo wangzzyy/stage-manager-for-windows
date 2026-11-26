@@ -21,8 +21,9 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	tiltStep        = 0 // 3D card tilt is disabled.
-	cardPerspective = 640
+	tiltStep            = 0  // Settings-driven card tilt is disabled.
+	cardPerspectiveTilt  = 24 // Fixed angle that preserves the screen-centered perspective.
+	cardPerspective     = 640
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
 	// The cards keep clear of a band at the bottom of the strip, where the

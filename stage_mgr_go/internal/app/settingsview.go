@@ -673,7 +673,7 @@ func (sw *settingsWindow) stripPane(c *ui.Context, f form, tr *i18n.Strings) {
 			preview := ui.Box(c).Size(40, 30).Shrink(0)
 			deg := preview.AnimateTo("tilt", rest, ui.Snappy)
 			preview.Draw(func(p *ui.Painter, r ui.Rect) {
-				rx, rh := turnedCard(r.W, r.H, deg, 120)
+				rx, rh := turnedCard(r.W, r.H, deg, cardPerspective)
 				mid := r.Y + r.H/2
 				band := float32(6)
 				face := new(ui.Path).MoveTo(r.X, r.Y).LineTo(r.X+rx, mid-rh).LineTo(r.X+rx, mid+rh).LineTo(r.X, r.Y+r.H).Close()

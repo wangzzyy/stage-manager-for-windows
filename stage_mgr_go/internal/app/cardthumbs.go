@@ -4,7 +4,6 @@ package app
 
 import (
 	"math"
-	"slices"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo"
@@ -27,6 +26,7 @@ type cardThumbs struct {
 type cardThumb struct {
 	t winapi.Thumbnail
 	dest winapi.Rect
+	src winapi.Rect
 	opacity float64
 	visible bool
 }
@@ -118,9 +118,9 @@ func (c *cardThumbs) endFrame() {
 			Left: frame.Left - win.Left, Top: frame.Top - win.Top,
 			Right: frame.Right - win.Left, Bottom: frame.Bottom - win.Top,
 		}
-		if !th.visible || at.dest != th.dest || math.Abs(at.opacity-th.opacity) >= 0.004 {
+		if !th.visible || at.dest != th.dest || src != th.src || math.Abs(at.opacity-th.opacity) >= 0.004 {
 			th.t.Show(at.dest, src, at.opacity)
-			th.dest, th.opacity, th.visible = at.dest, at.opacity, at.opacity > 0
+			th.dest, th.src, th.opacity, th.visible = at.dest, src, at.opacity, at.opacity > 0
 		}
 		visible = visible || th.visible
 	}
@@ -163,13 +163,3 @@ func (c *cardThumbs) close() {
 	}
 }
 
-// cardThumbHandles returns registered source windows in a stable order for
-// tests and diagnostics.
-func (c *cardThumbs) cardThumbHandles() []winapi.HWND {
-	out := make([]winapi.HWND, 0, len(c.thumbs))
-	for h := range c.thumbs {
-		out = append(out, h)
-	}
-	slices.Sort(out)
-	return out
-}

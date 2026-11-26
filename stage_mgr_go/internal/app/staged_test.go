@@ -373,39 +373,22 @@ func TestStagedCardShakesWhenClicked(t *testing.T) {
 	}
 }
 
-// The convergence slider moves the vanishing point from the screen center
-// to the opposite edge, mirrored for a strip on the right.
-func TestCardViewpointMovesTowardOppositeEdge(t *testing.T) {
-	for _, right := range []bool{false, true} {
-		s, _, _ := testStrip(t)
-		if right {
-			s.a.settings.Sides = map[string]settings.Side{s.d.mon.Device: settings.Right}
-			s.rect.Left = s.d.mon.Work.Right - s.rect.Right
-			s.rect.Right = s.d.mon.Work.Right
-		}
-		card := s.d.layout.cards[0]
-		work := s.d.mon.Work
-		outerX := float64(s.rect.Left) + float64(card.X)*float64(s.scale)
-		farX := float64(work.Right)
-		if right {
-			outerX = float64(s.rect.Left) + float64(card.X+card.W)*float64(s.scale)
-			farX = float64(work.Left)
-		}
-		centerX := float64(work.Left+work.Right) / 2
-		angle := math.Sin(float64(cardPerspectiveTilt) * math.Pi / 180)
-		for _, tc := range []struct {
-			level int
-			want  float64
-		}{{0, centerX}, {settings.MaxTilt, farX}} {
-			_, perspective := s.cardViewpoint(card, cardPerspectiveTilt, tc.level)
-			got := outerX + float64(perspective)/angle*float64(s.scale)
-			if right {
-				got = outerX - float64(perspective)/angle*float64(s.scale)
-			}
-			if math.Abs(got-tc.want) > 1 {
-				t.Fatalf("right=%v level=%d: vanishing point at %.1f, want %.1f", right, tc.level, got, tc.want)
-			}
-		}
+// The perspective slider leaves the card undistorted at zero and brings
+// the vanishing point closer as its value rises.
+func TestCardViewpointIncreasesPerspectiveStrength(t *testing.T) {
+	s, _, _ := testStrip(t)
+	card := s.d.layout.cards[0]
+	_, none := s.cardViewpoint(card, cardPerspectiveTilt, 0)
+	_, mild := s.cardViewpoint(card, cardPerspectiveTilt, 1)
+	_, strong := s.cardViewpoint(card, cardPerspectiveTilt, settings.MaxTilt)
+	if none <= mild || mild <= strong {
+		t.Fatalf("perspective distance should decrease as strength rises: zero=%v, one=%v, max=%v", none, mild, strong)
+	}
+	if none < 100_000 {
+		t.Fatalf("zero should be effectively distortion-free, got perspective distance %v", none)
+	}
+	if strong <= 0 {
+		t.Fatalf("maximum strength should have a positive perspective distance, got %v", strong)
 	}
 }
 

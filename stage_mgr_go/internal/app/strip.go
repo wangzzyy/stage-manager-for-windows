@@ -12,6 +12,7 @@ import (
 
 const (
 	edgeWidth = 2 // pixels at a display's edge that reveal a floating strip
+	autoHide  = 700 * time.Millisecond
 )
 
 // strip is the window of one display's strip: transparent, above other
@@ -333,8 +334,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if c := s.a.cardDrag; c != nil && c.aim == aimMove && c.to == s.d {
 			s.lastInside = now
 		}
-		pointerInStrip := !s.d.inOverview && s.rect.Contains(cur)
-		want := pointerInStrip || now.Before(s.holdUntil) || s.dragging ||
+		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while

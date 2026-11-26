@@ -108,6 +108,7 @@ type Strings struct {
 	IconSize, Spacing                        string
 	CardsAt                                  string // how far down the strip the cards sit, as a share
 	Tilt, TiltDesc, TiltOff                  string
+	Perspective, PerspectiveDesc             string
 	DefaultValue                             string // %s: the default value
 
 	// CardsAtTip opens the tip of the info mark beside CardsAt, which says

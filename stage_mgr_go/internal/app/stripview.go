@@ -897,7 +897,8 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			for i := len(row) - 1; i >= 0; i-- {
 				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {
 					r := row[i]
-					ui.Image(c.Key(g.apps[i].app), icon).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H)
+					ui.Image(c.Key(g.apps[i].app), icon).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).
+					Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.42))
 				}
 			}
 			// The name follows the icons toward the stage.

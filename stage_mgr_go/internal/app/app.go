@@ -45,9 +45,9 @@ func (g *group) front() catalog.Window { return g.windows[0] }
 type set struct {
 	key  string   // the card's identity: its first app
 	apps []*group // in the order they came on the stage
-	// windows are what the card shows, front first: the front window of
-	// each app, so that every app shows, then the others. The ones shown
-	// are in z-order.
+	// windows are what the card shows, in model app order: the front
+	// window of each app first, so every app shows, then its other windows.
+	// This keeps merged source-before-target order even while windows are parked.
 	windows []catalog.Window
 	// staged tells the card is that of the apps on the stage, which a strip
 	// that lists every stage (settings.AllStages) keeps in its slot, as a ghost.

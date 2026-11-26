@@ -41,6 +41,7 @@ type strip struct {
 	holding      bool // the button went down on a card and is still down
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
+	pointerOnCard  bool // the pointer is actually hovering a card
 	edgeReveal     bool // the strip was explicitly revealed from the screen edge while covered
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
@@ -180,8 +181,7 @@ func (s *strip) zOrder() winapi.HWND {
 	// the covering window. Once the pointer hovers over it, a click/drag is
 	// held, or a stage transition starts, fall through to PR #18's original
 	// z-order rules unchanged.
-	if s.d.covered && !s.a.settings.HideWhenCovered &&
-		!s.pointerOnStrip && !s.holding && !s.dragging {
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnCard {
 		return winapi.HwndBottom
 	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
@@ -243,6 +243,15 @@ func (s *strip) setPointerOnStrip(v bool) {
 		return
 	}
 	s.pointerOnStrip = v
+	s.syncZOrder()
+}
+
+// setPointerOnCard changes z-order only when the pointer enters or leaves a card.
+func (s *strip) setPointerOnCard(v bool) {
+	if s.pointerOnCard == v {
+		return
+	}
+	s.pointerOnCard = v
 	s.syncZOrder()
 }
 
@@ -406,6 +415,8 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
 	s.setPointerOnStrip(band)
+	cardHover := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && s.overCard(cur)
+	s.setPointerOnCard(cardHover)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.
 	s.syncZOrder()
@@ -496,6 +507,18 @@ func (s *strip) hardEdge(p winapi.Point) bool {
 // over reports whether a screen point is over a card, or the band of the
 // overview's button: the strip takes the pointer there.
 func (s *strip) over(p winapi.Point) bool {
+	if s.overCard(p) {
+		return true
+	}
+	f := s.footerHit
+	return f.W > 0 && float32(float64(p.X-s.rect.Left)/s.scale) >= f.X &&
+		float32(float64(p.X-s.rect.Left)/s.scale) < f.X+f.W &&
+		float32(float64(p.Y-s.rect.Top)/s.scale) >= f.Y &&
+		float32(float64(p.Y-s.rect.Top)/s.scale) < f.Y+f.H
+}
+
+// overCard reports whether a screen point is over an actual card.
+func (s *strip) overCard(p winapi.Point) bool {
 	x := float32(float64(p.X-s.rect.Left) / s.scale)
 	y := float32(float64(p.Y-s.rect.Top) / s.scale)
 	const slop = 6
@@ -504,8 +527,7 @@ func (s *strip) over(p winapi.Point) bool {
 			return true
 		}
 	}
-	f := s.footerHit
-	return f.W > 0 && x >= f.X && x < f.X+f.W && y >= f.Y && y < f.Y+f.H
+	return false
 }
 
 // cardBand is the band of the screen the cards take, in pixels: a window

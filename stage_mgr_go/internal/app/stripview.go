@@ -433,7 +433,7 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 // opposite vertical edge of the display. The outer edge remains the card's
 // fixed base; its top and bottom edges run toward that distant point, while
 // the inner edge is foreshortened without being turned around its own axis.
-func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
+func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, perspective float32) {
 	if s.scale <= 0 {
 		return 0.5, cardPerspective
 	}
@@ -447,11 +447,14 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	}
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
-	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	screenCenterOrigin := float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	// The existing perspective slider controls both the rotation and its
+	// vertical pivot: zero centers the pivot on the card; larger values
+	// progressively move it toward the display's vertical centerline.
+	intensity := float32(level) / float32(settings.MaxTilt)
+	originY = 0.5 + (screenCenterOrigin-0.5)*intensity
 	// With a Y rotation, parallel lines converge at p/sin(tilt).
-	// Set p so that the vanishing point lands on the opposite display edge,
-	// rather than beyond it; using the full edge distance here made the
-	// perspective too weak and the cards looked almost flat.
+	// Set p so that the vanishing point lands on the opposite display edge.
 	angle := math.Abs(float64(tilt)) * math.Pi / 180
 	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle))
 	if perspective < 1 {
@@ -809,7 +812,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
 	// drive it toward zero, then abruptly fall back to cardPerspective.
-	originY, perspective := s.cardViewpoint(box, restTilt)
+	originY, perspective := s.cardViewpoint(box, restTilt, a.settings.Tilt)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement
 	// so hovering enlarges a card in place instead of pulling it toward the

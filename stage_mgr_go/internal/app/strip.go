@@ -408,15 +408,17 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
+		inStrip := !s.d.inOverview && s.rect.Contains(cur)
+		if edgeWake {
+			s.edgeReveal = true
+		} else if !inStrip {
+			// Keep the edge-reveal latch through transient changes between
+			// fully covered, partly covered, and uncovered while a card is
+			// switching/zooming. Only leaving the strip ends the reveal.
+			s.edgeReveal = false
+		}
 		if s.d.covered {
 			if s.a.settings.HideWhenCovered || fullyCovered {
-				if edgeWake {
-					s.edgeReveal = true
-				}
-				inStrip := !s.d.inOverview && s.rect.Contains(cur)
-				if !edgeWake && !inStrip {
-					s.edgeReveal = false
-				}
 				// A fully covered strip is normally slid out. Reaching the
 				// screen edge starts the same slide-in used by the original
 				// auto-hide path; leaving the strip lets it slide out again.
@@ -425,16 +427,9 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 			} else if s.shown {
 				// A partly exposed strip remains visible underneath the
 				// covering window, so its uncovered area can still be hovered.
-				s.edgeReveal = false
+				// Do not clear edgeReveal here: coverage can be transiently
+				// partial during a stage switch or card zoom.
 				want = true
-			}
-		} else {
-			// Coverage can briefly disappear while the newly selected window
-			// is being activated or its zoom animation is settling. Keep the
-			// edge-reveal latch: if the pointer is still over the strip band,
-			// the next covered poll must not require another edge gesture.
-			if !s.rect.Contains(cur) {
-				s.edgeReveal = false
 			}
 		}
 		s.setShown(want)

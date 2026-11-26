@@ -419,7 +419,12 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// Determine exposure from the geometry of visible top-level windows,
 	// rather than WindowFromPoint: the strip is layered and click-through,
 	// which makes hit-test results dependent on its current z-order/styles.
-	exposedStrip := s.d.covered && !s.a.settings.HideWhenCovered && s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && !s.coveredAt(cur)
+	eligibleExposedStrip := s.d.covered && !s.a.settings.HideWhenCovered && s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	// Once the pointer has entered an exposed part and raised the strip,
+	// latch that state for the whole time it remains inside the strip.
+	// Rechecking window coverage after raising would see the window behind
+	// the strip and lower it again, causing a z-order oscillation.
+	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || !s.coveredAt(cur))
 	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.

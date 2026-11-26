@@ -164,6 +164,7 @@ var settingsIcons = []*ui.SVG{
 	lineIcon(`<rect x="3" y="4" width="18" height="16" rx="2.5"/><rect x="9" y="8" width="9" height="8" rx="1"/><path d="M5.5 9.5v1M5.5 13.5v1"/>`),
 	lineIcon(`<rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/>`),
 	lineIcon(`<path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/><rect x="9" y="9" width="12" height="12" rx="2"/>`),
+	lineIcon(`<path d="M4 4h16v16H4z"/><path d="m8 12 2.5 2.5L16 9"/>`),
 	lineIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/>`),
 }
 
@@ -172,7 +173,8 @@ var settingsIcons = []*ui.SVG{
 // pane the longest by far.
 const (
 	overviewTab = 3
-	aboutTab    = 5
+	excludedTab = 5
+	aboutTab    = 6
 )
 
 // The sidebar's width, and its width as icons alone in a window too
@@ -435,7 +437,7 @@ func (sw *settingsWindow) view(c *ui.Context) {
 		}
 	}
 
-	names := []string{tr.TabGeneral, tr.TabStrip, tr.TabStage, tr.TabOverview, tr.TabCompanions, tr.TabAbout}
+	names := []string{tr.TabGeneral, tr.TabStrip, tr.TabStage, tr.TabOverview, tr.TabCompanions, tr.TabExcluded, tr.TabAbout}
 	w, _ := c.Size()
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		sw.nav(c, t, names, w < compactBelow)
@@ -460,6 +462,8 @@ func (sw *settingsWindow) view(c *ui.Context) {
 						sw.overviewPane(c, f, tr)
 					case 4:
 						sw.companionsPane(c, f, tr)
+					case excludedTab:
+						sw.excludedPane(c, f, tr)
 					case aboutTab:
 						sw.aboutPane(c, f, tr)
 					}
@@ -1025,6 +1029,42 @@ func (sw *settingsWindow) browseCompanion(tr *i18n.Strings) {
 			sw.apply()
 		})
 	}()
+}
+
+// excludedPane manages the executables Stage Manager must leave alone.
+func (sw *settingsWindow) excludedPane(c *ui.Context, f form, tr *i18n.Strings) {
+	t := f.t
+	add := func() {
+		ui.MenuButton(c, tr.AddExcluded, func(m *ui.Menu) {
+			for _, g := range sw.running() {
+				exe := g.front().Exe
+				if exe != "" && !sw.s.ExcludedExe(exe) && m.Item(g.name).Chosen() {
+					sw.s = sw.s.WithExcluded(exe, true)
+					sw.apply()
+				}
+			}
+		})
+	}
+	f.group(c, tr.ExcludedLabel, nil, func() {
+		if len(sw.s.Excluded) == 0 {
+			ui.Text(c, tr.ExcludedEmpty).FontSize(12).TextColor(t.TextMuted).Padding(14, rowPadX)
+		}
+		for _, entry := range sw.s.Excluded {
+			ui.Row(c).Key(entry).Padding(7, rowPadX).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(24, 24).Center().Children(func() {
+					ui.Icon(c, appIcon).FontSize(20).TextColor(t.TextMuted)
+				})
+				ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+					ui.Text(c, strings.TrimSuffix(filepath.Base(entry), ".exe")).SingleLine()
+					ui.Text(c, entry).FontSize(12).TextColor(t.TextMuted).SingleLine().Tooltip(entry)
+				})
+				if ui.Button(c, "").Label(tr.Remove).Tooltip(tr.Remove).Children(func() { ui.Icon(c, removeIcon).FontSize(14) }).Clicked() {
+					sw.s.Excluded = slices.DeleteFunc(slices.Clone(sw.s.Excluded), func(e string) bool { return e == entry })
+					sw.apply()
+				}
+			})
+		}
+	}, add)
 }
 
 // aboutPane is the app's own page, as the About window of a Mac app: who

@@ -787,6 +787,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		if len(g.windows) > 1 {
 			label = tr.CloseWindows
 		}
+		if m.Item(tr.ExcludeWindow).Chosen() {
+			a.exclude(g, true)
+		}
+		if m.Item(tr.ExcludeWindowSession).Chosen() {
+			a.exclude(g, false)
+		}
 		if m.Item(label).Chosen() {
 			a.request(actClose, d, g)
 		}

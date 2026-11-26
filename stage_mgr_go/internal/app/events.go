@@ -265,7 +265,7 @@ func (a *App) settleForeground() {
 	// already brought its window up: the stage it leaves fades under it.
 	// A companion, as a TortoiseSVN dialog opened from the file manager,
 	// comes beside the stage instead and leaves it with its windows.
-	a.switchStage(d, d.model.Coming(a.groupKey(w), a.settings.Companion(w.Exe)), w.HWND, false, true)
+	a.switchStage(d, d.model.Coming(a.groupKey(w), a.companion(w.Exe)), w.HWND, false, true)
 }
 
 // noteClosed remembers a window that closed or hid while on a stage, for

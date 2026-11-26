@@ -873,7 +873,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// not know it is under the pointer, nor take its click.
 		// The stage's card wears a green check, which is what makes the ghost
 		// read as the one that is open, and is not faded with its windows. It
-		// sits where the card's corner shows once the card is turned
 		// shares the card's 3D transform and lifts with it. A disc turned as far as the
 		// card is squeezes to an oval that looks nothing like a button, and
 		// one that lies flat beside a card at an angle looks pasted on: it

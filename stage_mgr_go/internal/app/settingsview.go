@@ -28,7 +28,7 @@ type settingsWindow struct {
 	tab   int
 	width float64
 	icon  float64
-	tilt  float64
+	tilt, perspective float64
 	// spacing is the gap between cards, as the slider sets it, and
 	// cardsAt how far down the strip they sit.
 	spacing, cardsAt float64
@@ -108,6 +108,7 @@ func (sw *settingsWindow) load() {
 	}
 	sw.quality = slices.Index(qualities, sw.s.Quality)
 	sw.width, sw.icon, sw.tilt, sw.spacing = sw.s.Width, sw.s.IconScale, float64(sw.s.Tilt), sw.s.Spacing
+	sw.perspective = sw.s.Perspective
 	sw.cardsAt = sw.s.CardsAt
 	sw.panelW, sw.panelH = sw.s.PanelWidth, sw.s.PanelHeight
 	sw.panelOp, sw.blur = sw.s.PanelOpacity, sw.s.PanelBlur
@@ -687,6 +688,14 @@ func (sw *settingsWindow) stripPane(c *ui.Context, f form, tr *i18n.Strings) {
 					sw.s.Tilt = n
 					sw.apply()
 				}
+			}
+		})
+		pct := func(v float64) string { return fmt.Sprintf("%.0f%%", v*100) }
+		f.row(c, tr.Perspective, tr.PerspectiveDesc, func() {
+			if f.slider(c, tr, &sw.perspective, settings.MinPerspective, settings.MaxPerspective, 0, def.Perspective, pct) {
+				sw.perspective = math.Round(sw.perspective*100) / 100
+				sw.s.Perspective = sw.perspective
+				sw.apply()
 			}
 		})
 	})

@@ -59,7 +59,7 @@ const (
 	MaxWidth     = 360
 	MinIconScale = 0.6
 	MaxIconScale = 1.6
-	MaxTilt      = 10
+	MaxTilt      = 20
 	MaxSpacing   = 80
 	// The cards sit from a little above the middle of a strip to well
 	// below it, where the hand is: further up is a reach, and further down

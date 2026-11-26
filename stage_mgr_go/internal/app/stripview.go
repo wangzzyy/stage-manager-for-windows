@@ -447,12 +447,14 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, p
 	if level == 0 {
 		return originY, 1_000_000
 	}
-	// Perspective distance is measured in DIPs. A shorter distance brings
-	// the vanishing point closer; the eased curve gives useful control across
-	// the slider while keeping zero distortion-free.
-	fraction := float64(level) / float64(settings.MaxTilt)
-	perspective = float32(float64(cardPerspective) + 840*(1-fraction)*(1-fraction))
-	return originY, perspective
+	// Keep the camera distance fixed: the slider changes the card's inward
+	// rotation, and the perspective projection itself determines its visible
+	// width. With no rotation, use an effectively infinite distance so the
+	// card is exactly flat.
+	if level == 0 {
+		return originY, 1_000_000
+	}
+	return originY, cardPerspective
 }
 
 // cardDrawOrder returns the cards in layout order, with the previously

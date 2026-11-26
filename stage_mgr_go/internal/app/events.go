@@ -137,6 +137,9 @@ func (a *App) updateCovered() {
 	for _, d := range a.displays {
 		if c := a.covered(d); c != d.covered {
 			d.covered, changed = c, true
+			if d.strip != nil {
+				d.strip.syncZOrder()
+			}
 		}
 	}
 	if changed {

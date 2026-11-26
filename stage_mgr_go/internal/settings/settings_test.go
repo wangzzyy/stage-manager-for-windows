@@ -23,6 +23,28 @@ func TestNormalizeClamps(t *testing.T) {
 	}
 }
 
+func TestHideWhenCoveredPreference(t *testing.T) {
+	st := NewStore(t.TempDir())
+	if !st.Load().HideWhenCovered {
+		t.Fatal("covered-sidebar auto-hide should be on by default")
+	}
+	s := Default()
+	s.HideWhenCovered = false
+	if err := st.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if st.Load().HideWhenCovered {
+		t.Fatal("turned-off covered-sidebar auto-hide came back on")
+	}
+	// Older settings omit the field and inherit the enabled default.
+	if err := os.WriteFile(st.Path, []byte(`{"width": 240}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Load().HideWhenCovered {
+		t.Fatal("older settings unexpectedly disabled covered-sidebar auto-hide")
+	}
+}
+
 func TestStoreRoundTrip(t *testing.T) {
 	st := NewStore(t.TempDir())
 	if got := st.Load(); !got.Equal(Default()) {

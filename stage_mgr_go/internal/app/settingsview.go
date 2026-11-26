@@ -630,6 +630,11 @@ func (sw *settingsWindow) stripPane(c *ui.Context, f form, tr *i18n.Strings) {
 				sw.widthTimer = after(180*time.Millisecond, sw.apply)
 			}
 		})
+		f.row(c, tr.HideWhenCovered, tr.HideWhenCoveredDesc, func() {
+			if ui.Switch(c, &sw.s.HideWhenCovered).Changed() {
+				sw.apply()
+			}
+		})
 	})
 	f.section(c, tr.Cards, func() {
 		f.row(c, tr.Spacing, "", func() {

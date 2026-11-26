@@ -2,6 +2,7 @@ package app
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
@@ -41,6 +42,10 @@ type strip struct {
 	holding      bool // the button went down on a card and is still down
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
+	pointerOnExposedStrip bool // the pointer is over an uncovered part of the visible strip
+	edgeRaise bool // the screen edge explicitly revealed a partly covered sidebar
+	edgeReveal bool // the strip was explicitly revealed from the screen edge while covered
+	edgeRevealZOrder bool // keep the strip above the covering window until its slide-out finishes
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -175,6 +180,19 @@ func (s *strip) zOrder() winapi.HWND {
 	if s.switching {
 		return winapi.HwndTopmost
 	}
+	// Once a fully covered strip has been revealed from the screen edge,
+	// keep it topmost for the whole reveal lifetime. In particular, do not
+	// let the covered-sidebar policy lower it while the slide-out is running;
+	// poll clears edgeRevealZOrder only after the final frame has settled.
+	if s.edgeRevealZOrder && !s.away {
+		return winapi.HwndTopmost
+	}
+	// With covered-sidebar auto-hide disabled, keep the strip below the
+	// covering window until the pointer is over a part of the strip that is
+	// not covered by another window. Otherwise, PR #18's original rules apply.
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise && !s.edgeRevealZOrder {
+		return winapi.HwndBottom
+	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
 	// z-order is independent of the pointer and of full-screen detection;
 	// it drops below other windows only after the slide-out has finished.
@@ -237,6 +255,16 @@ func (s *strip) setPointerOnStrip(v bool) {
 	s.syncZOrder()
 }
 
+// setPointerOnExposedStrip changes z-order when the pointer enters or leaves
+// an uncovered part of the visible strip.
+func (s *strip) setPointerOnExposedStrip(v bool) {
+	if s.pointerOnExposedStrip == v {
+		return
+	}
+	s.pointerOnExposedStrip = v
+	s.syncZOrder()
+}
+
 func (s *strip) relayout() { s.place() }
 
 // message handles the shell's app bar notices.
@@ -290,6 +318,10 @@ func (s *strip) message(msg uint32, wParam, lParam uintptr) (uintptr, bool) {
 // wherever no card is. While the overview shows the display's windows, the
 // strip under it takes nothing.
 func (s *strip) poll(cur winapi.Point, now time.Time) {
+	// Remember whether the sidebar was already topmost before this poll.
+	// A card switch can put a newly activated stage window under the pointer;
+	// geometric coverage must not undo a topmost state that was already earned.
+	wasTopmost := s.zOrderKnown && s.zOrderTopmost
 	inside := s.visible && !s.d.inOverview && s.rect.Contains(cur) && s.over(cur)
 	// The list of the stage's windows takes the pointer as the cards do,
 	// but brings no switch: its windows are on the stage already, and are
@@ -306,6 +338,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	}
 	s.wasInside = inside
 	if s.a.settings.Mode == settings.Floating {
+		edgeWake := false
 		m := s.d.mon.Monitor
 		x0 := m.Left
 		if s.placed {
@@ -320,6 +353,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 			}
 			if s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
 				s.lastInside = now
+				edgeWake = true
 			}
 		} else {
 			s.edgeSince = time.Time{}
@@ -334,17 +368,70 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if c := s.a.cardDrag; c != nil && c.aim == aimMove && c.to == s.d {
 			s.lastInside = now
 		}
-		// Once the edge-triggered strip is visible, keep it open while the
-		// pointer remains in its bounds; leaving those bounds ends the hold.
-		if s.pointerOnStrip {
-			if !s.d.inOverview && s.rect.Contains(cur) {
+		// Keep the strip open while the pointer remains in its band.
+		// Do not rely on pointerOnStrip here: it is updated later in this
+		// poll, so on the first tick after a card animation changes hit
+		// geometry it can still be false and let the strip start hiding.
+		if s.visible && !s.d.inOverview {
+			if s.rect.Contains(cur) {
 				s.lastInside = now
-			} else {
+			} else if s.pointerOnStrip {
 				s.lastInside = time.Time{}
 			}
 		}
+		// A partially covered sidebar stays in place underneath the
+		// covering window. A fully covered one uses the original edge-reveal
+		// animation, without conflating its resting visibility with z-order.
+		fullyCovered := s.d.covered && !s.a.settings.HideWhenCovered && s.fullyCovered()
+		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
+			if fullyCovered {
+				s.edgeRevealZOrder = true
+			} else {
+				s.edgeRaise = true
+			}
+		}
+		// Keep the strip above the covering window through the entire
+		// slide-out. view() marks away only after its final frame settles.
+		// Coverage can change while a card is zooming or a stage is
+		// switching. Once a fully covered strip has been edge-revealed,
+		// keep its z-order lock until the slide-out has actually settled.
+		if s.edgeRevealZOrder && s.away && !s.edgeReveal && !edgeWake {
+			s.edgeRevealZOrder = false
+		}
+		// Keep the edge reveal raised while its slide-in animation runs.
+		// The pointer starts at the screen edge, outside the strip rectangle;
+		// clearing edgeRaise there would put the strip behind the covering window.
+		// Once the pointer leaves the strip, lastInside is reset above and the
+		// normal auto-hide interval expires.
+		if !s.d.covered || now.Sub(s.lastInside) >= autoHide {
+			s.edgeRaise = false
+		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
+		inStrip := !s.d.inOverview && s.rect.Contains(cur)
+		if edgeWake {
+			s.edgeReveal = true
+		} else if !inStrip {
+			// Keep the edge-reveal latch through transient changes between
+			// fully covered, partly covered, and uncovered while a card is
+			// switching/zooming. Only leaving the strip ends the reveal.
+			s.edgeReveal = false
+		}
+		if s.d.covered {
+			if s.a.settings.HideWhenCovered || fullyCovered {
+				// A fully covered strip is normally slid out. Reaching the
+				// screen edge starts the same slide-in used by the original
+				// auto-hide path; leaving the strip lets it slide out again.
+				want = (s.edgeReveal && (edgeWake || inStrip)) ||
+					s.dragging || now.Before(s.holdUntil)
+			} else if s.shown {
+				// A partly exposed strip remains visible underneath the
+				// covering window, so its uncovered area can still be hovered.
+				// Do not clear edgeReveal here: coverage can be transiently
+				// partial during a stage switch or card zoom.
+				want = true
+			}
+		}
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while
 		// it still moves, the window keeps the frame it asked for waiting
@@ -374,12 +461,102 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
 	s.setPointerOnStrip(band)
+	// Determine exposure from the geometry of visible top-level windows,
+	// rather than WindowFromPoint: the strip is layered and click-through,
+	// which makes hit-test results dependent on its current z-order/styles.
+	eligibleExposedStrip := s.d.covered && !s.a.settings.HideWhenCovered && s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	// Once the pointer has entered an exposed part and raised the strip,
+	// latch that state for the whole time it remains inside the strip.
+	// Rechecking window coverage after raising would see the window behind
+	// the strip and lower it again, causing a z-order oscillation.
+	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || s.edgeRaise || wasTopmost || !s.coveredAt(cur))
+	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.
 	s.syncZOrder()
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)
+}
+
+// fullyCovered reports whether the stage windows cover every point of the
+// card band. d.covered only means that at least one window overlaps it; using
+// that weaker test here would hide the exposed part of a partly covered strip.
+func (s *strip) fullyCovered() bool {
+	band := s.cardBand()
+	if band.Empty() {
+		return false
+	}
+	type interval struct{ top, bottom int32 }
+	var windows []winapi.Rect
+	xs := []int32{band.Left, band.Right}
+	for _, g := range s.d.onStage {
+		for _, w := range g.windows {
+			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+				continue
+			}
+			r := winapi.FrameBounds(w.HWND)
+			if !r.Intersects(band) {
+				continue
+			}
+			r.Left = max(r.Left, band.Left)
+			r.Right = min(r.Right, band.Right)
+			r.Top = max(r.Top, band.Top)
+			r.Bottom = min(r.Bottom, band.Bottom)
+			windows = append(windows, r)
+			xs = append(xs, r.Left, r.Right)
+		}
+	}
+	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })
+	for i := 0; i+1 < len(xs); i++ {
+		left, right := xs[i], xs[i+1]
+		if left == right {
+			continue
+		}
+		var spans []interval
+		for _, r := range windows {
+			if r.Left <= left && r.Right >= right {
+				spans = append(spans, interval{r.Top, r.Bottom})
+			}
+		}
+		sort.Slice(spans, func(i, j int) bool { return spans[i].top < spans[j].top })
+		coveredTo := band.Top
+		for _, span := range spans {
+			if span.top > coveredTo {
+				break
+			}
+			if span.bottom > coveredTo {
+				coveredTo = span.bottom
+			}
+			if coveredTo >= band.Bottom {
+				break
+			}
+		}
+		if coveredTo < band.Bottom {
+			return false
+		}
+	}
+	return true
+}
+
+// coveredAt reports which visible top-level window is foremost at p.
+// EnumWindows walks windows in z-order, so windows behind the strip must not
+// count as covering it. Desktop wallpaper and shell surfaces are ignored.
+func (s *strip) coveredAt(p winapi.Point) bool {
+	// Check the stage windows that make this display "covered". Enumerating
+	// every top-level HWND can pick the layered sidebar or unrelated shell
+	// surfaces first, causing an exposed point to be misclassified.
+	for _, g := range s.d.onStage {
+		for _, w := range g.windows {
+			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+				continue
+			}
+			if winapi.FrameBounds(w.HWND).Contains(p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // approach brings the overview's panel in as the pointer nears it, from

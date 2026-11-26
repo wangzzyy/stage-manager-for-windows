@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo/ui"
 )
@@ -21,7 +22,7 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	cardPerspectiveTilt = 24 // Fixed angle; the slider moves the vanishing point, not the card.
+	cardPerspectiveTilt = 24 // Maximum inward rotation at the slider maximum.
 	cardPerspective     = 120
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows
@@ -35,10 +36,11 @@ const (
 // give it: its width a share of the cards', and its height in DIPs.
 type panel struct{ share, h float32 }
 
-// cardTilts keeps the perspective angle fixed while a hovered card faces the
-// user squarely. The setting moves the vanishing point, not this angle.
-func cardTilts(_ int) (rest, hover float32) {
-	return cardPerspectiveTilt, 0
+// cardTilts turns cards inward as the setting rises. Hovering turns a card
+// back toward the user; the perspective distance stays fixed.
+func cardTilts(level int) (rest, hover float32) {
+	level = min(max(level, 0), settings.MaxTilt)
+	return cardPerspectiveTilt * float32(level) / float32(settings.MaxTilt), 0
 }
 
 // mirror reflects r across the middle of within, as a strip on the right

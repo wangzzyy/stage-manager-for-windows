@@ -843,7 +843,12 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 						r.Y = cardRect.Y + originY*box.H + (r.Y-originY*box.H)*lift
 						r.W *= lift
 						r.H *= lift
-						x, y, w, h := s.toScreen(r)
+						// DWM destination rectangles are in the host window's client
+						// pixels, not screen coordinates.
+						x := float64(r.X+s.viewOffsetX) * s.scale
+						y := float64(r.Y) * s.scale
+						w := float64(r.W) * s.scale
+						h := float64(r.H) * s.scale
 						dest := winapi.Rect{
 							Left: int32(math.Round(x)), Top: int32(math.Round(y)),
 							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),

@@ -56,12 +56,13 @@ func newCardThumbs(s *strip) *cardThumbs {
 }
 
 func (c *cardThumbs) beginFrame() {
+	if c == nil { return }
 	clear(c.keepSet)
 	clear(c.want)
 }
 
 func (c *cardThumbs) keep(h winapi.HWND) {
-	if h != 0 {
+	if c != nil && h != 0 {
 		c.keepSet[h] = true
 	}
 }
@@ -69,6 +70,7 @@ func (c *cardThumbs) keep(h winapi.HWND) {
 // add asks DWM to draw h at dest. It returns true once a thumbnail exists,
 // so the cached still can be omitted from the strip's own drawing.
 func (c *cardThumbs) add(h winapi.HWND, dest winapi.Rect, opacity float64) bool {
+	if c == nil { return false }
 	c.keep(h)
 	if dest.Empty() || opacity <= 0 || !winapi.IsWindow(h) {
 		return false
@@ -92,6 +94,7 @@ func (c *cardThumbs) add(h winapi.HWND, dest winapi.Rect, opacity float64) bool 
 }
 
 func (c *cardThumbs) endFrame() {
+	if c == nil { return }
 	visible := false
 	for h, th := range c.thumbs {
 		if !c.keepSet[h] {
@@ -136,7 +139,7 @@ func (c *cardThumbs) endFrame() {
 }
 
 func (c *cardThumbs) place() {
-	if c.hwnd == 0 || c.s.hwnd == 0 || !winapi.IsWindow(c.hwnd) {
+	if c == nil || c.hwnd == 0 || c.s.hwnd == 0 || !winapi.IsWindow(c.hwnd) {
 		return
 	}
 	r := c.s.rect

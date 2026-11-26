@@ -1196,11 +1196,5 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	originY, perspective := at.originY, at.perspective
-	// Poses that are not card landings (for example, a collapsing flight)
-	// keep the original centered projection.
-	if perspective <= 0 {
-		originY, perspective = 0.5, cardPerspective
-	}
-	img.TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
+	img.TransformOrigin(originX, at.originY).RotateY(at.tilt).Opacity(op)
 }

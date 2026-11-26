@@ -390,7 +390,10 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		}
 		// Keep the strip above the covering window through the entire
 		// slide-out. view() marks away only after its final frame settles.
-		if !s.d.covered || s.away && !s.edgeReveal && !edgeWake {
+		// Coverage can change while a card is zooming or a stage is
+		// switching. Once a fully covered strip has been edge-revealed,
+		// keep its z-order lock until the slide-out has actually settled.
+		if s.edgeRevealZOrder && s.away && !s.edgeReveal && !edgeWake {
 			s.edgeRevealZOrder = false
 		}
 		// Keep the edge reveal raised while its slide-in animation runs.
@@ -421,12 +424,10 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				// A partly exposed strip remains visible underneath the
 				// covering window, so its uncovered area can still be hovered.
 				s.edgeReveal = false
-				s.edgeRevealZOrder = false
 				want = true
 			}
 		} else {
 			s.edgeReveal = false
-			s.edgeRevealZOrder = false
 		}
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while

@@ -138,6 +138,11 @@ func TestTilt(t *testing.T) {
 	if s := (Settings{Tilt: -1}).Normalize(); s.Tilt != 0 {
 		t.Fatalf("tilt -1 normalized to %d", s.Tilt)
 	}
+	for in, want := range map[float64]float64{0: 1, 0.1: MinPerspective, 3: MaxPerspective, 1.237: 1.24, math.NaN(): 1} {
+		if got := (Settings{Perspective: in}).Normalize().Perspective; got != want {
+			t.Errorf("perspective %v normalized to %v, want %v", in, got, want)
+		}
+	}
 	// The perspective switch of older settings carries over.
 	for json, want := range map[string]int{
 		`{"perspective": false}`:            0,

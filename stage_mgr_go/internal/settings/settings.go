@@ -115,8 +115,8 @@ type Settings struct {
 	// Spacing is the gap between the cards of a strip, in DIPs at their
 	// full size.
 	Spacing float64 `json:"spacing"`
-	// Tilt is the horizontal position of the perspective convergence point: 0 is
-	// the display center, and MaxTilt is the opposite edge of the work area.
+	// Tilt controls perspective strength: 0 disables perspective distortion,
+	// and MaxTilt brings the convergence point closest to the card.
 	Tilt int `json:"tilt"`
 	// CardsAt is where the middle of a strip's cards goes, as a share of the
 	// way down it: 0.5, the middle, as on macOS, or lower, nearer to the

@@ -431,30 +431,49 @@ func TestBadgeRect(t *testing.T) {
 
 // A point of a card shows where the card turned has it: those at its outer
 // edge stay, and the card's far edge goes where turnedCard puts it.
+func TestTiltTargetOrigin(t *testing.T) {
+	const cardY, cardH, targetY float32 = 100, 200, 500
+	if got := tiltTargetOrigin(cardY, cardH, targetY, 0); got != 0.5 {
+		t.Fatalf("zero tilt pivot = %v, want card midpoint 0.5", got)
+	}
+	if got := tiltTargetOrigin(cardY, cardH, targetY, 0.5); got != 1.25 {
+		t.Fatalf("half-strength pivot = %v, want 1.25", got)
+	}
+	if got := tiltTargetOrigin(cardY, cardH, targetY, 1); got != 2 {
+		t.Fatalf("full-strength pivot = %v, want target center 2", got)
+	}
+	if got := tiltTargetOrigin(cardY, cardH, targetY, 2); got != 2 {
+		t.Fatalf("over-range strength was not clamped: %v", got)
+	}
+	if got := tiltTargetOrigin(cardY, 0, targetY, 1); got != 0.5 {
+		t.Fatalf("zero-height card pivot = %v, want 0.5", got)
+	}
+}
+
 func TestTurnedPoint(t *testing.T) {
 	const w, h, dist float32 = 160, 105, 640
 	for _, right := range []bool{false, true} {
-		if x, y := turnedPoint(40, 20, w, h, 0, dist, right); x != 40 || y != 20 {
+		if x, y := turnedPoint(40, 20, w, h, 0, dist, right, 0.5); x != 40 || y != 20 {
 			t.Fatalf("right=%v: a card not turned moved a point to %v, %v", right, x, y)
 		}
 	}
 	rx, rh := turnedCard(w, h, 24, dist)
-	x, y := turnedPoint(w, 0, w, h, 24, dist, false)
+	x, y := turnedPoint(w, 0, w, h, 24, dist, false, 0.5)
 	if d := x - rx; d > 0.01 || d < -0.01 || y-(h/2-rh) > 0.01 || y-(h/2-rh) < -0.01 {
 		t.Fatalf("the far top corner at %v, %v, not %v, %v", x, y, rx, h/2-rh)
 	}
 	// On the right, the same card is the mirror image, and a turn the other
 	// way, as the strip makes it, changes nothing.
-	mx, my := turnedPoint(0, 0, w, h, -24, dist, true)
+	mx, my := turnedPoint(0, 0, w, h, -24, dist, true, 0.5)
 	if d := mx - (w - rx); d > 0.01 || d < -0.01 || my != y {
 		t.Fatalf("the mirrored corner at %v, %v, not %v, %v", mx, my, w-rx, y)
 	}
 	// Points on the edge it turns about stay, and the middle of the card's
 	// height is where the card turns about.
-	if x, y := turnedPoint(0, 30, w, h, 24, dist, false); x != 0 || y != 30 {
+	if x, y := turnedPoint(0, 30, w, h, 24, dist, false, 0.5); x != 0 || y != 30 {
 		t.Fatalf("a point on the axis moved to %v, %v", x, y)
 	}
-	if _, y := turnedPoint(100, h/2, w, h, 24, dist, false); y != h/2 {
+	if _, y := turnedPoint(100, h/2, w, h, 24, dist, false, 0.5); y != h/2 {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
 }

@@ -448,10 +448,10 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, p
 		return originY, 1_000_000
 	}
 	// Perspective distance is measured in DIPs. A shorter distance brings
-	// the vanishing point closer; the reciprocal curve gives useful control
-	// across the slider while keeping zero distortion-free.
+	// the vanishing point closer; the eased curve gives useful control across
+	// the slider while keeping zero distortion-free.
 	fraction := float64(level) / float64(settings.MaxTilt)
-	perspective = float32(float64(cardPerspective) + 840/(fraction*fraction))
+	perspective = float32(float64(cardPerspective) + 840*(1-fraction)*(1-fraction))
 	return originY, perspective
 }
 

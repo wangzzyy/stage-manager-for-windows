@@ -156,10 +156,11 @@ var checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" 
 // itself in green a little below, which makes it stand off the disc.
 func stageBadge(c *ui.Context, r ui.Rect, pop, turn, horizontalCompensation float32) {
 	d := r.W
-	// The badge is still inside the card's perspective layer. Counter-rotation
-	// keeps its face toward the viewer, while this local stretch cancels the
-	// horizontal foreshortening that the outer card transform leaves behind.
-	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop*horizontalCompensation, pop).RotateY(turn).Perspective(badgePerspective).
+	// The badge is still inside the card's perspective layer. A local
+	// counter-rotation compounds with the parent's projective transform, so
+	// keep the disc in its own plane and cancel the parent's horizontal
+	// foreshortening with the measured cosine compensation instead.
+	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop*horizontalCompensation, pop).
 		LinearGradient(ui.LinearGradient{Angle: 155, Stops: []ui.GradientStop{{Color: badgeLight, At: 0}, {Color: badgeMid, At: 0.45}, {Color: badgeDeep, At: 1}}}).
 		Border(max(d*0.03, 0.5), badgeEdge).
 		Shadow(0, d*0.08, d*0.22, 0, badgeCast).

@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	edgeWidth = 2 // pixels at a display's edge that reveal a floating strip
+	edgeWidth     = 2  // pixels at a display's edge that reveal a floating strip
+	edgeDeadZone = 80 // DIPs at the top and bottom of a display where edge reveal is disabled
 	autoHide  = 700 * time.Millisecond
 )
 
@@ -344,7 +345,8 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if s.placed {
 			x0 = m.Right - edgeWidth
 		}
-		if cur.X >= x0 && cur.X < x0+edgeWidth && cur.Y >= m.Top && cur.Y < m.Bottom {
+		deadZone := int32(math.Round(edgeDeadZone * s.scale))
+		if cur.X >= x0 && cur.X < x0+edgeWidth && edgeWakeAllowed(cur.Y, m.Top, m.Bottom, deadZone) {
 			// Where another display lies beyond the edge, the pointer
 			// crosses it on its way there: it has to rest a moment.
 			if s.edgeSince.IsZero() {
@@ -627,6 +629,12 @@ func (s *strip) setClickThrough(v bool) {
 // setDragging keeps the strip out and taking the pointer while a card is
 // dragged.
 func (s *strip) setDragging(v bool) { s.dragging = v }
+
+// edgeWakeAllowed excludes the top and bottom dead zones from edge activation.
+// The distance is in physical pixels, converted from DIPs by the caller.
+func edgeWakeAllowed(y, top, bottom, deadZone int32) bool {
+	return y >= top+deadZone && y < bottom-deadZone
+}
 
 // hardEdge reports whether no display lies beyond the strip's edge next
 // to the point, so the pointer stops there.

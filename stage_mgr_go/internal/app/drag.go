@@ -16,9 +16,10 @@ const dwell = 150 * time.Millisecond
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {
-	h    winapi.HWND
-	from winapi.Rect // where it was as the move began
-	home *display    // the display it was on then
+	h            winapi.HWND
+	from         winapi.Rect // where it was as the move began
+	wasMaximized bool        // the native move loop restores maximized windows before they are dropped
+	home         *display    // the display it was on then
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
 	at, over *display
@@ -34,7 +35,16 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	from := winapi.WindowRect(h)
+	wasMaximized := winapi.IsZoomed(h)
+	debugf("drag start hwnd=%v maximized=%t rect=%+v", h, wasMaximized, from)
+	a.drag = &drag{
+		h:            h,
+		from:         from,
+		wasMaximized: wasMaximized,
+		home:         home,
+		at:           home,
+	}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -52,10 +62,13 @@ func (a *App) dragOver() {
 	if d != g.at {
 		g.at, g.since = d, time.Now()
 	}
-	// Turn the dragged window into a real card as soon as the pointer enters
-	// a visible strip. The ordinary stage switch owns the capture, flight,
-	// parking and card creation; mouse-up must not run the drop a second time.
-	if target := a.stripUnder(winapi.Cursor()); target != nil {
+	// Ordinary windows can be handed off as soon as the pointer enters
+	// the strip. A maximized window must stay in the native move loop until
+	// mouse-up: Windows restores it while dragging, and it should follow the
+	// same drop path as an ordinary window rather than the early card handoff.
+	// Path B accepts its restore-induced size change using wasMaximized.
+	if target := a.stripUnder(winapi.Cursor()); target != nil && !g.wasMaximized {
+		debugf("drag path A candidate hwnd=%v maximized-at-start=%t target=%s home=%t", g.h, g.wasMaximized, target.mon.Device, target == g.home)
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]
 			key := a.groupKey(w)
@@ -64,6 +77,7 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
+				debugf("drag path A accepted hwnd=%v title=%q target=%s kind=home-strip", g.h, w.Title, target.mon.Device)
 				g.converted = true
 				// Start the card's external drag before the native move loop
 				// ends. The loop-end event may clear a.drag before the switch
@@ -81,6 +95,7 @@ func (a *App) dragOver() {
 				// Keep the real window visible until the flight layer has drawn
 				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
 				// before cancelling the native move loop and parking it.
+				debugf("drag path A accepted hwnd=%v title=%q target=%s kind=other-strip", g.h, w.Title, target.mon.Device)
 				g.converted = true
 				// Preserve the pointer gesture independently of a.drag: the
 				// native move-size-end event can arrive before card creation.
@@ -143,10 +158,20 @@ func (a *App) windowMoved(h winapi.HWND) {
 	}
 	a.drag = nil
 	if moved && g.converted {
+		debugf("drag end hwnd=%v result=path-A-converted", h)
 		// The stage switch already owns this window and its card. The end of
 		// the native move only ends the pointer gesture; it is not another drop.
 		a.refreshSoon()
 		return
+	}
+	if moved {
+		p := winapi.Cursor()
+		target := a.stripUnder(p)
+		if target == nil {
+			debugf("drag end hwnd=%v result=no-strip-target cursor=%+v maximized-at-start=%t", h, p, g.wasMaximized)
+		} else {
+			debugf("drag end hwnd=%v result=path-B-pending target=%s maximized-at-start=%t", h, target.mon.Device, g.wasMaximized)
+		}
 	}
 	if !moved {
 		// A move whose start went unseen.
@@ -162,6 +187,10 @@ func (a *App) windowMoved(h winapi.HWND) {
 	}
 	w := a.windows[i]
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
+		r := winapi.WindowRect(h)
+		key := a.groupKey(w)
+		inHeading := slices.Contains(a.heading(d), key)
+		debugf("drag path B candidate hwnd=%v title=%q maximized-at-start=%t target=%s home=%t rect-start=%+v rect-drop=%+v same-size=%t in-heading=%t", h, w.Title, g.wasMaximized, d.mon.Device, d == g.home, g.from, r, r.W() == g.from.W() && r.H() == g.from.H(), inHeading)
 		switch {
 		case d != g.home && a.settings.HideInactive:
 			stage := g.stage
@@ -171,12 +200,20 @@ func (a *App) windowMoved(h winapi.HWND) {
 			a.leave(g.home, w)
 			a.sendAcross(d, w, stage)
 			return
-		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
+		case d == g.home && inHeading:
 			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
+			// Windows restores a maximized window to its normal size as
+			// soon as its title bar is dragged. That size change is part
+			// of the move gesture, not a user resize, so retain the
+			// strip-drop behavior for windows maximized at drag start.
+			// For ordinary windows, keep distinguishing a resize from a
+			// drag by requiring the original dimensions.
+			if g.wasMaximized || (r.W() == g.from.W() && r.H() == g.from.H()) {
+				debugf("drag path B accepted hwnd=%v reason=%s", h, map[bool]string{true: "maximized-at-start", false: "same-size"}[g.wasMaximized])
 				a.sendToStrip(d, w, g.from)
 				return
 			}
+			debugf("drag path B rejected hwnd=%v reason=size-changed start=%dx%d drop=%dx%d", h, g.from.W(), g.from.H(), r.W(), r.H())
 		}
 	}
 	d := a.displayOf(w)

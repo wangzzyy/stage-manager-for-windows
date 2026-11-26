@@ -352,10 +352,27 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 			a.requestMove(c.to, g, c.at, winapi.Rect{Left: int32(x), Top: int32(y), Right: int32(x + w), Bottom: int32(y + h)})
 			a.flights.endDrag(c.to, moveDrop)
 		case aimJoin:
+			// Anchor the incoming flight to the pointer's release position.
+			// Keep the windows' relative arrangement, but move the front
+			// window's center under the pointer so the app opens from the
+			// place where the card was dropped, not its saved desktop pose.
+			drop := st.poses
+			if drop != nil {
+				if p, ok := drop[g.front().HWND]; ok {
+					cur := winapi.Cursor()
+					dx := float64(cur.X) - (p.x + p.w/2)
+					dy := float64(cur.Y) - (p.y + p.h/2)
+					for h, at := range drop {
+						at.x += dx
+						at.y += dy
+						drop[h] = at
+					}
+				}
+			}
 			// The windows stay on the layer where they were let go until
 			// the switch flies them on.
 			a.setCardDrag(nil)
-			d.dropPoses = st.poses
+			d.dropPoses = drop
 			a.request(actJoin, d, g)
 			a.flights.endDrag(d, 800*time.Millisecond)
 		default:

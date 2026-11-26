@@ -141,6 +141,23 @@ func TestWithCompanion(t *testing.T) {
 	}
 }
 
+func TestExcludedExecutables(t *testing.T) {
+	s := (Settings{Excluded: []string{" Paint.EXE ", `"D:/Tools/Editor.exe"`, "paint"}}).Normalize()
+	if want := []string{"paint", `d:\tools\editor.exe`}; !slices.Equal(s.Excluded, want) {
+		t.Fatalf("excluded %q, want %q", s.Excluded, want)
+	}
+	if !s.ExcludedExe(`C:\Apps\Paint.exe`) || !s.ExcludedExe(`D:\Tools\Editor.exe`) || s.ExcludedExe(`C:\Windows\Editor.exe`) {
+		t.Fatal("executable exclusion matching is incorrect")
+	}
+	s = s.WithExcluded(`C:\Apps\Notes.exe`, true)
+	if !s.ExcludedExe(`D:\Other\Notes.exe`) { t.Fatal("new exclusion was not added") }
+	s = s.WithExcluded(`C:\Apps\Paint.exe`, false)
+	if s.ExcludedExe(`C:\Apps\Paint.exe`) { t.Fatal("removed exclusion still matches") }
+	clone := s.Clone()
+	clone.Excluded[0] = "changed"
+	if s.Excluded[0] == "changed" { t.Fatal("clone shares exclusions") }
+}
+
 func TestNoCompanionsStaysEmpty(t *testing.T) {
 	st := NewStore(t.TempDir())
 	s := Default()

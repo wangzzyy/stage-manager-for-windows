@@ -21,7 +21,7 @@ const (
 	stripPadRight   = 22
 	stripMargin     = 28
 	minCardScale    = 0.46
-	tiltStep        = 4 // degrees a resting card turns for each step of the tilt setting: the default 6 turns it 24°
+	tiltStep        = 0 // 3D card tilt is disabled.
 	cardPerspective = 640
 	maxStacked      = 3
 	maxIcons        = 3 // icons a card of several apps shows

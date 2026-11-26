@@ -42,7 +42,7 @@ var ja = Strings{
 	IconSize:     "アイコンのサイズ",
 	Spacing:      "カードの間隔",
 	CardsAt:      "カードの縦位置",
-	Tilt:         "遠近法の強さ",
+	Tilt:         "内向きの回転",
 	TiltDesc:     "ストリップの内向きの回転量を調整します。0 は平面で、値が大きいほどカードが画面の内側へ回転します。",
 	TiltOff:      "なし",
 	DefaultValue: "デフォルト：%s。クリックで戻します。",

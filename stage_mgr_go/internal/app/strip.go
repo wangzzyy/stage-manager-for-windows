@@ -176,12 +176,17 @@ func (s *strip) zOrder() winapi.HWND {
 	if s.switching {
 		return winapi.HwndTopmost
 	}
+	// With covered-sidebar auto-hide disabled, keep an idle strip below
+	// the covering window. Once the pointer hovers over it, a click/drag is
+	// held, or a stage transition starts, fall through to PR #18's original
+	// z-order rules unchanged.
+	if s.d.covered && !s.a.settings.HideWhenCovered &&
+		!s.pointerOnStrip && !s.holding && !s.dragging {
+		return winapi.HwndBottom
+	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
 	// z-order is independent of the pointer and of full-screen detection;
 	// it drops below other windows only after the slide-out has finished.
-	if s.d.covered && !s.a.settings.HideWhenCovered {
-		return winapi.HwndBottom
-	}
 	if s.a.settings.Mode == settings.Floating && s.visible && !s.away {
 		return winapi.HwndTopmost
 	}

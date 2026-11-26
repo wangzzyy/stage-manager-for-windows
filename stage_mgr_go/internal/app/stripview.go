@@ -440,8 +440,10 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt, strength float32) (originY, pe
 		strength = 1
 	}
 	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle) / float64(strength))
-	if perspective < 1 {
+	if angle < 0.001 {
 		perspective = cardPerspective
+	} else {
+		perspective = max(perspective, 1)
 	}
 	return originY, perspective
 }
@@ -749,7 +751,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			b := badgeRect(stack, local, float32(a.settings.IconScale), right, ui.Rect{X: -box.X, W: d.viewW})
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
+			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, perspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()

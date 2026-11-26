@@ -195,9 +195,8 @@ type Settings struct {
 	Language i18n.Lang `json:"language,omitempty"`
 }
 
-// DefaultTilt places the convergence point 60% of the way from screen center
-// to the opposite edge, preserving the previous default slider position.
-const DefaultTilt = 6
+// DefaultTilt is the initial perspective slider position.
+const DefaultTilt = 3
 
 // The accent the overview's buttons take under the pointer, besides a color
 // of the user's: AccentDefault is the blue the overview rings with, and

@@ -2,6 +2,7 @@ package app
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
@@ -181,7 +182,7 @@ func (s *strip) zOrder() winapi.HWND {
 	// With covered-sidebar auto-hide disabled, keep the strip below the
 	// covering window until the pointer is over a part of the strip that is
 	// not covered by another window. Otherwise, PR #18's original rules apply.
-	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise {
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise && !s.edgeReveal {
 		return winapi.HwndBottom
 	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
@@ -364,9 +365,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				s.lastInside = time.Time{}
 			}
 		}
-		// With auto-hide disabled, reaching the screen edge can reveal a
-		// fully covered sidebar using the original slide-in animation.
-		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
+		// A partially covered sidebar stays in place underneath the
+		// covering window. A fully covered one uses the original edge-reveal
+		// animation, without conflating its resting visibility with z-order.
+		fullyCovered := s.d.covered && !s.a.settings.HideWhenCovered && s.fullyCovered()
+		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered && !fullyCovered {
 			s.edgeRaise = true
 		}
 		// Keep the edge reveal raised while its slide-in animation runs.
@@ -380,7 +383,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
 		if s.d.covered {
-			if s.a.settings.HideWhenCovered {
+			if s.a.settings.HideWhenCovered || fullyCovered {
 				if edgeWake {
 					s.edgeReveal = true
 				}
@@ -388,13 +391,14 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				if !edgeWake && !inStrip {
 					s.edgeReveal = false
 				}
-				// A covered strip stays hidden unless the pointer explicitly
-				// reveals it from the screen edge. Keep it open while the pointer
-				// remains anywhere in the strip bounds, then hide it on leaving.
+				// A fully covered strip is normally slid out. Reaching the
+				// screen edge starts the same slide-in used by the original
+				// auto-hide path; leaving the strip lets it slide out again.
 				want = (s.edgeReveal && (edgeWake || inStrip)) ||
 					s.dragging || now.Before(s.holdUntil)
 			} else if s.shown {
-				// Keep a visible strip shown underneath the covering window.
+				// A partly exposed strip remains visible underneath the
+				// covering window, so its uncovered area can still be hovered.
 				want = true
 			}
 		} else {
@@ -445,6 +449,66 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)
+}
+
+// fullyCovered reports whether the stage windows cover every point of the
+// card band. d.covered only means that at least one window overlaps it; using
+// that weaker test here would hide the exposed part of a partly covered strip.
+func (s *strip) fullyCovered() bool {
+	band := s.cardBand()
+	if band.Empty() {
+		return false
+	}
+	type interval struct{ top, bottom int32 }
+	var windows []winapi.Rect
+	xs := []int32{band.Left, band.Right}
+	for _, g := range s.d.onStage {
+		for _, w := range g.windows {
+			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+				continue
+			}
+			r := winapi.FrameBounds(w.HWND)
+			if !r.Intersects(band) {
+				continue
+			}
+			r.Left = max(r.Left, band.Left)
+			r.Right = min(r.Right, band.Right)
+			r.Top = max(r.Top, band.Top)
+			r.Bottom = min(r.Bottom, band.Bottom)
+			windows = append(windows, r)
+			xs = append(xs, r.Left, r.Right)
+		}
+	}
+	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })
+	for i := 0; i+1 < len(xs); i++ {
+		left, right := xs[i], xs[i+1]
+		if left == right {
+			continue
+		}
+		var spans []interval
+		for _, r := range windows {
+			if r.Left <= left && r.Right >= right {
+				spans = append(spans, interval{r.Top, r.Bottom})
+			}
+		}
+		sort.Slice(spans, func(i, j int) bool { return spans[i].top < spans[j].top })
+		coveredTo := band.Top
+		for _, span := range spans {
+			if span.top > coveredTo {
+				break
+			}
+			if span.bottom > coveredTo {
+				coveredTo = span.bottom
+			}
+			if coveredTo >= band.Bottom {
+				break
+			}
+		}
+		if coveredTo < band.Bottom {
+			return false
+		}
+	}
+	return true
 }
 
 // coveredAt reports which visible top-level window is foremost at p.

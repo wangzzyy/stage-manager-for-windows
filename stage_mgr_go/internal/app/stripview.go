@@ -888,7 +888,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			stageBadge(c, b, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+			stageBadge(c, b, 0.5+0.5*ghost, -tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

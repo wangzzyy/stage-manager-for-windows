@@ -31,6 +31,9 @@ var ja = Strings{
 	Cards:      "カード",
 	StripShows: "表示内容",
 
+	HideWhenCovered:     "ウィンドウに隠れたときサイドバーを自動的に隠す",
+	HideWhenCoveredDesc: "ステージウィンドウがカード領域に重なると自動的に隠します。画面端にポインターを移動すると再表示できます。オフにするとウィンドウの下に表示されます。",
+
 	Mode:         "表示方法",
 	ModeDesc:     "サイドバーとウインドウで画面をどう分け合うか。",
 	Fixed:        "固定",

@@ -102,6 +102,7 @@ type Strings struct {
 	RescueNone                       string
 
 	Mode, ModeDesc                           string
+	HideWhenCovered, HideWhenCoveredDesc    string
 	Fixed, FixedDesc, Floating, FloatingDesc string
 	Width                                    string
 	WidthValue                               string // %.0f: DIPs

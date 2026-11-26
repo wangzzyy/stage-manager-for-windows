@@ -41,6 +41,7 @@ type strip struct {
 	holding      bool // the button went down on a card and is still down
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
+	edgeReveal     bool // the strip was explicitly revealed from the screen edge while covered
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -178,6 +179,9 @@ func (s *strip) zOrder() winapi.HWND {
 	// A floating strip stays topmost for its entire visible lifetime. Its
 	// z-order is independent of the pointer and of full-screen detection;
 	// it drops below other windows only after the slide-out has finished.
+	if s.d.covered && !s.a.settings.HideWhenCovered {
+		return winapi.HwndBottom
+	}
 	if s.a.settings.Mode == settings.Floating && s.visible && !s.away {
 		return winapi.HwndTopmost
 	}
@@ -306,6 +310,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	}
 	s.wasInside = inside
 	if s.a.settings.Mode == settings.Floating {
+		edgeWake := false
 		m := s.d.mon.Monitor
 		x0 := m.Left
 		if s.placed {
@@ -320,6 +325,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 			}
 			if s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
 				s.lastInside = now
+				edgeWake = true
 			}
 		} else {
 			s.edgeSince = time.Time{}
@@ -345,6 +351,27 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
+		if s.d.covered {
+			if s.a.settings.HideWhenCovered {
+				if edgeWake {
+					s.edgeReveal = true
+				}
+				inStrip := !s.d.inOverview && s.rect.Contains(cur)
+				if !edgeWake && !inStrip {
+					s.edgeReveal = false
+				}
+				// A covered strip stays hidden unless the pointer explicitly
+				// reveals it from the screen edge. Keep it open while the pointer
+				// remains anywhere in the strip bounds, then hide it on leaving.
+				want = (s.edgeReveal && (edgeWake || inStrip)) ||
+					s.dragging || now.Before(s.holdUntil)
+			} else if s.shown {
+				// Keep a visible strip shown underneath the covering window.
+				want = true
+			}
+		} else {
+			s.edgeReveal = false
+		}
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while
 		// it still moves, the window keeps the frame it asked for waiting

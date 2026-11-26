@@ -29,6 +29,9 @@ var zhHans = Strings{
 	Cards:      "卡片",
 	StripShows: "显示内容",
 
+	HideWhenCovered:     "窗口遮挡时自动隐藏侧边栏",
+	HideWhenCoveredDesc: "舞台窗口遮挡侧边栏卡片区域时自动收起；移动鼠标到屏幕边缘仍可唤出。关闭后侧边栏保持可见并位于遮挡窗口下方。",
+
 	Mode:         "显示方式",
 	ModeDesc:     "侧边栏怎样和窗口共用屏幕。",
 	Fixed:        "固定",

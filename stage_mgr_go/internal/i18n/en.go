@@ -29,6 +29,9 @@ var en = Strings{
 	Cards:      "Cards",
 	StripShows: "Contents",
 
+	HideWhenCovered:     "Hide sidebar when covered",
+	HideWhenCoveredDesc: "Automatically hide the sidebar when a stage window overlaps its cards. Move the pointer to the screen edge to bring it back. When off, the sidebar stays visible underneath the window.",
+
 	Mode:         "Style",
 	ModeDesc:     "How the sidebar shares the screen with windows.",
 	Fixed:        "Fixed",

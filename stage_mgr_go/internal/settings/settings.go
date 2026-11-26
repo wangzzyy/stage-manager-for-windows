@@ -97,6 +97,8 @@ const (
 // Settings are the user's preferences.
 type Settings struct {
 	Mode Mode `json:"mode"`
+	// HideWhenCovered hides the floating sidebar when a stage window overlaps its card area.
+	HideWhenCovered bool `json:"hideWhenCovered"`
 	// Width of a strip in DIPs.
 	Width float64 `json:"width"`
 	// FlightSpeed is how fast windows fly from a card to the stage and
@@ -224,6 +226,7 @@ func accent(s string) string {
 func Default() Settings {
 	return Settings{
 		Mode:               Fixed,
+		HideWhenCovered:    true,
 		FlightSpeed:        1,
 		Width:              200,
 		HideInactive:       true,

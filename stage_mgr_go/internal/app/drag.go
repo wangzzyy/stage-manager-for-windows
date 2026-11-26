@@ -26,6 +26,7 @@ type drag struct {
 	stage    []string
 	dwell    *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	caption   bool // the move began on the title bar, including a restore-and-move from maximized
 }
 
 // startDrag follows window h, which the user began to move.
@@ -34,7 +35,17 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	// A maximized window is restored by Windows before its native move loop
+	// settles. Its final rectangle can therefore differ from the one sampled
+	// at move-size start even though the gesture is a title-bar drag, not a
+	// resize. Remember the non-client hit-test at the start so mouse-up can
+	// still recognize that restore-and-move if no location event reached the
+	// strip while the native loop was running.
+	const htCaption = 2
+	a.drag = &drag{
+		h: h, from: winapi.WindowRect(h), home: home, at: home,
+		caption: winapi.NonClientHitTest(h, winapi.Cursor()) == htCaption,
+	}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -61,13 +72,9 @@ func (a *App) dragOver() {
 			key := a.groupKey(w)
 			if target == g.home && slices.Contains(a.heading(target), key) {
 				origin := winapi.FrameBounds(g.h)
-				// Keep the real window visible until the flight layer has drawn
-				// its first frame over it. The handoff callback then temporarily cloaks it with DWM
-				// before cancelling the native move loop and parking it.
+				// Keep the existing window-to-card flight for same-display drops.
+				// The handoff callback owns hiding and parking the real HWND.
 				g.converted = true
-				// Start the card's external drag before the native move loop
-				// ends. The loop-end event may clear a.drag before the switch
-				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
 				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
 				return
@@ -172,9 +179,18 @@ func (a *App) windowMoved(h winapi.HWND) {
 			a.sendAcross(d, w, stage)
 			return
 		case d == g.home && slices.Contains(a.heading(d), a.groupKey(w)):
-			// A resize that ends over the strip is no drag into it.
-			if r := winapi.WindowRect(h); r.W() == g.from.W() && r.H() == g.from.H() {
-				a.sendToStrip(d, w, g.from)
+			// A resize that ends over the strip is no drag into it. A
+			// title-bar drag may restore a maximized window first, changing
+			// its size; it is still a drag and must use the same animated
+			// handoff as a window whose location events reached the strip.
+			r := winapi.WindowRect(h)
+			if (r.W() == g.from.W() && r.H() == g.from.H()) || g.caption {
+				origin := winapi.FrameBounds(h)
+				g.converted = true
+				a.beginWindowCardDrag(d, a.groupKey(w))
+				a.sendDraggedToStrip(d, w,
+					slices.DeleteFunc(a.heading(d), func(app string) bool { return app == a.groupKey(w) }),
+					g.from, origin)
 				return
 			}
 		}
@@ -271,11 +287,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		}
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
+		// Ending the native move loop is best-effort. Some applications
+		// do not acknowledge WM_CANCELMODE promptly after Windows restores
+		// a maximized window. Do not abandon the handoff in that case: keep
+		// the HWND hidden and park it at the sampled drag position. If the
+		// move loop later writes its final position back, CollectEscaped
+		// will detect and re-park it.
 		if !winapi.CancelMoveSize(w.HWND) {
-			winapi.ShowNoActivate(w.HWND)
-			winapi.DwmFlush()
-			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
-			return
+			debugf("drag into card: native move loop did not settle for %v; parking anyway", w.HWND)
 		}
 		parked := false
 		if a.settings.HideInactive {
@@ -328,11 +347,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	// hung application from holding up the handoff.
 	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
 		if !startFlight() {
-			// No overlay will take over; restore the real card after a failed
-			// capture so externalLayer cannot leave it permanently invisible.
+			// A missing/failed still must not leave the real HWND behind
+			// while the model has already moved its app into the strip.
+			// Complete the same hide-and-park handoff, then reveal the
+			// ordinary card as a non-animated fallback.
+			handoff()
 			card.externalLayer = false
 			card.externalPresented = false
-			debugf("drag into card: capture produced no drawable animation; restored real card")
+			debugf("drag into card: capture produced no drawable animation; completed non-animated handoff")
 		}
 		a.redraw()
 	})

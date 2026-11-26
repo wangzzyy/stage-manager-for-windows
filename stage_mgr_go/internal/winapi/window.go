@@ -442,6 +442,30 @@ func WindowFromPoint(p Point) HWND {
 	return Root(HWND(r))
 }
 
+// NonClientHitTest asks a window which non-client area lies at p.
+// SMTO_ABORTIFHUNG keeps a stalled application from holding up the event
+// thread. HTCAPTION (2) distinguishes a title-bar move from a border resize.
+func NonClientHitTest(h HWND, p Point) int32 {
+	if h == 0 || IsHung(h) {
+		return 0
+	}
+	const (
+		wmNCHitTest     = 0x0084
+		smtoAbortIfHung = 0x0002
+		timeoutMS       = 50
+	)
+	lParam := uintptr(uint32(uint16(int16(p.X))) | uint32(uint16(int16(p.Y)))<<16)
+	var result uintptr
+	r, _, _ := procSendMessageTimeoutW.Call(
+		uintptr(h), wmNCHitTest, 0, lParam,
+		smtoAbortIfHung, timeoutMS, uintptr(unsafe.Pointer(&result)),
+	)
+	if r == 0 {
+		return 0
+	}
+	return int32(result)
+}
+
 // DpiForWindow returns the window's DPI, 96 at 100%.
 func DpiForWindow(h HWND) uint32 {
 	r, _, _ := procGetDpiForWindow.Call(uintptr(h))

@@ -368,12 +368,14 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if c := s.a.cardDrag; c != nil && c.aim == aimMove && c.to == s.d {
 			s.lastInside = now
 		}
-		// Once the edge-triggered strip is visible, keep it open while the
-		// pointer remains in its bounds; leaving those bounds ends the hold.
-		if s.pointerOnStrip {
-			if !s.d.inOverview && s.rect.Contains(cur) {
+		// Keep the strip open while the pointer remains in its band.
+		// Do not rely on pointerOnStrip here: it is updated later in this
+		// poll, so on the first tick after a card animation changes hit
+		// geometry it can still be false and let the strip start hiding.
+		if s.visible && !s.d.inOverview {
+			if s.rect.Contains(cur) {
 				s.lastInside = now
-			} else {
+			} else if s.pointerOnStrip {
 				s.lastInside = time.Time{}
 			}
 		}

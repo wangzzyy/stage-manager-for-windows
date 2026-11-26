@@ -115,8 +115,8 @@ type Settings struct {
 	// Spacing is the gap between the cards of a strip, in DIPs at their
 	// full size.
 	Spacing float64 `json:"spacing"`
-	// Tilt is how far the cards turn in 3D, as the macOS strip's do, from
-	// 0, flat, to MaxTilt.
+	// Tilt is the horizontal position of the perspective convergence point: 0 is
+	// the display center, and MaxTilt is the opposite edge of the work area.
 	Tilt int `json:"tilt"`
 	// CardsAt is where the middle of a strip's cards goes, as a share of the
 	// way down it: 0.5, the middle, as on macOS, or lower, nearer to the
@@ -195,7 +195,8 @@ type Settings struct {
 	Language i18n.Lang `json:"language,omitempty"`
 }
 
-// DefaultTilt turns the cards as far as the macOS strip does.
+// DefaultTilt places the convergence point 60% of the way from screen center
+// to the opposite edge, preserving the previous default slider position.
 const DefaultTilt = 6
 
 // The accent the overview's buttons take under the pointer, besides a color

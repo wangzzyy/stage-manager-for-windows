@@ -40,8 +40,10 @@ var en = Strings{
 	IconSize:     "Icon size",
 	Spacing:      "Card spacing",
 	CardsAt:      "Vertical position",
-	Tilt:         "3D perspective",
-	TiltDesc:     "Cards turn sideways as on macOS and face you when hovered. Higher values tilt them more; 0 turns it off.",
+	Tilt:         "Tilt angle",
+	TiltDesc:     "Sets how far cards turn inward around their screen-edge anchor; 0 turns the tilt off.",
+	Perspective: "3D depth",
+	PerspectiveDesc: "Controls how strongly cards recede into the screen. Higher values make the far edge shrink more; the vanishing target stays at the vertical center of the opposite screen edge.",
 	TiltOff:      "Off",
 	DefaultValue: "Default: %s. Click to restore.",
 

@@ -834,9 +834,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				s.previousMark(c, g, stack)
 				cardRect := ui.Rect{X: box.X + translateX, Y: box.Y + translateY - verticalCompensation, W: box.W, H: box.H}
 				for i := len(stack) - 1; i >= 0; i-- {
-					h := g.windows[i].HWND
-					s.cardThumbs.keep(h)
-					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == h
+					hwnd := g.windows[i].HWND
+					s.cardThumbs.keep(hwnd)
+					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == hwnd
 					if flat && !preserveAspect {
 						r := stack[i]
 						r.X = cardRect.X + originX*box.W + (r.X-originX*box.W)*lift
@@ -853,7 +853,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 							Left: int32(math.Round(x)), Top: int32(math.Round(y)),
 							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),
 						}
-						if s.cardThumbs.add(g.windows[i].HWND, dest, float64(shown*fade*op)) {
+						if s.cardThumbs.add(hwnd, dest, float64(shown*fade*op)) {
 							continue
 						}
 					}

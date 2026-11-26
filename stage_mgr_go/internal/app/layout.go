@@ -653,7 +653,22 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 // turned deg degrees about its outer edge, as turnedCard has it, the one on the
 // left or, with right, on the right: pulled toward the edge and, as it goes
 // back, toward the card's middle.
-func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
+// tiltTargetOrigin moves a card's vertical transform origin from its own
+// midpoint toward the display's centerline as the tilt setting increases.
+// strength is normalized to 0..1, so a flat card keeps its original pivot.
+func tiltTargetOrigin(cardY, cardH, targetY, strength float32) float32 {
+	if cardH <= 0 {
+		return 0.5
+	}
+	strength = min(max(strength, 0), 1)
+	mid := cardY + cardH/2
+	return 0.5 + (targetY-mid)/cardH*strength
+}
+
+// turnedPoint is where the point (x, y) of a w×h card shows once the card is
+// turned deg degrees about its outer edge, with its vertical pivot at originY.
+// The right strip is the mirror image of the left.
+func turnedPoint(x, y, w, h, deg, dist float32, right bool, originY float32) (float32, float32) {
 	sin, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
 	u := x
 	if right {
@@ -664,5 +679,6 @@ func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
 	if right {
 		x = w - x
 	}
-	return x, h/2 + (y-h/2)*k
+	pivotY := h * originY
+	return x, pivotY + (y-pivotY)*k
 }

@@ -370,6 +370,8 @@ const (
 	// of its own, asks for these.
 	actFront   // to come in front of the others on the stage
 	actUnstage // for its app to leave the stage for the strip
+	actExclude // make the card's apps persistent exceptions
+	actExcludeSession // make the card's apps exceptions for this run only
 )
 
 // request carries out what a card asks for once the frame is built. Tests
@@ -394,6 +396,22 @@ func (a *App) request(act action, d *display, s *set) {
 			a.bringForward(s.front())
 		case actUnstage:
 			a.unstage(d, s)
+		case actExclude:
+			next := a.settings
+			for _, g := range s.apps {
+				next = next.WithCompanion(g.front().Exe, true)
+			}
+			a.applySettings(next)
+		case actExcludeSession:
+			if a.sessionCompanions == nil {
+				a.sessionCompanions = map[string]bool{}
+			}
+			for _, g := range s.apps {
+				if exe := g.front().Exe; exe != "" {
+					a.sessionCompanions[exe] = true
+				}
+			}
+			a.redraw()
 		}
 	})
 }

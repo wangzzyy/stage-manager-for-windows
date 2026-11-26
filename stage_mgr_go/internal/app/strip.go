@@ -338,11 +338,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				s.edgeSince = now
 				debugf("strip %s: pointer at the edge, hard=%v", s.d.mon.Device, s.hardEdge(cur))
 			}
-			// A covered sidebar can only be reached through the screen edge.
-			// Preserve the immediate edge reveal when auto-hide is enabled;
-			// otherwise retain the normal hard-edge / dwell behavior.
-			coveredEdgeReveal := s.d.covered && s.a.settings.HideWhenCovered
-			if coveredEdgeReveal || s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
+			if s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
 				s.lastInside = now
 				edgeWake = true
 			}

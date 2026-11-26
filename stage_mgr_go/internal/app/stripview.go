@@ -429,10 +429,10 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint puts the perspective's vanishing point at the middle of the
-// opposite vertical edge of the display. The outer edge remains the card's
-// fixed base; its top and bottom edges run toward that distant point, while
-// the inner edge is foreshortened without being turned around its own axis.
+// cardViewpoint moves the perspective's vertical target from the card's
+// midpoint toward the centerline of the opposite display edge as the tilt
+// setting increases. The outer edge remains the card's fixed base; its inner
+// edge recedes toward the display, without the card turning around its own axis.
 func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
 	if s.scale <= 0 {
 		return 0.5, cardPerspective

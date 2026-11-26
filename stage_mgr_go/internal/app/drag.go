@@ -13,6 +13,10 @@ import (
 // a third display or back, does not set it flying.
 const dwell = 150 * time.Millisecond
 
+// maximizedBeforeMove remembers the last maximized state observed before
+// Windows restores a window as its native title-bar drag begins.
+var maximizedBeforeMove = map[winapi.HWND]time.Time{}
+
 // drag is a window the user is moving, from the start of the move to its
 // end.
 type drag struct {
@@ -24,8 +28,9 @@ type drag struct {
 	at, over *display
 	since    time.Time
 	stage    []string
-	dwell    *time.Timer
-	converted bool // the window has already become a strip card while still being dragged
+	dwell         *time.Timer
+	wasMaximized bool // Windows restored this maximized window as its native move loop began
+	converted    bool // the window has already become a strip card while still being dragged
 }
 
 // startDrag follows window h, which the user began to move.
@@ -33,8 +38,18 @@ func (a *App) startDrag(h winapi.HWND) {
 	if a.drag != nil && a.drag.dwell != nil {
 		a.drag.dwell.Stop()
 	}
+	wasMaximized := winapi.IsZoomed(h)
+	if at, ok := maximizedBeforeMove[h]; ok {
+		wasMaximized = wasMaximized || time.Since(at) < time.Second
+		delete(maximizedBeforeMove, h)
+	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	if wasMaximized {
+		// Suppress DWM's restore transition for the remainder of this native
+		// move loop. Do not call Restore: Windows already owns the gesture.
+		winapi.SetTransitionsDisabled(h, true)
+	}
+	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: wasMaximized}
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -69,7 +84,7 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin, g.wasMaximized)
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -88,7 +103,7 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized)
 				return
 			}
 		}
@@ -142,6 +157,12 @@ func (a *App) windowMoved(h winapi.HWND) {
 		g.dwell.Stop()
 	}
 	a.drag = nil
+	if moved {
+		delete(maximizedBeforeMove, h)
+		if g.wasMaximized {
+			winapi.SetTransitionsDisabled(h, false)
+		}
+	}
 	if moved && g.converted {
 		// The stage switch already owns this window and its card. The end of
 		// the native move only ends the pointer gesture; it is not another drop.
@@ -242,7 +263,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, wasMaximized bool) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -272,14 +293,19 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
-			winapi.ShowNoActivate(w.HWND)
+			// The card has already taken over visually. Never show the real HWND
+			// again merely because the native move loop did not acknowledge
+			// cancellation: it can still snap back to its original rectangle.
+			if a.park.RememberHiddenFrom(w.HWND, parkFrom, wasMaximized) {
+				a.park.Rehome(w.HWND, home)
+			}
 			winapi.DwmFlush()
-			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
+			debugf("drag into card: native move loop did not end for %v; keeping real window hidden", w.HWND)
 			return
 		}
 		parked := false
-		if a.settings.HideInactive {
-			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
+		if a.settings.HideInactive || wasMaximized {
+			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom, wasMaximized)
 			if parked {
 				a.park.Rehome(w.HWND, home)
 			}
@@ -291,9 +317,13 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
-		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
-		// keeps enumeration and later restoration working as usual.
-		winapi.ShowNoActivate(w.HWND)
+		// Successfully parked windows remain WS_VISIBLE beyond the desktop.
+		// If native positioning failed for a maximized HWND, keep it hidden:
+		// showing it here would expose the restored normal-size remnant behind
+		// the card. Unparking sends it home and makes it visible again.
+		if !a.park.KeepHidden(w.HWND) {
+			winapi.ShowNoActivate(w.HWND)
+		}
 		winapi.DwmFlush()
 		if a.settings.HideInactive && !parked {
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)

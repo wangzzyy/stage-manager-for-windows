@@ -87,6 +87,7 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 			return
 		}
 		delete(a.handoffHidden, h)
+		delete(maximizedBeforeMove, h)
 		a.noteClosed(h)
 	case winapi.EventObjectHide:
 		if until, ok := a.handoffHidden[h]; ok {
@@ -110,6 +111,14 @@ func (a *App) onWinEvent(event uint32, h winapi.HWND) {
 	case winapi.EventSystemMoveSizeEnd:
 		a.windowMoved(h)
 	case winapi.EventObjectLocationChange:
+		// Remember the maximized state before Windows restores a window as
+		// the user starts dragging its title bar. The move-size-start event
+		// can arrive after IsZoomed has already become false.
+		if a.drag == nil || h != a.drag.h {
+			if winapi.IsZoomed(h) {
+				maximizedBeforeMove[h] = time.Now()
+			}
+		}
 		if a.drag != nil && h == a.drag.h {
 			a.dragOver()
 		}

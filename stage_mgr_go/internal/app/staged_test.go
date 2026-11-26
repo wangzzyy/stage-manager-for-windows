@@ -465,6 +465,8 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		s, _, tt := testStrip(t)
 		if right {
 			s.a.settings.Sides = map[string]settings.Side{s.d.mon.Device: settings.Right}
+			s.rect.Left = s.d.mon.Work.Right - s.rect.Right
+			s.rect.Right = s.d.mon.Work.Right
 		}
 		s.d.sets[0].staged = true
 		stillRed(s)

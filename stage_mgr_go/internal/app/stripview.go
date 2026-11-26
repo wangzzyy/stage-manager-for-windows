@@ -626,7 +626,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		a.media.preview(g.windows)
 	}
 	restTilt, hoverTilt := cardTilts(a.settings.Tilt)
-	restTilt += cardPerspectiveTilt
 	tilt := restTilt
 	if live {
 		tilt = hoverTilt

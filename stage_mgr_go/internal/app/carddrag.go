@@ -341,6 +341,10 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
+			// A merge ends the drag here, unlike a move that remains in
+			// flight until cardLanded. Leaving cardDrag set would make
+			// every card's hover test fail (el.Hovered() && cardDrag == nil).
+			a.setCardDrag(nil)
 			a.requestMerge(d, g, c.target)
 			a.flights.endDrag(d, 0)
 		case aimMove:

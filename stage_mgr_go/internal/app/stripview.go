@@ -450,7 +450,8 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	// At zero tilt the card keeps its own midpoint as the pivot. Increasing
 	// the existing tilt slider progressively moves that pivot toward the
 	// opposite-edge centerline, making the card recede into the display.
-	strength := float32(math.Abs(float64(tilt))) / float32(settings.MaxTilt*tiltStep)
+	normalizedTilt := float32(math.Abs(float64(tilt))) / float32(settings.MaxTilt*tiltStep)
+	strength := tiltTargetStrength(normalizedTilt)
 	originY = tiltTargetOrigin(card.Y, card.H, float32(localCenterY), strength)
 	// With a Y rotation, parallel lines converge at p/sin(tilt).
 	// Set p so that the vanishing point lands on the opposite display edge,

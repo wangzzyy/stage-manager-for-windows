@@ -390,7 +390,8 @@ func TestStagedCardHasACheck(t *testing.T) {
 		b := stageBadgeRect(local, float32(s.a.settings.IconScale), false)
 		// The badge follows the fixed resting perspective angle, not the
 		// settings-driven tilt (which is zero in this change).
-		bx, by := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, cardPerspectiveTilt, cardPerspective, false)
+		_, perspective := s.cardViewpoint(card, cardPerspectiveTilt, s.a.settings.Tilt)
+		bx, by := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, cardPerspectiveTilt, perspective, false)
 		img := tt.Image()
 		for y := int(card.Y + by - b.H/2); y < int(card.Y+by+b.H/2); y++ {
 			for x := int(card.X + bx - b.W/2); x < int(card.X+bx+b.W/2); x++ {
@@ -437,8 +438,8 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		local := ui.Rect{W: card.W, H: card.H}
 		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
 		deg, _ := cardTilts(s.a.settings.Tilt)
-		deg += cardPerspectiveTilt
-		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right)
+		_, perspective := s.cardViewpoint(card, deg, s.a.settings.Tilt)
+		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, perspective, right)
 		img := tt.Image()
 		x0, y0, x1, y1 := 1<<30, 1<<30, -1, -1
 		for y := 0; y < img.Bounds().Dy(); y++ {

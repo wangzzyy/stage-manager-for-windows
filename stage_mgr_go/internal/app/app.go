@@ -45,9 +45,9 @@ func (g *group) front() catalog.Window { return g.windows[0] }
 type set struct {
 	key  string   // the card's identity: its first app
 	apps []*group // in the order they came on the stage
-	// windows are what the card shows, front first: the front window of
-	// each app, so that every app shows, then the others. The ones shown
-	// are in z-order.
+	// windows are what the card shows, in model app order: the front
+	// window of each app first, so every app shows, then its other windows.
+	// This keeps merged source-before-target order even while windows are parked.
 	windows []catalog.Window
 	// staged tells the card is that of the apps on the stage, which a strip
 	// that lists every stage (settings.AllStages) keeps in its slot, as a ghost.
@@ -57,17 +57,16 @@ type set struct {
 // newSet makes the card of apps, given in the order they came.
 func newSet(apps []*group) *set {
 	s := &set{key: apps[0].app, apps: apps}
-	byZ := slices.Clone(apps)
-	slices.SortStableFunc(byZ, func(x, y *group) int { return x.z - y.z })
-	for _, g := range byZ {
+	// The model's app order is authoritative: in particular, Merge puts
+	// the dragged card before the target card. Sorting these windows by the
+	// desktop's current Z-order would undo that order for parked/hidden HWNDs,
+	// which are absent from EnumWindows and retain stale Z values.
+	for _, g := range apps {
 		s.windows = append(s.windows, g.windows[0])
 	}
-	for _, g := range byZ {
+	for _, g := range apps {
 		s.windows = append(s.windows, g.windows[1:]...)
 	}
-	// Those the card shows overlap as they do on the desktop, so that the
-	// windows flying out of the card and home keep their order all the way.
-	slices.SortStableFunc(s.stacked(), frontFirst)
 	return s
 }
 
@@ -463,7 +462,7 @@ func (a *App) syncDisplays() {
 
 // frontApp returns the front-most app showing on a display, or "".
 func (a *App) frontApp(d *display) string {
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	for _, g := range a.groupsOf(d) {
 		if showing(a, g) {
 			return g.app
@@ -568,7 +567,7 @@ func (a *App) displaysChanged() {
 // initStage puts on each display's stage the app the user is in, or the
 // front-most app showing there, and parks the others.
 func (a *App) initStage() {
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	now := time.Now()
 	fg := catalog.RootOwner(winapi.Foreground())
 	var leaving []winapi.HWND
@@ -623,6 +622,20 @@ func (a *App) initStage() {
 	})
 }
 
+// listWindows retains cached metadata for handoff HWNDs that are deliberately SW_HIDE while parked.
+// Catalog.Windows omits hidden windows, but their cards must remain in the model until unpark.
+func (a *App) listWindows() []catalog.Window {
+	listed := a.cat.Windows()
+	seen := make(map[winapi.HWND]bool, len(listed))
+	for _, w := range listed { seen[w.HWND] = true }
+	for _, w := range a.windows {
+		if a.park == nil || seen[w.HWND] || !a.park.IsParked(w.HWND) || !winapi.IsWindow(w.HWND) || winapi.IsWindowVisible(w.HWND) { continue }
+		listed = append(listed, w)
+		seen[w.HWND] = true
+	}
+	return listed
+}
+
 // refresh lists the windows again and brings strips and stages up to date.
 func (a *App) refresh() {
 	if a.refreshTimer != nil {
@@ -644,7 +657,7 @@ func (a *App) refresh() {
 		return
 	}
 	a.reparkEscaped()
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	if a.followMoved() {
 		return
 	}
@@ -801,12 +814,25 @@ func (a *App) reparkEscaped() {
 	fg := winapi.Foreground()
 	for _, h := range a.park.CollectEscaped() {
 		i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
-		if i < 0 || h == fg || !a.settings.HideInactive {
+		until, handedOff := a.handoffHidden[h]
+		// A dragged-to-strip window can briefly reappear while Windows
+		// unwinds its native move loop. It is still the card's window, not
+		// a user move back onto the desktop: keep it parked even if Windows
+		// reports it as the foreground window during that interval.
+		keepParked := handedOff && time.Now().Before(until)
+		if i < 0 || (h == fg && !keepParked) || !a.settings.HideInactive {
+			a.park.ForgetEscaped(h)
 			continue
 		}
 		w := a.windows[i]
 		if d := a.displayOf(w); d != nil && a.managed(d) && !d.model.OnStage(a.groupKey(w)) {
-			a.park.Park(h)
+			// Restore the existing parking record, not a new one: the
+			// original home must survive a transient escape during handoff.
+			if !a.park.ReparkEscaped(h) {
+				debugf("repark escaped %x %q failed; will retry", h, w.Title)
+			}
+		} else {
+			a.park.ForgetEscaped(h)
 		}
 	}
 }

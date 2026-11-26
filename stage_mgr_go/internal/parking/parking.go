@@ -50,8 +50,16 @@ type parked struct {
 }
 
 // Service parks and unparks windows. Use it from one goroutine.
+type snappedPlacement struct {
+	placement winapi.WindowPlacementSnapshot
+	rect      winapi.Rect
+}
+
 type Service struct {
-	parked  map[winapi.HWND]parked
+	parked    map[winapi.HWND]parked
+	maximized map[winapi.HWND]winapi.WindowPlacementSnapshot // pre-drag placement for windows whose maximize state was lost
+	snapped   map[winapi.HWND]snappedPlacement
+	escaped map[winapi.HWND]parked // windows temporarily back on the desktop; retains their original homes
 	journal string
 	lifted  map[winapi.HWND]bool // parked windows home for a moment, see Lift
 	homing  map[winapi.HWND]homing
@@ -74,7 +82,7 @@ type homing struct {
 
 // New keeps the journal in dir.
 func New(dir string) *Service {
-	return &Service{parked: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
+	return &Service{parked: map[winapi.HWND]parked{}, maximized: map[winapi.HWND]winapi.WindowPlacementSnapshot{}, snapped: map[winapi.HWND]snappedPlacement{}, escaped: map[winapi.HWND]parked{}, lifted: map[winapi.HWND]bool{}, homing: map[winapi.HWND]homing{}, journal: filepath.Join(dir, "parked-windows.json")}
 }
 
 // IsParked reports whether a window is parked.
@@ -84,6 +92,37 @@ func (s *Service) IsParked(h winapi.HWND) bool { _, ok := s.parked[h]; return ok
 func (s *Service) Home(h winapi.HWND) (winapi.Rect, bool) {
 	p, ok := s.parked[h]
 	return p.Home, ok
+}
+
+// RestoreSnapped marks a parked window to return to its saved snap cell.
+func (s *Service) RestoreSnapped(h winapi.HWND, placement winapi.WindowPlacementSnapshot, rect winapi.Rect) {
+	if s.IsParked(h) && !rect.Empty() {
+		s.snapped[h] = snappedPlacement{placement: placement, rect: rect}
+		s.logf("parked %x will restore snapped placement=%+v rect=%v", h, placement, rect)
+	}
+}
+
+// rememberSnapped captures a window's snap placement before moving it off-screen.
+func (s *Service) rememberSnapped(h winapi.HWND) {
+	if !winapi.IsSnapped(h) {
+		return
+	}
+	placement, ok := winapi.CaptureWindowPlacement(h)
+	rect := winapi.WindowRect(h)
+	if ok && !rect.Empty() {
+		s.snapped[h] = snappedPlacement{placement: placement, rect: rect}
+		s.logf("parked %x will restore snapped placement=%+v rect=%v", h, placement, rect)
+	}
+}
+
+// RestoreMaximized marks a parked window to return maximized after its card is selected.
+func (s *Service) RestoreMaximized(h winapi.HWND, placement winapi.WindowPlacementSnapshot) {
+	if s.IsParked(h) {
+		s.maximized[h] = placement
+		s.logf("parked %x will restore maximized placement=%+v", h, placement)
+	} else {
+		s.logf("cannot mark %x maximized: window is not parked", h)
+	}
 }
 
 // Count is how many windows are parked.
@@ -108,7 +147,9 @@ func (s *Service) ParkImmediateFrom(h winapi.HWND, from winapi.Rect) bool {
 	}
 	home := onDesktop(from)
 	spot := spotFor(home)
+	s.rememberSnapped(h)
 	if !moveImmediate(h, spot) {
+		delete(s.snapped, h)
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, At: time.Now()}
@@ -194,7 +235,38 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	for w, p := range s.parked {
 		if w == h || p.Owner == h {
 			delete(s.parked, w)
-			s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+			if snapped, ok := s.snapped[w]; ok {
+				delete(s.snapped, w)
+				delete(s.homing, w)
+				// SW_HIDE, not DWM cloak, is what keeps the parked HWND out of
+				// composition. Remove the cloak while it is still SW_HIDE'd.
+				beforeRect, beforeVisible := winapi.WindowRect(w), winapi.IsWindowVisible(w)
+				uncloaked := winapi.SetCloaked(w, false)
+				s.logf("restore snapped begin %x visible=%v rect=%v uncloaked=%v target=%v placement=%+v",
+					w, beforeVisible, beforeRect, uncloaked, snapped.rect, snapped.placement)
+				restored := winapi.ShowSnappedPlacementNoActivate(w, snapped.placement, snapped.rect)
+				s.logf("restore snapped end %x ok=%v visible=%v rect=%v target=%v",
+					w, restored, winapi.IsWindowVisible(w), winapi.WindowRect(w), snapped.rect)
+				if !restored {
+					s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+					winapi.ShowNoActivate(w)
+				}
+			} else if placement, maximized := s.maximized[w]; maximized {
+				delete(s.maximized, w)
+				// A maximized window must not enter the ordinary sendHome/Chase
+				// path. Those routines keep applying SetWindowPos to its outer
+				// rectangle after it has maximized, which can move it away from
+				// the monitor selected by its saved WINDOWPLACEMENT.
+				delete(s.homing, w)
+				winapi.SetCloaked(w, false)
+				ok := winapi.ShowMaximizedPlacementNoActivate(w, placement)
+				s.logf("restore maximized %x ok=%v zoomed=%v rect=%v placement=%+v", w, ok, winapi.IsZoomed(w), winapi.WindowRect(w), placement)
+			} else {
+				s.sendHome(w, reachable(p.Home.Offset(shiftX, shiftY)))
+				winapi.SetCloaked(w, false)
+				winapi.ShowNoActivate(w)
+			}
+			winapi.SetTransitionsDisabled(w, false)
 		}
 	}
 	// A dialog opened while its owner was parked was placed next to the
@@ -203,6 +275,7 @@ func (s *Service) unpark(h winapi.HWND) bool {
 	for _, o := range catalog.OwnedWindows(h) {
 		if r := winapi.WindowRect(o); winapi.MostlyOffscreen(r) {
 			s.sendHome(o, reachable(r.Offset(dx, dy)))
+			winapi.SetCloaked(o, false)
 		}
 	}
 	return true
@@ -314,10 +387,14 @@ func place(h winapi.HWND, p winapi.Point) {
 		return
 	}
 	land(h, p)
-	// Parking uses SWP_NOREDRAW to preserve the last composed frame while
-	// windows are off-screen. Invalidate on return so apps that discarded
-	// their surface while hidden repaint without waiting for pointer input.
-	winapi.Redraw(h)
+	// A handoff window is deliberately SW_HIDE'd while parked. Redrawing it
+	// before it is shown forces some applications (notably editor windows)
+	// to discard/rebuild their redirected surface, producing a blank flash
+	// or an apparent reload on card restore. Preserve the last composed frame
+	// for hidden windows; ordinary visible parked windows still get repainted.
+	if winapi.IsWindowVisible(h) {
+		winapi.Redraw(h)
+	}
 }
 
 // raising counts the calls to raise: the last one asked for is the order
@@ -430,13 +507,66 @@ func (s *Service) Lower() {
 // RestoreAll brings every parked window home. It is safe while quitting.
 func (s *Service) RestoreAll() {
 	for h, p := range s.parked {
-		if winapi.IsWindow(h) {
+		if !winapi.IsWindow(h) {
+			continue
+		}
+		if snapped, ok := s.snapped[h]; ok {
+			delete(s.homing, h)
+			beforeRect, beforeVisible := winapi.WindowRect(h), winapi.IsWindowVisible(h)
+			uncloaked := winapi.SetCloaked(h, false)
+			s.logf("restore-all snapped begin %x visible=%v rect=%v uncloaked=%v target=%v placement=%+v",
+				h, beforeVisible, beforeRect, uncloaked, snapped.rect, snapped.placement)
+			if !winapi.ShowSnappedPlacementNoActivate(h, snapped.placement, snapped.rect) {
+				home := onDesktop(p.Home)
+				s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+				winapi.ShowNoActivate(h)
+			}
+			s.logf("restore-all snapped end %x visible=%v rect=%v target=%v",
+				h, winapi.IsWindowVisible(h), winapi.WindowRect(h), snapped.rect)
+			delete(s.snapped, h)
+		} else if placement, maximized := s.maximized[h]; maximized {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			winapi.ShowMaximizedPlacementNoActivate(h, placement)
+		} else {
 			home := onDesktop(p.Home)
 			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
-			winapi.Redraw(h)
+			winapi.SetCloaked(h, false)
+			winapi.ShowNoActivate(h)
 		}
+		winapi.SetTransitionsDisabled(h, false)
+		winapi.Redraw(h)
+	}
+	for h, p := range s.escaped {
+		if !winapi.IsWindow(h) {
+			continue
+		}
+		if snapped, ok := s.snapped[h]; ok {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			if !winapi.ShowSnappedPlacementNoActivate(h, snapped.placement, snapped.rect) {
+				home := onDesktop(p.Home)
+				s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+				winapi.ShowNoActivate(h)
+			}
+			delete(s.snapped, h)
+		} else if placement, maximized := s.maximized[h]; maximized {
+			delete(s.homing, h)
+			winapi.SetCloaked(h, false)
+			winapi.ShowMaximizedPlacementNoActivate(h, placement)
+		} else {
+			home := onDesktop(p.Home)
+			s.sendHome(h, winapi.Point{X: home.Left, Y: home.Top})
+			winapi.SetCloaked(h, false)
+			winapi.ShowNoActivate(h)
+		}
+		winapi.SetTransitionsDisabled(h, false)
+		winapi.Redraw(h)
 	}
 	s.parked = map[winapi.HWND]parked{}
+	s.maximized = map[winapi.HWND]winapi.WindowPlacementSnapshot{}
+	s.snapped = map[winapi.HWND]snappedPlacement{}
+	s.escaped = map[winapi.HWND]parked{}
 	clear(s.lifted)
 	s.save()
 }
@@ -445,11 +575,21 @@ func (s *Service) RestoreAll() {
 // windows something else moved back onto the desktop, as Windows does when
 // it re-maximizes windows after the work area changes.
 func (s *Service) CollectEscaped() []winapi.HWND {
+	if s.escaped == nil {
+		s.escaped = map[winapi.HWND]parked{}
+	}
+	// Retry windows that escaped on an earlier refresh until the app either
+	// re-parks them or decides the user intentionally brought them back.
 	var escaped []winapi.HWND
+	for h := range s.escaped {
+		escaped = append(escaped, h)
+	}
 	changed := false
 	for h, p := range s.parked {
 		if !winapi.IsWindow(h) {
 			delete(s.parked, h)
+			delete(s.maximized, h)
+			delete(s.snapped, h)
 			changed = true
 			continue
 		}
@@ -474,6 +614,7 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 		delete(s.parked, h)
 		changed = true
 		if p.Owner == 0 && winapi.OnAnyMonitor(r) {
+			s.escaped[h] = p
 			escaped = append(escaped, h)
 		}
 	}
@@ -481,6 +622,36 @@ func (s *Service) CollectEscaped() []winapi.HWND {
 		s.save()
 	}
 	return escaped
+}
+
+// ReparkEscaped puts a temporarily escaped window back at its original spot,
+// preserving the home recorded before it escaped. Calling Park here would
+// incorrectly make the escaped desktop position the new home.
+func (s *Service) ReparkEscaped(h winapi.HWND) bool {
+	p, ok := s.escaped[h]
+	if !ok || !winapi.IsWindow(h) || winapi.IsIconic(h) {
+		return false
+	}
+	if !moveImmediate(h, p.Spot) {
+		return false
+	}
+	p.At = time.Now()
+	s.parked[h] = p
+	delete(s.escaped, h)
+	s.logf("repark %x %q home %v spot %v", h, winapi.Title(h), p.Home, p.Spot)
+	s.save()
+	return true
+}
+
+// ForgetEscaped lets a window the user intentionally brought back become
+// an ordinary desktop window instead of retaining stale parking metadata.
+func (s *Service) ForgetEscaped(h winapi.HWND) {
+	if _, ok := s.escaped[h]; ok {
+		delete(s.escaped, h)
+		delete(s.maximized, h)
+		delete(s.snapped, h)
+		s.save()
+	}
 }
 
 type entry struct {
@@ -524,6 +695,7 @@ func restoreJournal(path string) int {
 		}
 		home := onDesktop(winapi.Rect{Left: e.HomeX, Top: e.HomeY, Right: e.HomeX + r.W(), Bottom: e.HomeY + r.H()})
 		place(h, winapi.Point{X: home.Left, Y: home.Top})
+		winapi.SetCloaked(h, false)
 		winapi.Redraw(h)
 		n++
 	}
@@ -572,10 +744,25 @@ func (s *Service) parkOneUsing(h, owner winapi.HWND, place func(r winapi.Rect) (
 		return false
 	}
 	home, spot := place(r)
+	s.rememberSnapped(h)
+	// A normal stage switch uses Park rather than the drag handoff path.
+	// Moving a maximized window off-screen can make Windows forget its
+	// maximized show state, so preserve the complete placement before the
+	// move and let unpark restore it explicitly.
+	var maximizedPlacement winapi.WindowPlacementSnapshot
+	wasMaximized := winapi.IsZoomed(h)
+	if wasMaximized {
+		maximizedPlacement, wasMaximized = winapi.CaptureWindowPlacement(h)
+	}
 	if !mover(h, spot) {
+		delete(s.snapped, h)
 		return false
 	}
 	s.parked[h] = parked{Home: home, Spot: spot, Owner: owner, At: time.Now()}
+	if wasMaximized {
+		s.maximized[h] = maximizedPlacement
+		s.logf("parked %x will restore maximized placement=%+v", h, maximizedPlacement)
+	}
 	s.logf("park %x %q from %v home %v spot %v owner %x", h, winapi.Title(h), r, home, spot, owner)
 	return true
 }
@@ -623,12 +810,15 @@ func land(h winapi.HWND, p winapi.Point) bool {
 }
 
 func (s *Service) save() {
-	if len(s.parked) == 0 {
+	if len(s.parked) == 0 && len(s.escaped) == 0 {
 		os.Remove(s.journal)
 		return
 	}
-	entries := make([]entry, 0, len(s.parked))
+	entries := make([]entry, 0, len(s.parked)+len(s.escaped))
 	for h, p := range s.parked {
+		entries = append(entries, entry{uint64(h), p.Home.Left, p.Home.Top, p.Spot.X, p.Spot.Y})
+	}
+	for h, p := range s.escaped {
 		entries = append(entries, entry{uint64(h), p.Home.Left, p.Home.Top, p.Spot.X, p.Spot.Y})
 	}
 	data, _ := json.Marshal(entries)

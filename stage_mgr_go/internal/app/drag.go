@@ -19,13 +19,35 @@ type drag struct {
 	h    winapi.HWND
 	from winapi.Rect // where it was as the move began
 	home *display    // the display it was on then
+	// Save this before the system move loop can automatically restore a
+	// borderless fullscreen window to its normal size on the first drag.
+	fullscreenNormal winapi.Rect
+	fullscreenFrame  winapi.Rect
+	fullscreen       bool
+	// A caption drag that starts maximized is restored by Windows as soon as
+	// the pointer leaves the top edge. Remember the first normal-sized
+	// rectangle: that is the position to return to after the strip handoff,
+	// not the maximized monitor-sized rectangle from the start of the drag.
+	wasMaximized bool
+	maximizedPlacement winapi.WindowPlacementSnapshot
+	maximizedPlacementOK bool
+	wasSnapped bool
+	snappedPlacement winapi.WindowPlacementSnapshot
+	snappedPlacementOK bool
+	snappedRect winapi.Rect
+	transitionsDisabled bool
+	restoredRect winapi.Rect
 	// at is the display it is over, since since; over the one whose stage
 	// made way for it, and stage what was on that stage.
-	at, over *display
-	since    time.Time
-	stage    []string
-	dwell    *time.Timer
+	at, over  *display
+	since     time.Time
+	stage     []string
+	dwell     *time.Timer
 	converted bool // the window has already become a strip card while still being dragged
+	captureAtDragStart bool
+	dragStartCaptureDone bool
+	dragStartCaptureOK bool
+	dragStartCaptureWaiters []func(bool)
 }
 
 // startDrag follows window h, which the user began to move.
@@ -34,7 +56,83 @@ func (a *App) startDrag(h winapi.HWND) {
 		a.drag.dwell.Stop()
 	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
-	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
+	var g *drag
+	// A borderless-fullscreen drag is restarted as a caption drag after its
+	// first restore. Reuse its drag-start capture state so the second native
+	// move loop still animates from the original frame.
+	if previous := a.drag; previous != nil && previous.h == h && previous.captureAtDragStart {
+		g = previous
+		g.from, g.home, g.at = winapi.WindowRect(h), home, home
+		g.wasMaximized = winapi.IsZoomed(h)
+		g.wasSnapped = false
+		g.snappedPlacementOK = false
+		g.snappedRect = winapi.Rect{}
+		g.fullscreen = false
+		g.fullscreenNormal, g.fullscreenFrame = winapi.Rect{}, winapi.Rect{}
+		g.restoredRect = winapi.Rect{}
+		g.over, g.stage, g.dwell = nil, nil, nil
+		g.converted = false
+		g.since = time.Now()
+	} else {
+		g = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home, wasMaximized: winapi.IsZoomed(h)}
+		g.wasSnapped = winapi.IsSnapped(h)
+		if g.wasSnapped {
+			g.snappedPlacement, g.snappedPlacementOK = winapi.CaptureWindowPlacement(h)
+			g.snappedRect = winapi.WindowRect(h)
+			if !g.snappedPlacementOK {
+				debugf("snapped drag snapshot %x failed; snap geometry will use the live rectangle fallback", h)
+			} else {
+				debugf("snapped drag snapshot %x placement=%+v rect=%v", h, g.snappedPlacement, g.snappedRect)
+			}
+		}
+	}
+	if g.wasMaximized {
+		g.maximizedPlacement, g.maximizedPlacementOK = winapi.CaptureWindowPlacement(h)
+		if !g.maximizedPlacementOK {
+			debugf("maximized drag snapshot %x failed; native maximize restore will not be overridden", h)
+		}
+		winapi.SetTransitionsDisabled(h, true)
+		g.transitionsDisabled = true
+		debugf("maximized drag snapshot %x placement=%+v; DWM transitions disabled", h, g.maximizedPlacement)
+	}
+	debugf("move-size start %x class=%q style=%#x iconic=%v zoomed=%v rect=%v frame=%v",
+		h, winapi.ClassName(h), winapi.Style(h), winapi.IsIconic(h), winapi.IsZoomed(h), g.from, winapi.FrameBounds(h))
+	// The fullscreen test must happen at move-size start. Windows may restore
+	// the window as soon as the user pulls it away from the top edge; testing
+	// later, when the pointer reaches a strip, loses the original fullscreen
+	// geometry and cannot distinguish this gesture from an ordinary drag.
+	if normal, frame, ok := winapi.FullscreenRestoreRect(h); ok {
+		g.fullscreenNormal, g.fullscreenFrame, g.fullscreen = normal, frame, true
+		g.captureAtDragStart = true
+		debugf("fullscreen drag detected %x frame %v normal %v", h, frame, normal)
+	} else {
+		normal, maximized, placementOK := winapi.RestoredRect(h)
+		debugf("fullscreen drag rejected %x frame=%v normal=%v maximized=%v placementOK=%v monitor=%v",
+			h, winapi.FrameBounds(h), normal, maximized, placementOK,
+			winapi.MonitorInfo(winapi.MonitorFromRect(winapi.FrameBounds(h))).Monitor)
+	}
+	if g.fullscreen || g.wasMaximized {
+		g.captureAtDragStart = true
+		before := time.Time{}
+		if st := a.media.still(h); st != nil {
+			before = st.at
+		}
+		// Take the flight image before Windows changes a maximized or fullscreen
+		// window during the native move loop. A later handoff capture may see the
+		// restored, smaller window instead of the frame the user began dragging.
+		a.media.capture([]winapi.HWND{h}, true, true, 2*time.Second, func() {
+			st := a.media.still(h)
+			g.dragStartCaptureOK = st != nil && st.at.After(before)
+			g.dragStartCaptureDone = true
+			debugf("drag-start capture %x ok=%v", h, g.dragStartCaptureOK)
+			waiters := g.dragStartCaptureWaiters
+			g.dragStartCaptureWaiters = nil
+			for _, waiter := range waiters {
+				waiter(g.dragStartCaptureOK)
+			}
+		})
+	}
+	a.drag = g
 }
 
 // dragOver makes way for a window dragged onto another display, as macOS
@@ -45,6 +143,17 @@ func (a *App) dragOver() {
 	if !a.ready || g == nil || g.converted {
 		return
 	}
+	// EVENT_SYSTEM_MOVESIZESTART can race the first native placement update
+	// on some windows. If the initial GetWindowPlacement snapshot failed,
+	// retry while Windows still reports the window maximized; once the
+	// caption drag restores it, the original normal placement is no longer
+	// recoverable from the live HWND.
+	if g.wasMaximized && !g.maximizedPlacementOK && winapi.IsZoomed(g.h) {
+		if snapshot, ok := winapi.CaptureWindowPlacement(g.h); ok {
+			g.maximizedPlacement, g.maximizedPlacementOK = snapshot, true
+			debugf("maximized drag snapshot retry %x placement=%+v", g.h, snapshot)
+		}
+	}
 	// By its visible frame, as displayOf goes: a switch must not take the
 	// window for one of the stage it leaves, and park it under the pointer.
 	// Not by its size: crossing to a display of another DPI resizes it.
@@ -52,10 +161,43 @@ func (a *App) dragOver() {
 	if d != g.at {
 		g.at, g.since = d, time.Now()
 	}
+	// Windows restores a maximized caption window inside the native move
+	// loop. Capture that first restored rectangle before the strip handoff
+	// cancels the loop; g.from still describes the maximized frame.
+	if g.wasMaximized && g.restoredRect.Empty() && !winapi.IsZoomed(g.h) && !winapi.IsIconic(g.h) {
+		if r := winapi.WindowRect(g.h); !r.Empty() && (r.W() != g.from.W() || r.H() != g.from.H()) {
+			g.restoredRect = r
+			debugf("maximized drag restored %x from %v to %v", g.h, g.from, r)
+		}
+	}
 	// Turn the dragged window into a real card as soon as the pointer enters
 	// a visible strip. The ordinary stage switch owns the capture, flight,
 	// parking and card creation; mouse-up must not run the drop a second time.
 	if target := a.stripUnder(winapi.Cursor()); target != nil {
+		debugf("drag %x reached strip %s fullscreen=%v cursor=%v", g.h, target.mon.Device, g.fullscreen, winapi.Cursor())
+		// Use the placement captured at move-size start: by the time the
+		// pointer reaches the strip, Windows may already have restored the
+		// fullscreen window and its current frame no longer identifies it.
+		if g.fullscreen {
+			cursor := winapi.Cursor()
+			original := winapi.WindowRect(g.h)
+			if winapi.CancelMoveSize(g.h) {
+				// Keep g attached to the HWND: StartCaptionDrag starts a new
+				// native move loop, whose start event reuses this fullscreen
+				// capture instead of taking a post-restore screenshot.
+				if winapi.SetWindowPos(g.h, 0, g.fullscreenNormal.Left, g.fullscreenNormal.Top,
+					g.fullscreenNormal.W(), g.fullscreenNormal.H(),
+					winapi.SwpNoZOrder|winapi.SwpNoActivate|winapi.SwpFrameChanged) {
+					if winapi.StartCaptionDrag(g.h, cursor) {
+						debugf("fullscreen drag restart %x from %v (frame %v) to %v", g.h, original, g.fullscreenFrame, g.fullscreenNormal)
+						return
+					}
+				}
+				debugf("fullscreen drag restart %x: restore or caption-drag post failed", g.h)
+				return
+			}
+			debugf("fullscreen drag restart %x: native move loop did not end", g.h)
+		}
 		if i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == g.h }); i >= 0 {
 			w := a.windows[i]
 			key := a.groupKey(w)
@@ -69,7 +211,22 @@ func (a *App) dragOver() {
 				// ends. The loop-end event may clear a.drag before the switch
 				// has finished arranging the new card.
 				a.beginWindowCardDrag(target, key)
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), g.from, origin)
+				home := g.from
+				if g.wasMaximized && !g.restoredRect.Empty() {
+					home = g.restoredRect
+				}
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(a.heading(target), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, g.wasSnapped && g.snappedPlacementOK, g.snappedPlacement, g.snappedRect, func() func(func(bool)) {
+					if !g.captureAtDragStart {
+						return nil
+					}
+					return func(ready func(bool)) {
+						if g.dragStartCaptureDone {
+							ready(g.dragStartCaptureOK)
+							return
+						}
+						g.dragStartCaptureWaiters = append(g.dragStartCaptureWaiters, ready)
+					}
+				}())
 				return
 			}
 			if target != g.home && a.settings.HideInactive {
@@ -88,7 +245,18 @@ func (a *App) dragOver() {
 				a.leave(g.home, w)
 				x, y := w.Rect.Left+winapi.FitInto(w.Frame, target.mon.Handle).Left-w.Frame.Left, w.Rect.Top+winapi.FitInto(w.Frame, target.mon.Handle).Top-w.Frame.Top
 				home := winapi.Rect{Left: x, Top: y, Right: x + w.Rect.W(), Bottom: y + w.Rect.H()}
-				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin)
+				a.sendDraggedToStrip(target, w, slices.DeleteFunc(slices.Clone(stage), func(app string) bool { return app == key }), home, origin, g.wasMaximized && g.maximizedPlacementOK, g.maximizedPlacement, g.wasSnapped && g.snappedPlacementOK, g.snappedPlacement, g.snappedRect, func() func(func(bool)) {
+					if !g.captureAtDragStart {
+						return nil
+					}
+					return func(ready func(bool)) {
+						if g.dragStartCaptureDone {
+							ready(g.dragStartCaptureOK)
+							return
+						}
+						g.dragStartCaptureWaiters = append(g.dragStartCaptureWaiters, ready)
+					}
+				}())
 				return
 			}
 		}
@@ -148,6 +316,9 @@ func (a *App) windowMoved(h winapi.HWND) {
 		a.refreshSoon()
 		return
 	}
+	if g.transitionsDisabled {
+		winapi.SetTransitionsDisabled(h, false)
+	}
 	if !moved {
 		// A move whose start went unseen.
 		g = &drag{}
@@ -155,7 +326,7 @@ func (a *App) windowMoved(h winapi.HWND) {
 	if !a.ready || a.park.IsParked(h) {
 		return
 	}
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == h })
 	if i < 0 {
 		return
@@ -207,10 +378,10 @@ func (a *App) leave(d *display, w catalog.Window) {
 }
 
 // followMoved puts the app of the window in front on the stage of its
-// display, should it have moved there without a drag, as with
-// Win+Shift+Arrow or by itself: it takes the stage as a dropped window
-// does, rather than be parked for a stray once it loses the focus. It
-// reports whether it started a switch.
+// display, should it have moved there without a drag, as with Win+Shift+Arrow
+// or by itself: it takes the stage as a dropped window does, rather than be
+// parked for a stray once it loses the focus. It reports whether it started
+// a switch.
 func (a *App) followMoved() bool {
 	if !a.settings.HideInactive || a.drag != nil || a.fg.h != 0 || a.fg.timer != nil {
 		return false
@@ -242,7 +413,7 @@ func (a *App) stripUnder(p winapi.Point) *display {
 // sendDraggedToStrip prepares a card handoff. The real window stays visible
 // until the flight layer has drawn its first frame over it; only then is the
 // native move loop cancelled and the real window parked.
-func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect) {
+func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, home, origin winapi.Rect, restoreMaximized bool, maximizedPlacement winapi.WindowPlacementSnapshot, restoreSnapped bool, snappedPlacement winapi.WindowPlacementSnapshot, snappedRect winapi.Rect, awaitCapture func(func(bool))) {
 	debugf("%q prepared for direct strip-card handoff", w.Title)
 	// The overlay must have a real, drawable frame before the native window
 	// is hidden. In particular, Invalidate alone is only a paint request.
@@ -259,21 +430,30 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			a.handoffHidden = make(map[winapi.HWND]time.Time)
 		}
 		a.handoffHidden[w.HWND] = time.Now().Add(2 * time.Second)
+		// Keep the window out of DWM composition after it is shown again
+		// off-screen. Moving it outside the desktop alone is not sufficient
+		// on every multi-monitor/DPI arrangement.
+		cloaked := winapi.SetCloaked(w.HWND, true)
+		debugf("drag into card: cloak real window %v ok=%v", w.HWND, cloaked)
 		winapi.Hide(w.HWND)
 		if winapi.IsWindowVisible(w.HWND) {
 			winapi.SetWindowPos(w.HWND, 0, 0, 0, 0, 0,
 				winapi.SwpHideWindow|winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
 		}
 		if winapi.IsWindowVisible(w.HWND) {
+			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			debugf("drag into card: could not hide real window %v; aborting handoff", w.HWND)
 			return
 		}
 		winapi.DwmFlush()
 		parkFrom := winapi.WindowRect(w.HWND)
 		if !winapi.CancelMoveSize(w.HWND) {
+			winapi.SetCloaked(w.HWND, false)
 			winapi.ShowNoActivate(w.HWND)
 			winapi.DwmFlush()
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			debugf("drag into card: could not end native move loop for %v; restored real window", w.HWND)
 			return
 		}
@@ -282,6 +462,14 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			parked = a.park.ParkImmediateFrom(w.HWND, parkFrom)
 			if parked {
 				a.park.Rehome(w.HWND, home)
+				if restoreMaximized {
+					a.park.RestoreMaximized(w.HWND, maximizedPlacement)
+				} else if restoreSnapped {
+					// Keep the original snap-cell size and move it with the
+					// card's chosen home when the drop targets another display.
+					targetRect := snappedRect.Offset(home.Left-snappedRect.Left, home.Top-snappedRect.Top)
+					a.park.RestoreSnapped(w.HWND, snappedPlacement, targetRect)
+				}
 			}
 		}
 		if !parked {
@@ -290,14 +478,18 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 			// starting rectangle restored by the native move loop.
 			winapi.SetWindowPos(w.HWND, 0, home.Left, home.Top, 0, 0,
 				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+			winapi.SetCloaked(w.HWND, false)
 		}
-		// Parked windows remain WS_VISIBLE but sit beyond the desktop. This
-		// keeps enumeration and later restoration working as usual.
-		winapi.ShowNoActivate(w.HWND)
-		winapi.DwmFlush()
-		if a.settings.HideInactive && !parked {
+		// Keep a successfully parked handoff HWND hidden. DWM cloak is not
+		// reliable for arbitrary application windows (it failed on Notepad++),
+		// and showing an off-screen window lets the app move it onto the desktop.
+		// listWindows retains cached metadata so the strip card survives SW_HIDE.
+		if !parked {
+			winapi.SetTransitionsDisabled(w.HWND, false)
+			winapi.ShowNoActivate(w.HWND)
 			debugf("drag into card: could not park real window %v; restored it at its home", w.HWND)
 		}
+		winapi.DwmFlush()
 	}
 	// Switch the model first so refresh lays out the destination card. The
 	// window's last stage still is already available in the common case; use
@@ -316,26 +508,35 @@ func (a *App) sendDraggedToStrip(d *display, w catalog.Window, next []string, ho
 	card.externalAnimating = false
 	card.externalFrom = pose{}
 	card.externalStarted = time.Time{}
-	a.windows = a.cat.Windows()
+	a.windows = a.listWindows()
 	a.refresh()
 
 	startFlight := func() bool {
 		return a.flights != nil && a.flights.dragIntoCard(d, w, from, handoff)
 	}
-	// Capture only the dragged HWND. A desktop BitBlt is not a window
-	// capture: it includes whichever windows happen to overlap its rectangle.
-	// Use the window's PrintWindow capture path and let its timeout keep a
-	// hung application from holding up the handoff.
-	a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
-		if !startFlight() {
-			// No overlay will take over; restore the real card after a failed
-			// capture so externalLayer cannot leave it permanently invisible.
+	launchFlight := func(captured bool) {
+		if !captured || !startFlight() {
+			// No suitable image is available (or no overlay can take over).
+			// In particular, never substitute a post-restore image for the
+			// drag-start frame captured at drag start.
+			winapi.SetTransitionsDisabled(w.HWND, false)
 			card.externalLayer = false
 			card.externalPresented = false
-			debugf("drag into card: capture produced no drawable animation; restored real card")
+			debugf("drag into card: no valid pre-captured image or drawable animation; restored real card")
 		}
 		a.redraw()
-	})
+	}
+	if awaitCapture != nil {
+		// Fullscreen windows must animate from the image captured before
+		// Windows restores them during the native caption-drag loop.
+		awaitCapture(launchFlight)
+	} else {
+		// Normal windows keep the existing capture-at-handoff behavior.
+		// Capture only the dragged HWND, not the desktop behind it.
+		a.media.capture([]winapi.HWND{w.HWND}, true, false, 300*time.Millisecond, func() {
+			launchFlight(true)
+		})
+	}
 }
 
 // sendToStrip takes the app of a window dragged into a display's strip off

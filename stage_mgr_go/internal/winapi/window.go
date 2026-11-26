@@ -361,6 +361,9 @@ func Close(h HWND) {
 	procPostMessageW.Call(uintptr(h), wmClose, 0, 0)
 }
 
+// WINDOWPLACEMENT must match the Win32 structure exactly (44 bytes).
+// Do not append fields: GetWindowPlacement/SetWindowPlacement use Length
+// to validate this exact ABI layout.
 type windowPlacement struct {
 	Length         uint32
 	Flags          uint32
@@ -368,7 +371,30 @@ type windowPlacement struct {
 	MinPosition    Point
 	MaxPosition    Point
 	NormalPosition Rect
-	Device         Rect
+}
+
+// WindowPlacementSnapshot preserves the complete native placement captured
+// before a maximized caption drag. NormalPosition is in workspace coordinates.
+type WindowPlacementSnapshot struct {
+	Flags          uint32
+	ShowCmd        uint32
+	MinPosition    Point
+	MaxPosition    Point
+	NormalPosition Rect
+}
+
+// CaptureWindowPlacement reads the exact native placement before Windows
+// changes it as part of the caption-drag restore operation.
+func CaptureWindowPlacement(h HWND) (WindowPlacementSnapshot, bool) {
+	wp := windowPlacement{Length: uint32(unsafe.Sizeof(windowPlacement{}))}
+	if !boolCall(procGetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return WindowPlacementSnapshot{}, false
+	}
+	return WindowPlacementSnapshot{
+		Flags: wp.Flags, ShowCmd: wp.ShowCmd,
+		MinPosition: wp.MinPosition, MaxPosition: wp.MaxPosition,
+		NormalPosition: wp.NormalPosition,
+	}, !wp.NormalPosition.Empty()
 }
 
 // RestoredRect returns where a minimized window goes back to, in screen
@@ -390,6 +416,93 @@ func RestoredRect(h HWND) (r Rect, maximized bool, ok bool) {
 		n = n.Offset(mi.Work.Left-mi.Monitor.Left, mi.Work.Top-mi.Monitor.Top)
 	}
 	return n, false, true
+}
+
+
+// WindowNormalRect returns the raw workspace-coordinate normal rectangle.
+func WindowNormalRect(h HWND) (Rect, bool) {
+	snapshot, ok := CaptureWindowPlacement(h)
+	return snapshot.NormalPosition, ok
+}
+
+// ShowMaximizedPlacementNoActivate restores the original native placement.
+// It deliberately does not first move the hidden HWND with SetWindowPos:
+// moving a maximized window after restoration can change its monitor/geometry.
+func ShowMaximizedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot) bool {
+	if snapshot.NormalPosition.Empty() {
+		return false
+	}
+	wp := windowPlacement{
+		Length: uint32(unsafe.Sizeof(windowPlacement{})),
+		Flags: snapshot.Flags,
+		ShowCmd: 1, // SW_SHOWNORMAL
+		MinPosition: snapshot.MinPosition,
+		MaxPosition: snapshot.MaxPosition,
+		NormalPosition: snapshot.NormalPosition,
+	}
+	// A parked HWND has been moved off-screen while hidden. Asking
+	// SetWindowPlacement to maximize it directly changes its show state,
+	// but Windows can retain the off-screen maximized bounds. First apply
+	// the saved normal placement so Windows selects the correct monitor;
+	// then maximize from that monitor. DWM transitions are disabled during
+	// the handoff, so the intermediate normal placement is not animated.
+	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	wp.ShowCmd = 3 // SW_SHOWMAXIMIZED
+	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	return SetWindowPos(h, 0, 0, 0, 0, 0,
+		SwpNoSize|SwpNoMove|SwpNoZOrder|SwpNoActivate|SwpShowWindow)
+}
+
+// ShowSnappedPlacementNoActivate restores a previously snapped window's
+// native placement and then reapplies its exact visible rectangle. Windows
+// can discard snap-cell geometry when a window is moved off the virtual
+// desktop; WINDOWPLACEMENT alone may contain the pre-snap restore rectangle,
+// so both pieces are needed.
+func ShowSnappedPlacementNoActivate(h HWND, snapshot WindowPlacementSnapshot, rect Rect) bool {
+	if snapshot.NormalPosition.Empty() || rect.Empty() {
+		return false
+	}
+	wp := windowPlacement{
+		Length: uint32(unsafe.Sizeof(windowPlacement{})),
+		Flags: snapshot.Flags,
+		ShowCmd: swHide,
+		MinPosition: snapshot.MinPosition,
+		MaxPosition: snapshot.MaxPosition,
+		NormalPosition: snapshot.NormalPosition,
+	}
+	// Ordinary stage switches park windows off-screen but leave them visible.
+	// Hide explicitly before changing WINDOWPLACEMENT so neither its saved
+	// NormalPosition nor the intermediate SetWindowPos can be composed.
+	Hide(h)
+	if !boolCall(procSetWindowPlacement, uintptr(h), uintptr(unsafe.Pointer(&wp))) {
+		return false
+	}
+	// SWP_SHOWWINDOW reveals the HWND at the rectangle just assigned.
+	// Do not use ShowWindowAsync(SW_SHOWNOACTIVATE) here: that show command
+	// can reapply WINDOWPLACEMENT.NormalPosition and undo the snap rectangle.
+	return SetWindowPos(h, 0, rect.Left, rect.Top, rect.W(), rect.H(),
+		SwpNoZOrder|SwpNoActivate|SwpFrameChanged|SwpShowWindow)
+}
+
+// ShowMaximizedAtNoActivate is retained for callers that only have a normal
+// rectangle. New drag handoffs should use the full placement snapshot.
+func ShowMaximizedAtNoActivate(h HWND, normal Rect) bool {
+	snapshot, ok := CaptureWindowPlacement(h)
+	if !ok {
+		return false
+	}
+	snapshot.NormalPosition = normal
+	return ShowMaximizedPlacementNoActivate(h, snapshot)
+}
+
+// ShowMaximizedNoActivate restores a hidden window using its current saved
+// normal rectangle. Kept for callers that do not have a pre-drag snapshot.
+func ShowMaximizedNoActivate(h HWND) bool {
+	return ShowMaximizedAtNoActivate(h, Rect{})
 }
 
 // MoveRestored changes where a minimized window goes back to, p in screen

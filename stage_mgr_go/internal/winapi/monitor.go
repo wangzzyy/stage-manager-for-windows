@@ -121,6 +121,47 @@ func VirtualScreen() Rect {
 	return Rect{x, y, x + m(smW), y + m(smH)}
 }
 
+// IsSnapped reports whether a window occupies a standard Windows snap cell
+// on its current monitor. Use the visible DWM frame so invisible resize borders
+// do not make a snapped edge look detached from the work area.
+func IsSnapped(h HWND) bool {
+	r := FrameBounds(h)
+	if r.Empty() {
+		return false
+	}
+	m := MonitorInfo(MonitorFromRect(r))
+	w := m.Work
+	if w.Empty() {
+		return false
+	}
+	const tolerance int32 = 24
+	aligned := func(v, edge int32) bool {
+		d := v - edge
+		return d >= -tolerance && d <= tolerance
+	}
+	grid := []struct{ n, d int32 }{
+		{0, 1}, {1, 4}, {1, 3}, {1, 2}, {2, 3}, {3, 4}, {1, 1},
+	}
+	onGrid := func(v, start, size int32) bool {
+		for _, f := range grid {
+			if aligned(v, start+size*f.n/f.d) {
+				return true
+			}
+		}
+		return false
+	}
+	left := onGrid(r.Left, w.Left, w.W())
+	right := onGrid(r.Right, w.Left, w.W())
+	top := onGrid(r.Top, w.Top, w.H())
+	bottom := onGrid(r.Bottom, w.Top, w.H())
+	if !left || !right || !top || !bottom {
+		return false
+	}
+	fullWidth := aligned(r.Left, w.Left) && aligned(r.Right, w.Right)
+	fullHeight := aligned(r.Top, w.Top) && aligned(r.Bottom, w.Bottom)
+	return !fullWidth || !fullHeight
+}
+
 // OnAnyMonitor reports whether a rectangle overlaps a display.
 func OnAnyMonitor(r Rect) bool {
 	for _, m := range Monitors() {

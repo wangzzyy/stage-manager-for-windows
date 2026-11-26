@@ -366,12 +366,18 @@ func (a *App) excluded(w catalog.Window) bool {
 // them from the model. Permanent exclusions are keyed by executable;
 // session exclusions are keyed by HWND and disappear when this process exits.
 func (a *App) exclude(g *group, permanent bool) {
-	if g == nil || len(g.windows) == 0 { return }
+	if g == nil || len(g.windows) == 0 {
+		return
+	}
 	if permanent {
 		a.applySettings(a.settings.WithExcluded(g.front().Exe, true))
 	} else {
-		if a.excludedWindows == nil { a.excludedWindows = make(map[winapi.HWND]bool) }
-		for _, w := range g.windows { a.excludedWindows[w.HWND] = true }
+		if a.excludedWindows == nil {
+			a.excludedWindows = make(map[winapi.HWND]bool)
+		}
+		for _, w := range g.windows {
+			a.excludedWindows[w.HWND] = true
+		}
 	}
 	a.park.RestoreAll()
 	a.refresh()
@@ -680,6 +686,11 @@ func (a *App) refresh() {
 	for h := range a.seen {
 		if !alive[h] {
 			delete(a.seen, h)
+		}
+	}
+	for h := range a.excludedWindows {
+		if !alive[h] {
+			delete(a.excludedWindows, h)
 		}
 	}
 	a.media.forget(alive)

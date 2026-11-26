@@ -40,7 +40,7 @@ var en = Strings{
 	IconSize:     "Icon size",
 	Spacing:      "Card spacing",
 	CardsAt:      "Vertical position",
-	Tilt:         "Perspective strength",
+	Tilt:         "Inward rotation",
 	TiltDesc:     "Controls how far the strip turns inward: 0 is flat, and higher values turn the cards farther into the screen.",
 	TiltOff:      "None",
 	DefaultValue: "Default: %s. Click to restore.",

@@ -57,17 +57,16 @@ type set struct {
 // newSet makes the card of apps, given in the order they came.
 func newSet(apps []*group) *set {
 	s := &set{key: apps[0].app, apps: apps}
-	byZ := slices.Clone(apps)
-	slices.SortStableFunc(byZ, func(x, y *group) int { return x.z - y.z })
-	for _, g := range byZ {
+	// The model's app order is authoritative: in particular, Merge puts
+	// the dragged card before the target card. Sorting these windows by the
+	// desktop's current Z-order would undo that order for parked/hidden HWNDs,
+	// which are absent from EnumWindows and retain stale Z values.
+	for _, g := range apps {
 		s.windows = append(s.windows, g.windows[0])
 	}
-	for _, g := range byZ {
+	for _, g := range apps {
 		s.windows = append(s.windows, g.windows[1:]...)
 	}
-	// Those the card shows overlap as they do on the desktop, so that the
-	// windows flying out of the card and home keep their order all the way.
-	slices.SortStableFunc(s.stacked(), frontFirst)
 	return s
 }
 

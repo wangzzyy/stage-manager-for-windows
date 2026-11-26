@@ -420,7 +420,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// The sidebar itself is layered/click-through, so desktop pixels indicate
 	// an exposed part of the strip while another top-level window means covered.
 	underPointer := winapi.WindowFromPoint(cur)
-	exposedStrip := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && underPointer != 0 && catalog.IsDesktop(underPointer)
+	exposedStrip := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && (underPointer == s.hwnd || underPointer != 0 && catalog.IsDesktop(underPointer))
 	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.

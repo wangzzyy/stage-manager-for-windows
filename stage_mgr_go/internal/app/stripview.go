@@ -447,7 +447,13 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 	}
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
-	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	displayCenterY := float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
+	// The existing Tilt setting controls both the rotation and how far the
+	// perspective origin moves from the card's own center toward the display
+	// centerline. Its default (6 degrees) reaches the viewpoint introduced in
+	// PR #15; lower settings progressively bring the target back to the card.
+	originProgress := min(max(float32(s.a.settings.Tilt)/settings.DefaultTilt, 0), 1)
+	originY = 0.5 + (displayCenterY-0.5)*originProgress
 	// With a Y rotation, parallel lines converge at p/sin(tilt).
 	// Set p so that the vanishing point lands on the opposite display edge,
 	// rather than beyond it; using the full edge distance here made the

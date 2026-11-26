@@ -444,9 +444,6 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, p
 	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
 
 	level = min(max(level, 0), settings.MaxTilt)
-	if level == 0 {
-		return originY, 1_000_000
-	}
 	// Keep the camera distance fixed: the slider changes the card's inward
 	// rotation, and the perspective projection itself determines its visible
 	// width. With no rotation, use an effectively infinite distance so the

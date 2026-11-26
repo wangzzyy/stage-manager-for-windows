@@ -580,6 +580,9 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 			continue
 		}
 		home := poseOf(f.a.home(w))
+		if target, ok := d.dropTargets[w.HWND]; ok {
+			home = poseOf(target)
+		}
 		start, ok := from[w.HWND]
 		casts := castsShadow(w.HWND)
 		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: arrivalShade(cardShadeAt(start), casts), lands: true, casts: casts, fromOp: 1, toOp: 1}

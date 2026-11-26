@@ -234,6 +234,17 @@ func (h *handover) land() {
 	// above them in the same raise, not in one of its own that would race
 	// with theirs.
 	h.a.park.UnparkUnder(h.front, parked...)
+	// A card dropped on the stage opens under the pointer. Move the real
+	// windows to the same frame rectangles the flights just landed on.
+	for _, w := range h.arriving {
+		if target, ok := h.d.dropTargets[w.HWND]; ok {
+			x := target.Left + w.Rect.Left - w.Frame.Left
+			y := target.Top + w.Rect.Top - w.Frame.Top
+			winapi.SetWindowPos(w.HWND, 0, x, y, 0, 0,
+				winapi.SwpNoSize|winapi.SwpNoZOrder|winapi.SwpNoActivate)
+		}
+	}
+	clear(h.d.dropTargets)
 	if h.activate && !h.early && h.focus != 0 {
 		ok := winapi.Activate(h.focus)
 		debugf("activate late %x ok=%v fg=%x", h.focus, ok, winapi.Foreground())

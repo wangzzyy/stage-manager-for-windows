@@ -132,6 +132,8 @@ type display struct {
 	// dropPoses is where the windows of a card dropped on the stage were
 	// let go, for their flight home.
 	dropPoses map[winapi.HWND]pose
+	// dropTargets is where those windows land when a card is dropped on the stage.
+	dropTargets map[winapi.HWND]winapi.Rect
 	// inOverview is set while the overview shows the display's windows:
 	// the strip's cards are out there, and show nothing in the strip.
 	inOverview bool

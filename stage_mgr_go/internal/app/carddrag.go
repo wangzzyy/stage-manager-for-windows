@@ -353,9 +353,23 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 			a.flights.endDrag(c.to, moveDrop)
 		case aimJoin:
 			// The windows stay on the layer where they were let go until
-			// the switch flies them on.
+			// the switch flies them on. Their landing point follows the
+			// pointer, not the home position saved before the drag.
 			a.setCardDrag(nil)
 			d.dropPoses = st.poses
+			cur := winapi.Cursor()
+			d.dropTargets = make(map[winapi.HWND]winapi.Rect, len(g.windows))
+			for _, w := range g.windows {
+				frame := w.Frame
+				if frame.Empty() {
+					frame = w.Rect
+				}
+				drop := winapi.Rect{
+					Left: cur.X - frame.W()/2, Top: cur.Y - frame.H()/2,
+					Right: cur.X + (frame.W()+1)/2, Bottom: cur.Y + (frame.H()+1)/2,
+				}
+				d.dropTargets[w.HWND] = drop
+			}
 			a.request(actJoin, d, g)
 			a.flights.endDrag(d, 800*time.Millisecond)
 		default:

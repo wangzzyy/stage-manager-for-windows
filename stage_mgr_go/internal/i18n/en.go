@@ -40,9 +40,9 @@ var en = Strings{
 	IconSize:     "Icon size",
 	Spacing:      "Card spacing",
 	CardsAt:      "Vertical position",
-	Tilt:         "Perspective target",
-	TiltDesc:     "Moves the point that cards converge toward horizontally, from the screen center (0) to the opposite edge (10).",
-	TiltOff:      "Center",
+	Tilt:         "Perspective strength",
+	TiltDesc:     "Controls perspective strength: 0 is undistorted, and higher values bring the convergence point closer to the card.",
+	TiltOff:      "None",
 	DefaultValue: "Default: %s. Click to restore.",
 
 	CardsAtTip:       "Where the middle of the column of cards sits in the sidebar, from top to bottom.",

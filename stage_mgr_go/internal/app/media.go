@@ -73,8 +73,9 @@ type media struct {
 	stills   map[winapi.HWND]*still
 	pending  map[winapi.HWND]bool
 	tried    map[winapi.HWND]time.Time
-	icons    map[string]*ui.Bitmap // by app
-	sem      chan struct{}
+	icons       map[string]*ui.Bitmap // by app
+	iconShadows map[string]*ui.Bitmap // alpha-shaped shadows, by app
+	sem         chan struct{}
 	flyBytes int // what all the flight pictures take, against budget
 	budget   int
 	// full takes every still at the size the window shows, so that windows
@@ -90,7 +91,8 @@ func newMedia() *media {
 		stills:  map[winapi.HWND]*still{},
 		pending: map[winapi.HWND]bool{},
 		tried:   map[winapi.HWND]time.Time{},
-		icons:   map[string]*ui.Bitmap{},
+		icons:       map[string]*ui.Bitmap{},
+		iconShadows: map[string]*ui.Bitmap{},
 		// A few at a time: each asks an app to draw itself.
 		sem: make(chan struct{}, 3),
 	}
@@ -330,7 +332,9 @@ func (m *media) icon(w catalog.Window) *ui.Bitmap {
 	}
 	var b *ui.Bitmap
 	if img != nil {
-		b = ui.NewBitmap(trimIcon(img))
+		trimmed := trimIcon(img)
+		b = ui.NewBitmap(trimmed)
+		m.iconShadows[w.App] = ui.NewBitmap(iconShadow(trimmed))
 	}
 	m.icons[w.App] = b
 	return b

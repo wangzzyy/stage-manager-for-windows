@@ -40,9 +40,9 @@ var zhHans = Strings{
 	IconSize:     "图标大小",
 	Spacing:      "卡片间距",
 	CardsAt:      "卡片垂直位置",
-	Tilt:         "透视汇聚点",
-	TiltDesc:     "水平调整卡片汇聚的目标点：0 为屏幕中心，10 为对侧屏幕边缘。",
-	TiltOff:      "屏幕中心",
+	Tilt:         "透视强度",
+	TiltDesc:     "控制透视强度：0 为不变形，数值越大，汇聚点越靠近卡片。",
+	TiltOff:      "无",
 	DefaultValue: "默认值：%s，点击恢复",
 
 	CardsAtTip:       "整列卡片的中心放在侧边栏从上到下的哪个位置。",

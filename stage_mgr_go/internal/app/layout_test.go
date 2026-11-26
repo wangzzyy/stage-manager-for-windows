@@ -115,6 +115,15 @@ func TestStageWindowLayoutAlignsAwayFromScreenEdge(t *testing.T) {
 	}
 }
 
+func TestCardTiltsFollowSetting(t *testing.T) {
+	for level, want := range []float32{0, 2.4, 4.8, 7.2, 9.6, 12, 14.4, 16.8, 19.2, 21.6, 24} {
+		got, hover := cardTilts(level)
+		if math.Abs(float64(got-want)) > 0.001 || hover != 0 {
+			t.Fatalf("cardTilts(%d) = %v, %v; want %v, 0", level, got, hover, want)
+		}
+	}
+}
+
 func TestTurnedCard(t *testing.T) {
 	if rx, rh := turnedCard(40, 30, 0, 120); rx != 40 || rh != 15 {
 		t.Fatalf("a flat card projects to %v, %v", rx, rh)

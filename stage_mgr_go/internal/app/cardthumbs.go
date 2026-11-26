@@ -17,6 +17,8 @@ type cardThumbs struct {
 	s *strip
 	win *mygo.Window
 	hwnd winapi.HWND
+	rect winapi.Rect
+	placed bool
 	thumbs map[winapi.HWND]*cardThumb
 	failed map[winapi.HWND]bool
 	keepSet map[winapi.HWND]bool
@@ -128,9 +130,10 @@ func (c *cardThumbs) endFrame() {
 		visible = visible || th.visible
 	}
 	if visible {
-		c.place()
 		if !winapi.IsWindowVisible(c.hwnd) {
 			c.win.ShowInactive()
+			c.place()
+		} else if !c.placed || c.rect != c.s.rect {
 			c.place()
 		}
 	} else {
@@ -145,6 +148,7 @@ func (c *cardThumbs) place() {
 	r := c.s.rect
 	winapi.SetWindowPos(c.hwnd, c.s.hwnd, r.Left, r.Top, r.W(), r.H(),
 		winapi.SwpNoActivate|winapi.SwpNoOwnerZOrder)
+	c.rect, c.placed = r, true
 }
 
 func (c *cardThumbs) hide() {

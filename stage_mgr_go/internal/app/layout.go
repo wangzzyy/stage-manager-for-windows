@@ -649,20 +649,3 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 	return ui.Rect{X: area.X + (area.W-w)/2, Y: area.Y + (area.H-h)/2, W: w, H: h}
 }
 
-// turnedPoint is where the point (x, y) of a w×h card shows once the card is
-// turned deg degrees about its outer edge, as turnedCard has it, the one on the
-// left or, with right, on the right: pulled toward the edge and, as it goes
-// back, toward the card's middle.
-func turnedPoint(x, y, w, h, deg, dist float32, right bool) (float32, float32) {
-	sin, cos := math.Sincos(math.Abs(float64(deg)) * math.Pi / 180)
-	u := x
-	if right {
-		u = w - x
-	}
-	k := dist / (dist + u*float32(sin))
-	x = u * float32(cos) * k
-	if right {
-		x = w - x
-	}
-	return x, h/2 + (y-h/2)*k
-}

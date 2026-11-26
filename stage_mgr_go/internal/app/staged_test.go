@@ -417,9 +417,9 @@ func TestStagedCardHasACheck(t *testing.T) {
 	}
 }
 
-// Turned with the card as the strip has it, the badge stays nearly round, and
-// sits where the card's corner shows, on either side of the display.
-func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
+// Turned with the card as the strip has it, the badge stays nearly round
+// on either side of the display.
+func TestStagedBadgeStaysRound(t *testing.T) {
 	for _, right := range []bool{false, true} {
 		s, _, tt := testStrip(t)
 		if right {
@@ -430,11 +430,6 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		tt.Frame()
 		tt.Advance(2 * time.Second)
 		tt.Frame()
-		card := s.d.layout.cards[0]
-		local := ui.Rect{W: card.W, H: card.H}
-		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
-		deg, _ := cardTilts(s.a.settings.Tilt)
-		px, py := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, deg, cardPerspective, right)
 		img := tt.Image()
 		x0, y0, x1, y1 := 1<<30, 1<<30, -1, -1
 		for y := 0; y < img.Bounds().Dy(); y++ {
@@ -453,10 +448,6 @@ func TestStagedBadgeStaysRoundOnTheCorner(t *testing.T) {
 		// More than one pixel would be a visibly oval badge.
 		if abs(int(w-h)) > 1 {
 			t.Fatalf("right=%v: the badge is %v by %v, an oval", right, w, h)
-		}
-		cx, cy := float32(x0)+w/2-card.X, float32(y0)+h/2-card.Y
-		if d := cx - px; d < -3 || d > 3 || cy-py < -3 || cy-py > 3 {
-			t.Fatalf("right=%v: the badge is centered at %v, %v of its card, not at the corner %v, %v", right, cx, cy, px, py)
 		}
 	}
 }

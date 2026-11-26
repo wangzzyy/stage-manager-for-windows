@@ -124,7 +124,7 @@ func TestSnapshots(t *testing.T) {
 	shoot("badge-large.png", func(c *ui.Context) {
 		ui.Box(c).Absolute().Left(0).Top(0).Size(300, 130).Background(ui.Hex("#4a6178"))
 		for _, r := range []ui.Rect{{X: 20, Y: 17, W: 96, H: 96}, {X: 150, Y: 49, W: 32, H: 32}, {X: 210, Y: 54, W: 22, H: 22}, {X: 250, Y: 59, W: 12, H: 12}} {
-			ui.Box(c.Key(r.X)).Absolute().Left(0).Top(0).Size(300, 130).PassThrough().Children(func() { stageBadge(c, r, 1, 0) })
+			ui.Box(c.Key(r.X)).Absolute().Left(0).Top(0).Size(300, 130).PassThrough().Children(func() { stageBadge(c, r, 1, 1) })
 		}
 	}, 300, 130, nil)
 	// The same strip on the right of its display, its mirror image.

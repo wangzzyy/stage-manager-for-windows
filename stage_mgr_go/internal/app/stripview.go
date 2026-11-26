@@ -138,7 +138,6 @@ var (
 	// badgeTurn is how much of the card's turn the badge takes, as a share,
 	// and badgePerspective how far away, in DIPs, it is seen from: the
 	// closer, the more the side turned from the eye shrinks.
-	badgeTurn        = float32(0.25)
 	badgePerspective = float32(160)
 )
 
@@ -155,9 +154,13 @@ var checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" 
 // edge and a faint dark one inside its bottom, the gloss of a pill of white
 // fading downward across its top half, and the check, white, over a copy of
 // itself in green a little below, which makes it stand off the disc.
-func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
+func stageBadge(c *ui.Context, r ui.Rect, pop, horizontalCompensation float32) {
 	d := r.W
-	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop, pop).RotateY(turn).Perspective(badgePerspective).
+	// The badge is still inside the card's perspective layer. A local
+	// counter-rotation compounds with the parent's projective transform, so
+	// keep the disc in its own plane and cancel the parent's horizontal
+	// foreshortening with the local derivative of the parent's perspective projection instead.
+	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop*horizontalCompensation, pop).
 		LinearGradient(ui.LinearGradient{Angle: 155, Stops: []ui.GradientStop{{Color: badgeLight, At: 0}, {Color: badgeMid, At: 0.45}, {Color: badgeDeep, At: 1}}}).
 		Border(max(d*0.03, 0.5), badgeEdge).
 		Shadow(0, d*0.08, d*0.22, 0, badgeCast).
@@ -873,8 +876,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// not know it is under the pointer, nor take its click.
 		// The stage's card wears a green check, which is what makes the ghost
 		// read as the one that is open, and is not faded with its windows. It
-		// sits where the card's corner shows once the card is turned
-		// (turnedPoint), and lifts with the card. A disc turned as far as the
+		// shares the card's 3D transform and lifts with it. A disc turned as far as the
 		// card is squeezes to an oval that looks nothing like a button, and
 		// one that lies flat beside a card at an angle looks pasted on: it
 		// turns about itself by a share of the card's turn (badgeTurn), which
@@ -882,17 +884,23 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
-			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			// Anchor the stage mark to the card itself, not to the most
 			// recently active window in the group. The mark stays at the
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
-			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
+			// The badge stays inside the card's perspective layer, so it
+			// inherits the card's horizontal foreshortening. A small extra
+			// correction beyond the cosine inverse restores its round shape;
+			// keep it bounded so the badge remains within the card at either side.
+			angle := float64(tilt*sign) * math.Pi / 180
+			cosine := math.Max(math.Cos(angle), 0.1)
+			horizontalCompensation := float32(1.15 / cosine)
+			stageBadge(c, b, 0.5+0.5*ghost, horizontalCompensation)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				app := g.apps[i].front().App

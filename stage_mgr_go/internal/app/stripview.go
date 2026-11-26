@@ -433,37 +433,21 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 // opposite vertical edge of the display. The outer edge remains the card's
 // fixed base; its top and bottom edges run toward that distant point, while
 // the inner edge is foreshortened without being turned around its own axis.
-func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
+// cardViewpoint puts the rotation's vertical origin between the card's
+// center and the display's centerline, according to the existing Tilt setting.
+// The card is rotated without perspective projection, so its edges stay parallel.
+func (s *strip) cardViewpoint(card ui.Rect) (originY float32) {
 	if s.scale <= 0 {
-		return 0.5, cardPerspective
+		return 0.5
 	}
 	work := s.d.mon.Work
 	scale := float64(s.scale)
-	outerX := float64(s.rect.Left) + float64(card.X)*scale
-	farX := float64(work.Right)
-	if s.right() {
-		outerX = float64(s.rect.Left) + float64(card.X+card.W)*scale
-		farX = float64(work.Left)
-	}
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
 	displayCenterY := float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
-	// The existing Tilt setting controls both the rotation and how far the
-	// perspective origin moves from the card's own center toward the display
-	// centerline. Its default (6 degrees) reaches the viewpoint introduced in
-	// PR #15; lower settings progressively bring the target back to the card.
 	originProgress := min(max(float32(s.a.settings.Tilt)/settings.DefaultTilt, 0), 1)
 	originY = 0.5 + (displayCenterY-0.5)*originProgress
-	// With a Y rotation, parallel lines converge at p/sin(tilt).
-	// Set p so that the vanishing point lands on the opposite display edge,
-	// rather than beyond it; using the full edge distance here made the
-	// perspective too weak and the cards looked almost flat.
-	angle := math.Abs(float64(tilt)) * math.Pi / 180
-	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle))
-	if perspective < 1 {
-		perspective = cardPerspective
-	}
-	return originY, perspective
+	return originY
 }
 
 // cardDrawOrder returns the cards in layout order, with the previously
@@ -815,7 +799,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
 	// drive it toward zero, then abruptly fall back to cardPerspective.
-	originY, perspective := s.cardViewpoint(box, restTilt)
+	originY := s.cardViewpoint(box)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement
 	// so hovering enlarges a card in place instead of pulling it toward the
@@ -836,7 +820,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box.W, box.H).Opacity(shown * fade)
 		shell.Children(func() {
 			windows := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
-				TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective)
+				TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign)
 			if ghost > 0 {
 				windows.Cache()
 			}
@@ -888,7 +872,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
-			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, originY).Scale(lift, lift).Opacity(shown * ghost).PassThrough()
 		badge.Children(func() {
 			// Anchor the stage mark to the card itself, not to the most
 			// recently active window in the group. The mark stays at the
@@ -898,7 +882,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				app := g.apps[i].front().App

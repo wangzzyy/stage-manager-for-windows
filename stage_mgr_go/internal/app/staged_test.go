@@ -397,6 +397,9 @@ func TestCardViewpointMovesTowardOppositeEdge(t *testing.T) {
 		}{{0, centerX}, {settings.MaxTilt, farX}} {
 			_, perspective := s.cardViewpoint(card, cardPerspectiveTilt, tc.level)
 			got := outerX + float64(perspective)/angle*float64(s.scale)
+			if right {
+				got = outerX - float64(perspective)/angle*float64(s.scale)
+			}
 			if math.Abs(got-tc.want) > 1 {
 				t.Fatalf("right=%v level=%d: vanishing point at %.1f, want %.1f", right, tc.level, got, tc.want)
 			}

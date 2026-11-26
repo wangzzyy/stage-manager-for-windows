@@ -33,6 +33,14 @@ func (a *App) startDrag(h winapi.HWND) {
 	if a.drag != nil && a.drag.dwell != nil {
 		a.drag.dwell.Stop()
 	}
+	// A maximized window is restored by Windows as its title bar enters the
+	// native move loop. Restore it here, before sampling the drag origin, so
+	// the existing drag-to-card handoff works with the actual normal-size
+	// HWND rectangle instead of a stale maximized frame.
+	if winapi.IsZoomed(h) {
+		winapi.Restore(h)
+		winapi.DwmFlush()
+	}
 	home := a.displayByHandle(winapi.MonitorFromRect(winapi.FrameBounds(h)))
 	a.drag = &drag{h: h, from: winapi.WindowRect(h), home: home, at: home}
 }

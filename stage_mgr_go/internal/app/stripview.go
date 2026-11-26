@@ -176,6 +176,8 @@ func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
 // view draws a strip: the cards of the apps off the stage, over nothing.
 func (s *strip) view(c *ui.Context) {
 	a, d := s.a, s.d
+	s.cardThumbs.beginFrame()
+	defer s.cardThumbs.endFrame()
 	c.Root().Background(ui.Transparent)
 	w, h := c.Size()
 	d.viewW, d.viewH = w, h
@@ -813,6 +815,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
+	// DWM thumbnails are composited below this strip window, so the strip's
+	// icons, labels and close button remain ordinary UI above live content.
+	flat := math.Abs(float64(tilt)) < 0.01 && gray <= 0.005 && !st.external && !st.externalLayer && !st.externalAnimating && !landing && op > 0
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
 		// each shape it draws, so the stacked windows of a ghost would show
@@ -827,8 +832,25 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			}
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
+				cardRect := ui.Rect{X: box.X + translateX, Y: box.Y + translateY - verticalCompensation, W: box.W, H: box.H}
 				for i := len(stack) - 1; i >= 0; i-- {
-					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
+					h := g.windows[i].HWND
+					s.cardThumbs.keep(h)
+					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == h
+					if flat && !preserveAspect {
+						r := stack[i]
+						r.X += cardRect.X
+						r.Y += cardRect.Y
+						r = lifted(cardRect, r, lift, right)
+						x, y, w, h := s.toScreen(r)
+						dest := winapi.Rect{
+							Left: int32(math.Round(x)), Top: int32(math.Round(y)),
+							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),
+						}
+						if s.cardThumbs.add(g.windows[i].HWND, dest, float64(shown*fade*op)) {
+							continue
+						}
+					}
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
 				// While the pointer is on the card, a button on the top right

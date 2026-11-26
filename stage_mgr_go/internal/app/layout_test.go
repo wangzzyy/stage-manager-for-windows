@@ -429,6 +429,34 @@ func TestBadgeRect(t *testing.T) {
 	}
 }
 
+func TestTiltTargetStrength(t *testing.T) {
+	tests := []struct {
+		normalized float32
+		want       float32
+	}{
+		{0, 0},
+		{0.01, 0.075},
+		{0.04, 0.15},
+		{0.09, 0.225},
+		{0.25, 0.375},
+		{1, 0.75},
+	}
+	last := float32(-1)
+	for _, tt := range tests {
+		got := tiltTargetStrength(tt.normalized)
+		if math.Abs(float64(got-tt.want)) > 0.001 {
+			t.Errorf("tiltTargetStrength(%v) = %v, want %v", tt.normalized, got, tt.want)
+		}
+		if got < last {
+			t.Errorf("target strength fell from %v to %v", last, got)
+		}
+		last = got
+	}
+	if got := tiltTargetStrength(2); got != 0.75 {
+		t.Errorf("over-range strength = %v, want 0.75", got)
+	}
+}
+
 func TestTiltTargetOrigin(t *testing.T) {
 	const cardY, cardH, targetY float32 = 100, 200, 500
 	if got := tiltTargetOrigin(cardY, cardH, targetY, 0); got != 0.5 {

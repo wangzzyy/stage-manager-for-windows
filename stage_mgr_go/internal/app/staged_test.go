@@ -372,6 +372,37 @@ func TestStagedCardShakesWhenClicked(t *testing.T) {
 	}
 }
 
+// The convergence slider moves the vanishing point from the screen center
+// to the opposite edge, mirrored for a strip on the right.
+func TestCardViewpointMovesTowardOppositeEdge(t *testing.T) {
+	for _, right := range []bool{false, true} {
+		s, _, _ := testStrip(t)
+		if right {
+			s.a.settings.Sides = map[string]settings.Side{s.d.mon.Device: settings.Right}
+		}
+		card := s.d.layout.cards[0]
+		work := s.d.mon.Work
+		outerX := float64(s.rect.Left) + float64(card.X)*float64(s.scale)
+		farX := float64(work.Right)
+		if right {
+			outerX = float64(s.rect.Left) + float64(card.X+card.W)*float64(s.scale)
+			farX = float64(work.Left)
+		}
+		centerX := float64(work.Left+work.Right) / 2
+		angle := math.Sin(float64(cardPerspectiveTilt) * math.Pi / 180)
+		for _, tc := range []struct {
+			level int
+			want  float64
+		}{{0, centerX}, {settings.MaxTilt, farX}} {
+			_, perspective := s.cardViewpoint(card, cardPerspectiveTilt, tc.level)
+			got := outerX + float64(perspective)/angle*float64(s.scale)
+			if math.Abs(got-tc.want) > 1 {
+				t.Fatalf("right=%v level=%d: vanishing point at %.1f, want %.1f", right, tc.level, got, tc.want)
+			}
+		}
+	}
+}
+
 // The stage's card wears a green check at its inner bottom corner, where the
 // cards that wait have none, and it goes when the stage leaves the card.
 func TestStagedCardHasACheck(t *testing.T) {

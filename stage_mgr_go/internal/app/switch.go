@@ -234,6 +234,19 @@ func (h *handover) land() {
 	// above them in the same raise, not in one of its own that would race
 	// with theirs.
 	h.a.park.UnparkUnder(h.front, parked...)
+	// A maximized window was parked using its normal restored bounds, just
+	// like an ordinary dragged window. Reapply maximization only after the
+	// card-to-stage flight has landed and the real HWND is back on the
+	// desktop, so the full-screen frame cannot flash over the card animation.
+	for _, w := range h.arriving {
+		if h.activate && h.a.maximizeOnReturn[w.HWND] {
+			delete(h.a.maximizeOnReturn, w.HWND)
+			if winapi.IsWindow(w.HWND) {
+				winapi.Maximize(w.HWND)
+				winapi.DwmFlush()
+			}
+		}
+	}
 	if h.activate && !h.early && h.focus != 0 {
 		ok := winapi.Activate(h.focus)
 		debugf("activate late %x ok=%v fg=%x", h.focus, ok, winapi.Foreground())

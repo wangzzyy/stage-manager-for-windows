@@ -190,6 +190,12 @@ type App struct {
 	cardDrag *cardDrag
 	// dropHomes is where the windows dragged into a strip go back to.
 	dropHomes map[winapi.HWND]winapi.Rect
+	// maximizedWindows remembers the last observed maximized state. Windows
+	// can restore a maximized HWND before EVENT_SYSTEM_MOVESIZESTART arrives.
+	maximizedWindows map[winapi.HWND]bool
+	// maximizeOnReturn remembers windows restored by a native title-bar drag.
+	// They are maximized only after a later card-to-stage flight has landed.
+	maximizeOnReturn map[winapi.HWND]bool
 	// handoffHidden marks windows temporarily hidden while a native drag is
 	// being converted into a card; their WinEvent hide/show is not a close.
 	handoffHidden map[winapi.HWND]time.Time
@@ -245,8 +251,10 @@ func Start(o Options) *App {
 		media:     newMedia(),
 		seen:      map[winapi.HWND]time.Time{},
 		lost:      map[winapi.HWND]time.Time{},
-		dropHomes:     map[winapi.HWND]winapi.Rect{},
-		handoffHidden: map[winapi.HWND]time.Time{},
+		dropHomes:        map[winapi.HWND]winapi.Rect{},
+		maximizedWindows: map[winapi.HWND]bool{},
+		maximizeOnReturn: map[winapi.HWND]bool{},
+		handoffHidden:    map[winapi.HWND]time.Time{},
 		queued:    map[*display]*switchRequest{},
 		trayIcon:  o.TrayIcon,
 		sysLang:   i18n.FromLANGID(winapi.UILanguage()),

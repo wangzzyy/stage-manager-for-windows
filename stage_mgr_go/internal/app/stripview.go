@@ -891,16 +891,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			// A perspective transform does not foreshorten every point by
-			// the same amount. Compensate the horizontal derivative at the
-			// badge's actual position, relative to the card's outer-edge
-			// transform origin, rather than using only 1/cos(tilt).
+			// The badge stays inside the card's perspective layer, so it
+			// inherits the card's horizontal foreshortening. A small extra
+			// correction beyond the cosine inverse restores its round shape;
+			// keep it bounded so the badge remains within the card at either side.
 			angle := float64(tilt*sign) * math.Pi / 180
-			originX := float64((1 - sign) / 2)
-			dx := float64(b.X+b.W/2) - originX*float64(box.W)
 			cosine := math.Max(math.Cos(angle), 0.1)
-			perspectiveScale := 1 + dx*math.Sin(angle)/float64(max(perspective, 1))
-			horizontalCompensation := float32(perspectiveScale*perspectiveScale/cosine)
+			horizontalCompensation := float32(1.15 / cosine)
 			stageBadge(c, b, 0.5+0.5*ghost, horizontalCompensation)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective).Opacity(iconOp).PassThrough()

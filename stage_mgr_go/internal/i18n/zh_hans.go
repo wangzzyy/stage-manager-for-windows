@@ -40,8 +40,10 @@ var zhHans = Strings{
 	IconSize:     "图标大小",
 	Spacing:      "卡片间距",
 	CardsAt:      "卡片垂直位置",
-	Tilt:         "立体透视",
-	TiltDesc:     "卡片像 macOS 一样侧向转动，悬停时转向你。数值越大越倾斜，0 为关闭。",
+	Tilt:         "倾斜角度",
+	TiltDesc:     "控制卡片绕屏幕边缘向内侧倾斜的角度，0 为关闭。",
+	Perspective: "立体透视",
+	PerspectiveDesc: "控制卡片向屏幕内侧延伸的空间纵深感；数值越大，远端收缩越明显。目标点固定在屏幕内侧的垂直中心。",
 	TiltOff:      "关闭",
 	DefaultValue: "默认值：%s，点击恢复",
 

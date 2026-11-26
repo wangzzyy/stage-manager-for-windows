@@ -429,25 +429,30 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	s.approach(cur)
 }
 
-// coveredAt reports whether another visible top-level window occupies p.
-// Desktop wallpaper and shell surfaces are not treated as covering windows.
+// coveredAt reports which visible top-level window is foremost at p.
+// EnumWindows walks windows in z-order, so windows behind the strip must not
+// count as covering it. Desktop wallpaper and shell surfaces are ignored.
 func (s *strip) coveredAt(p winapi.Point) bool {
 	covered := false
+	found := false
 	winapi.EnumWindows(func(h winapi.HWND) bool {
-		if h == s.hwnd || !winapi.IsWindowVisible(h) || winapi.IsIconic(h) || winapi.IsCloaked(h) {
+		if !winapi.IsWindowVisible(h) || winapi.IsIconic(h) || winapi.IsCloaked(h) {
 			return true
 		}
 		class := winapi.ClassName(h)
 		if catalog.IsDesktop(h) || class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
 			return true
 		}
-		if winapi.FrameBounds(h).Contains(p) {
-			covered = true
-			return false
+		if !winapi.FrameBounds(h).Contains(p) {
+			return true
 		}
-		return true
+		// The first window containing the point is the actual foreground
+		// surface at that coordinate. Anything behind it is irrelevant.
+		found = true
+		covered = h != s.hwnd
+		return false
 	})
-	return covered
+	return found && covered
 }
 
 // approach brings the overview's panel in as the pointer nears it, from

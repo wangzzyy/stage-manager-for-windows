@@ -429,11 +429,11 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint puts the perspective's vanishing point at the middle of the
-// opposite vertical edge of the display. The outer edge remains the card's
-// fixed base; its top and bottom edges run toward that distant point, while
-// the inner edge is foreshortened without being turned around its own axis.
-func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective float32) {
+// cardViewpoint places the vanishing point at the display center when level is
+// zero, moving it horizontally toward the opposite edge as the slider rises.
+// The card's outer edge remains its fixed base; its top and bottom edges run
+// toward that point, while its inner edge is foreshortened.
+func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, perspective float32) {
 	if s.scale <= 0 {
 		return 0.5, cardPerspective
 	}
@@ -445,15 +445,17 @@ func (s *strip) cardViewpoint(card ui.Rect, tilt float32) (originY, perspective 
 		outerX = float64(s.rect.Left) + float64(card.X+card.W)*scale
 		farX = float64(work.Left)
 	}
+	centerX := float64(work.Left+work.Right) / 2
+	level = min(max(level, 0), settings.MaxTilt)
+	fraction := float64(level) / float64(settings.MaxTilt)
+	targetX := centerX + (farX-centerX)*fraction
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
 	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
-	// With a Y rotation, parallel lines converge at p/sin(tilt).
-	// Set p so that the vanishing point lands on the opposite display edge,
-	// rather than beyond it; using the full edge distance here made the
-	// perspective too weak and the cards looked almost flat.
+	// With a Y rotation, parallel lines converge at p/sin(tilt). Set p
+	// from the selected horizontal target, in the strip window's DIPs.
 	angle := math.Abs(float64(tilt)) * math.Pi / 180
-	perspective = float32(math.Abs(farX-outerX) / scale * math.Sin(angle))
+	perspective = float32(math.Abs(targetX-outerX) / scale * math.Sin(angle))
 	if perspective < 1 {
 		perspective = cardPerspective
 	}
@@ -810,7 +812,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
 	// drive it toward zero, then abruptly fall back to cardPerspective.
-	originY, perspective := s.cardViewpoint(box, restTilt)
+	originY, perspective := s.cardViewpoint(box, restTilt, a.settings.Tilt)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement
 	// so hovering enlarges a card in place instead of pulling it toward the
@@ -890,7 +892,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, cardPerspective, right)
+			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, perspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()

@@ -43,8 +43,9 @@ type strip struct {
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
 	pointerOnExposedStrip bool // the pointer is over an uncovered part of the visible strip
-	edgeRaise bool // the screen edge explicitly revealed a fully covered sidebar
-	edgeReveal     bool // the strip was explicitly revealed from the screen edge while covered
+	edgeRaise bool // the screen edge explicitly revealed a partly covered sidebar
+	edgeReveal bool // the strip was explicitly revealed from the screen edge while covered
+	edgeRevealZOrder bool // keep the strip above the covering window until its slide-out finishes
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -182,7 +183,7 @@ func (s *strip) zOrder() winapi.HWND {
 	// With covered-sidebar auto-hide disabled, keep the strip below the
 	// covering window until the pointer is over a part of the strip that is
 	// not covered by another window. Otherwise, PR #18's original rules apply.
-	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise && !s.edgeReveal {
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise && !s.edgeRevealZOrder {
 		return winapi.HwndBottom
 	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
@@ -369,8 +370,17 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		// covering window. A fully covered one uses the original edge-reveal
 		// animation, without conflating its resting visibility with z-order.
 		fullyCovered := s.d.covered && !s.a.settings.HideWhenCovered && s.fullyCovered()
-		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered && !fullyCovered {
-			s.edgeRaise = true
+		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
+			if fullyCovered {
+				s.edgeRevealZOrder = true
+			} else {
+				s.edgeRaise = true
+			}
+		}
+		// Keep the strip above the covering window through the entire
+		// slide-out. view() marks away only after its final frame settles.
+		if s.away || !s.d.covered {
+			s.edgeRevealZOrder = false
 		}
 		// Keep the edge reveal raised while its slide-in animation runs.
 		// The pointer starts at the screen edge, outside the strip rectangle;
@@ -400,10 +410,12 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				// A partly exposed strip remains visible underneath the
 				// covering window, so its uncovered area can still be hovered.
 				s.edgeReveal = false
+				s.edgeRevealZOrder = false
 				want = true
 			}
 		} else {
 			s.edgeReveal = false
+			s.edgeRevealZOrder = false
 		}
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while

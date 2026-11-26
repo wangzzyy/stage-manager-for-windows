@@ -181,7 +181,7 @@ func (s *strip) zOrder() winapi.HWND {
 	// With covered-sidebar auto-hide disabled, keep the strip below the
 	// covering window until the pointer is over a part of the strip that is
 	// not covered by another window. Otherwise, PR #18's original rules apply.
-	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip {
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip && !s.edgeRaise {
 		return winapi.HwndBottom
 	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
@@ -369,7 +369,12 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
 			s.edgeRaise = true
 		}
-		if !s.d.covered || !s.rect.Contains(cur) {
+		// Keep the edge reveal raised while its slide-in animation runs.
+		// The pointer starts at the screen edge, outside the strip rectangle;
+		// clearing edgeRaise there would put the strip behind the covering window.
+		// Once the pointer leaves the strip, lastInside is reset above and the
+		// normal auto-hide interval expires.
+		if !s.d.covered || now.Sub(s.lastInside) >= autoHide {
 			s.edgeRaise = false
 		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||

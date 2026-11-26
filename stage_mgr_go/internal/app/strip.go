@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo"
@@ -41,7 +42,7 @@ type strip struct {
 	holding      bool // the button went down on a card and is still down
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
-	pointerOnCard  bool // the pointer is actually hovering a card
+	pointerOnExposedStrip bool // the pointer is over an uncovered part of the visible strip
 	edgeReveal     bool // the strip was explicitly revealed from the screen edge while covered
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
@@ -178,9 +179,9 @@ func (s *strip) zOrder() winapi.HWND {
 		return winapi.HwndTopmost
 	}
 	// With covered-sidebar auto-hide disabled, keep the strip below the
-	// covering window until the pointer actually hovers a card. Otherwise,
-	// PR #18's original z-order rules apply unchanged.
-	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnCard {
+	// covering window until the pointer is over a part of the strip that is
+	// not covered by another window. Otherwise, PR #18's original rules apply.
+	if s.d.covered && !s.a.settings.HideWhenCovered && !s.pointerOnExposedStrip {
 		return winapi.HwndBottom
 	}
 	// A floating strip stays topmost for its entire visible lifetime. Its
@@ -245,12 +246,13 @@ func (s *strip) setPointerOnStrip(v bool) {
 	s.syncZOrder()
 }
 
-// setPointerOnCard changes z-order only when the pointer enters or leaves a card.
-func (s *strip) setPointerOnCard(v bool) {
-	if s.pointerOnCard == v {
+// setPointerOnExposedStrip changes z-order when the pointer enters or leaves
+// an uncovered part of the visible strip.
+func (s *strip) setPointerOnExposedStrip(v bool) {
+	if s.pointerOnExposedStrip == v {
 		return
 	}
-	s.pointerOnCard = v
+	s.pointerOnExposedStrip = v
 	s.syncZOrder()
 }
 
@@ -414,8 +416,12 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
 	s.setPointerOnStrip(band)
-	cardHover := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && s.overCard(cur)
-	s.setPointerOnCard(cardHover)
+	// WindowFromPoint sees the window that actually occupies this screen pixel.
+	// The sidebar itself is layered/click-through, so desktop pixels indicate
+	// an exposed part of the strip while another top-level window means covered.
+	underPointer := winapi.WindowFromPoint(cur)
+	exposedStrip := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && underPointer != 0 && catalog.IsDesktop(underPointer)
+	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.
 	s.syncZOrder()
@@ -516,19 +522,6 @@ func (s *strip) over(p winapi.Point) bool {
 	}
 	f := s.footerHit
 	return f.W > 0 && x >= f.X && x < f.X+f.W && y >= f.Y && y < f.Y+f.H
-}
-
-// overCard reports whether a screen point is inside an actual card, without
-// the extra hit-test margin used for normal card interaction.
-func (s *strip) overCard(p winapi.Point) bool {
-	x := float32(float64(p.X-s.rect.Left) / s.scale)
-	y := float32(float64(p.Y-s.rect.Top) / s.scale)
-	for _, r := range s.hits {
-		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
-			return true
-		}
-	}
-	return false
 }
 
 // cardBand is the band of the screen the cards take, in pixels: a window

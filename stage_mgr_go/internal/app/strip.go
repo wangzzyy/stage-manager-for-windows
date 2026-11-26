@@ -12,7 +12,7 @@ import (
 
 const (
 	edgeWidth = 2 // pixels at a display's edge that reveal a floating strip
-	autoHide  = 700 * time.Millisecond
+	autoHide  = 500 * time.Millisecond
 )
 
 // strip is the window of one display's strip: transparent, above other

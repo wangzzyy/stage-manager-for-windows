@@ -41,7 +41,7 @@ var zhHans = Strings{
 	Spacing:      "卡片间距",
 	CardsAt:      "卡片垂直位置",
 	Tilt:         "透视强度",
-	TiltDesc:     "控制透视强度：0 为不变形，数值越大，汇聚点越靠近卡片。",
+	TiltDesc:     "控制侧边栏向屏幕内旋转的幅度：0 为不旋转，数值越大，卡片旋转越明显、投影宽度越窄。",
 	TiltOff:      "无",
 	DefaultValue: "默认值：%s，点击恢复",
 

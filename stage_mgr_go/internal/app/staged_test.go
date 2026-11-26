@@ -386,7 +386,6 @@ func TestStagedCardHasACheck(t *testing.T) {
 	// check is.
 	badge := func(i int) (green, white int) {
 		card := s.d.layout.cards[i]
-		local := ui.Rect{W: card.W, H: card.H}
 		b := stageBadgeRect(local, float32(s.a.settings.IconScale), false)
 		img := tt.Image()
 		for y := int(card.Y + b.Y); y < int(card.Y+b.Y+b.H); y++ {

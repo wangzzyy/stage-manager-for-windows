@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"image/color"
+	"math"
 	"slices"
 	"testing"
 	"time"

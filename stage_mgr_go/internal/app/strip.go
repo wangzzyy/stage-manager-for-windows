@@ -337,7 +337,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				s.edgeSince = now
 				debugf("strip %s: pointer at the edge, hard=%v", s.d.mon.Device, s.hardEdge(cur))
 			}
-			if s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
+			// When a stage window fully covers the sidebar, the screen edge
+			// is the only reachable way to reveal it. Do not make the user
+			// wait at the edge (or require a hard edge on multi-monitor setups).
+			coveredEdgeReveal := s.d.covered && s.a.settings.HideWhenCovered
+			if coveredEdgeReveal || s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
 				s.lastInside = now
 				edgeWake = true
 			}

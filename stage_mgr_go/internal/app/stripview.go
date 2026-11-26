@@ -429,36 +429,29 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint places the vanishing point at the display center when level is
-// zero, moving it horizontally toward the opposite edge as the slider rises.
-// The card's outer edge remains its fixed base; its top and bottom edges run
-// toward that point, while its inner edge is foreshortened.
+// cardViewpoint keeps the card's vertical convergence centered while the
+// slider controls perspective strength. Zero uses an effectively infinite
+// perspective distance (no distortion); larger values bring the vanishing
+// point closer to the card.
 func (s *strip) cardViewpoint(card ui.Rect, tilt float32, level int) (originY, perspective float32) {
 	if s.scale <= 0 {
-		return 0.5, cardPerspective
+		return 0.5, 1_000_000
 	}
 	work := s.d.mon.Work
 	scale := float64(s.scale)
-	outerX := float64(s.rect.Left) + float64(card.X)*scale
-	farX := float64(work.Right)
-	if s.right() {
-		outerX = float64(s.rect.Left) + float64(card.X+card.W)*scale
-		farX = float64(work.Left)
-	}
-	centerX := float64(work.Left+work.Right) / 2
-	level = min(max(level, 0), settings.MaxTilt)
-	fraction := float64(level) / float64(settings.MaxTilt)
-	targetX := centerX + (farX-centerX)*fraction
 	centerY := float64(work.Top+work.Bottom) / 2
 	localCenterY := (centerY - float64(s.rect.Top)) / scale
 	originY = float32((localCenterY - float64(card.Y)) / float64(max(card.H, 1)))
-	// With a Y rotation, parallel lines converge at p/sin(tilt). Set p
-	// from the selected horizontal target, in the strip window's DIPs.
-	angle := math.Abs(float64(tilt)) * math.Pi / 180
-	perspective = float32(math.Abs(targetX-outerX) / scale * math.Sin(angle))
-	if perspective < 1 {
-		perspective = cardPerspective
+
+	level = min(max(level, 0), settings.MaxTilt)
+	if level == 0 {
+		return originY, 1_000_000
 	}
+	// Perspective distance is measured in DIPs. A shorter distance brings
+	// the vanishing point closer; the reciprocal curve gives useful control
+	// across the slider while keeping zero distortion-free.
+	fraction := float64(level) / float64(settings.MaxTilt)
+	perspective = float32(float64(cardPerspective) + 840/(fraction*fraction))
 	return originY, perspective
 }
 

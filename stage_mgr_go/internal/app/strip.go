@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo"
@@ -438,26 +437,20 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 // EnumWindows walks windows in z-order, so windows behind the strip must not
 // count as covering it. Desktop wallpaper and shell surfaces are ignored.
 func (s *strip) coveredAt(p winapi.Point) bool {
-	covered := false
-	found := false
-	winapi.EnumWindows(func(h winapi.HWND) bool {
-		if !winapi.IsWindowVisible(h) || winapi.IsIconic(h) || winapi.IsCloaked(h) {
-			return true
+	// Check the stage windows that make this display "covered". Enumerating
+	// every top-level HWND can pick the layered sidebar or unrelated shell
+	// surfaces first, causing an exposed point to be misclassified.
+	for _, g := range s.d.onStage {
+		for _, w := range g.windows {
+			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+				continue
+			}
+			if winapi.FrameBounds(w.HWND).Contains(p) {
+				return true
+			}
 		}
-		class := winapi.ClassName(h)
-		if catalog.IsDesktop(h) || class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
-			return true
-		}
-		if !winapi.FrameBounds(h).Contains(p) {
-			return true
-		}
-		// The first window containing the point is the actual foreground
-		// surface at that coordinate. Anything behind it is irrelevant.
-		found = true
-		covered = h != s.hwnd
-		return false
-	})
-	return found && covered
+	}
+	return false
 }
 
 // approach brings the overview's panel in as the pointer nears it, from

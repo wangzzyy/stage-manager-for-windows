@@ -42,6 +42,7 @@ type strip struct {
 	fullScreen     bool // a full-screen app is on the display
 	pointerOnStrip bool // the pointer is over the visible strip band
 	pointerOnExposedStrip bool // the pointer is over an uncovered part of the visible strip
+	edgeRaise bool // the screen edge explicitly revealed a fully covered sidebar
 	edgeReveal     bool // the strip was explicitly revealed from the screen edge while covered
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
@@ -337,11 +338,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				s.edgeSince = now
 				debugf("strip %s: pointer at the edge, hard=%v", s.d.mon.Device, s.hardEdge(cur))
 			}
-			// When a stage window fully covers the sidebar, the screen edge
-			// is the only reachable way to reveal it. Do not make the user
-			// wait at the edge (or require a hard edge on multi-monitor setups).
-			coveredEdgeReveal := s.d.covered && s.a.settings.HideWhenCovered
-			if coveredEdgeReveal || s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
+			if s.hardEdge(cur) || now.Sub(s.edgeSince) > 250*time.Millisecond {
 				s.lastInside = now
 				edgeWake = true
 			}
@@ -366,6 +363,12 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 			} else {
 				s.lastInside = time.Time{}
 			}
+		}
+		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
+			s.edgeRaise = true
+		}
+		if !s.d.covered || !s.rect.Contains(cur) {
+			s.edgeRaise = false
 		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
@@ -427,7 +430,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// latch that state for the whole time it remains inside the strip.
 	// Rechecking window coverage after raising would see the window behind
 	// the strip and lower it again, causing a z-order oscillation.
-	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || !s.coveredAt(cur))
+	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || s.edgeRaise || !s.coveredAt(cur))
 	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.

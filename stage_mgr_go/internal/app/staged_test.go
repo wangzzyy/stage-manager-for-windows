@@ -372,22 +372,24 @@ func TestStagedCardShakesWhenClicked(t *testing.T) {
 	}
 }
 
-// The perspective slider leaves the card undistorted at zero and brings
-// the vanishing point closer as its value rises.
-func TestCardViewpointIncreasesPerspectiveStrength(t *testing.T) {
+// The perspective distance stays fixed as the slider turns the card;
+// only zero uses an effectively infinite distance so the card is flat.
+func TestCardViewpointKeepsPerspectiveDistanceFixed(t *testing.T) {
 	s, _, _ := testStrip(t)
 	card := s.d.layout.cards[0]
 	_, none := s.cardViewpoint(card, cardPerspectiveTilt, 0)
 	_, mild := s.cardViewpoint(card, cardPerspectiveTilt, 1)
 	_, strong := s.cardViewpoint(card, cardPerspectiveTilt, settings.MaxTilt)
-	if none <= mild || mild <= strong {
-		t.Fatalf("perspective distance should decrease as strength rises: zero=%v, one=%v, max=%v", none, mild, strong)
-	}
 	if none < 100_000 {
 		t.Fatalf("zero should be effectively distortion-free, got perspective distance %v", none)
 	}
-	if strong <= 0 {
-		t.Fatalf("maximum strength should have a positive perspective distance, got %v", strong)
+	if mild != cardPerspective || strong != cardPerspective {
+		t.Fatalf("nonzero strengths should use the fixed perspective distance %v: one=%v, max=%v", cardPerspective, mild, strong)
+	}
+	oneTilt, _ := cardTilts(1)
+	maxTilt, _ := cardTilts(settings.MaxTilt)
+	if oneTilt <= 0 || maxTilt <= oneTilt {
+		t.Fatalf("card rotation should increase with strength: one=%v, max=%v", oneTilt, maxTilt)
 	}
 }
 
@@ -407,10 +409,10 @@ func TestStagedCardHasACheck(t *testing.T) {
 		card := s.d.layout.cards[i]
 		local := ui.Rect{W: card.W, H: card.H}
 		b := stageBadgeRect(local, float32(s.a.settings.IconScale), false)
-		// The badge follows the fixed resting perspective angle, not the
-		// settings-driven tilt (which is zero in this change).
-		_, perspective := s.cardViewpoint(card, cardPerspectiveTilt, s.a.settings.Tilt)
-		bx, by := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, cardPerspectiveTilt, perspective, false)
+		// The badge follows the card's actual resting angle and perspective.
+		restTilt, _ := cardTilts(s.a.settings.Tilt)
+		_, perspective := s.cardViewpoint(card, restTilt, s.a.settings.Tilt)
+		bx, by := turnedPoint(b.X+b.W/2, b.Y+b.H/2, card.W, card.H, restTilt, perspective, false)
 		img := tt.Image()
 		for y := int(card.Y + by - b.H/2); y < int(card.Y+by+b.H/2); y++ {
 			for x := int(card.X + bx - b.W/2); x < int(card.X+bx+b.W/2); x++ {

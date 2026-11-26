@@ -429,7 +429,13 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				want = true
 			}
 		} else {
-			s.edgeReveal = false
+			// Coverage can briefly disappear while the newly selected window
+			// is being activated or its zoom animation is settling. Keep the
+			// edge-reveal latch: if the pointer is still over the strip band,
+			// the next covered poll must not require another edge gesture.
+			if !s.rect.Contains(cur) {
+				s.edgeReveal = false
+			}
 		}
 		s.setShown(want)
 		// The window hides only once the slide has stopped. Hidden while

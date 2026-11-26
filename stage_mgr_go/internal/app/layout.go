@@ -650,9 +650,6 @@ func fitIn(area ui.Rect, aspect float64) ui.Rect {
 }
 
 // turnedPoint is where the point (x, y) of a w×h card shows once the card is
-// turned deg degrees about its outer edge, as turnedCard has it, the one on the
-// left or, with right, on the right: pulled toward the edge and, as it goes
-// back, toward the card's middle.
 // tiltTargetOrigin moves a card's vertical transform origin from its own
 // midpoint toward the display's centerline as the tilt setting increases.
 // strength is normalized to 0..1, so a flat card keeps its original pivot.

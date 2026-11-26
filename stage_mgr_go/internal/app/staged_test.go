@@ -432,7 +432,6 @@ func TestStagedBadgeStaysRound(t *testing.T) {
 		tt.Frame()
 		card := s.d.layout.cards[0]
 		local := ui.Rect{W: card.W, H: card.H}
-		b := stageBadgeRect(local, float32(s.a.settings.IconScale), right)
 		img := tt.Image()
 		x0, y0, x1, y1 := 1<<30, 1<<30, -1, -1
 		for y := 0; y < img.Bounds().Dy(); y++ {

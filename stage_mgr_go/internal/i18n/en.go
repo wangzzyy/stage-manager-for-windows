@@ -41,7 +41,7 @@ var en = Strings{
 	Spacing:      "Card spacing",
 	CardsAt:      "Vertical position",
 	Tilt:         "Perspective strength",
-	TiltDesc:     "Controls perspective strength: 0 is undistorted, and higher values bring the convergence point closer to the card.",
+	TiltDesc:     "Controls how far the strip turns inward: 0 is flat, and higher values turn the cards farther into the screen.",
 	TiltOff:      "None",
 	DefaultValue: "Default: %s. Click to restore.",
 

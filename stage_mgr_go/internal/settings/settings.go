@@ -60,6 +60,8 @@ const (
 	MinIconScale = 0.6
 	MaxIconScale = 1.6
 	MaxTilt      = 10
+	MinPerspective = 0.5
+	MaxPerspective = 2
 	MaxSpacing   = 80
 	// The cards sit from a little above the middle of a strip to well
 	// below it, where the hand is: further up is a reach, and further down
@@ -118,6 +120,8 @@ type Settings struct {
 	// Tilt is how far the cards turn in 3D, as the macOS strip's do, from
 	// 0, flat, to MaxTilt.
 	Tilt int `json:"tilt"`
+	// Perspective controls the strength of the cards' depth projection; larger is stronger.
+	Perspective float64 `json:"perspectiveStrength"`
 	// CardsAt is where the middle of a strip's cards goes, as a share of the
 	// way down it: 0.5, the middle, as on macOS, or lower, nearer to the
 	// taskbar and the hand. Below the list of the stage's windows, it is a
@@ -231,6 +235,7 @@ func Default() Settings {
 		IconScale:          1,
 		Spacing:            20,
 		Tilt:               DefaultTilt,
+		Perspective:        1,
 		CardsAt:            0.5,
 		PanelWidth:         1,
 		PanelHeight:        38,
@@ -288,6 +293,10 @@ func (s Settings) Normalize() Settings {
 	}
 	s.Spacing = math.Round(min(max(s.Spacing, 0), MaxSpacing))
 	s.Tilt = min(max(s.Tilt, 0), MaxTilt)
+	if s.Perspective == 0 || math.IsNaN(s.Perspective) {
+		s.Perspective = Default().Perspective
+	}
+	s.Perspective = math.Round(min(max(s.Perspective, MinPerspective), MaxPerspective)*100) / 100
 	// It cannot be 0, so 0 is one missing from older settings.
 	if s.CardsAt == 0 || math.IsNaN(s.CardsAt) {
 		s.CardsAt = Default().CardsAt

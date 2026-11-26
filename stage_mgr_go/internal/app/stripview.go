@@ -154,12 +154,12 @@ var checkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" 
 // edge and a faint dark one inside its bottom, the gloss of a pill of white
 // fading downward across its top half, and the check, white, over a copy of
 // itself in green a little below, which makes it stand off the disc.
-func stageBadge(c *ui.Context, r ui.Rect, pop, turn, horizontalCompensation float32) {
+func stageBadge(c *ui.Context, r ui.Rect, pop, horizontalCompensation float32) {
 	d := r.W
 	// The badge is still inside the card's perspective layer. A local
 	// counter-rotation compounds with the parent's projective transform, so
 	// keep the disc in its own plane and cancel the parent's horizontal
-	// foreshortening with the measured cosine compensation instead.
+	// foreshortening with the local derivative of the parent's perspective projection instead.
 	disc := ui.Box(c.Key("badge")).Absolute().Left(r.X).Top(r.Y).Size(d, d).Radius(d/2).Scale(pop*horizontalCompensation, pop).
 		LinearGradient(ui.LinearGradient{Angle: 155, Stops: []ui.GradientStop{{Color: badgeLight, At: 0}, {Color: badgeMid, At: 0.45}, {Color: badgeDeep, At: 1}}}).
 		Border(max(d*0.03, 0.5), badgeEdge).
@@ -891,8 +891,17 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			// card's lower-left corner even when its windows are arranged
 			// side by side or offset from one another.
 			b := stageBadgeRect(local, float32(a.settings.IconScale), right)
-			horizontalCompensation := float32(1 / math.Max(math.Cos(float64(tilt)*math.Pi/180), 0.1))
-			stageBadge(c, b, 0.5+0.5*ghost, -tilt*sign, horizontalCompensation)
+			// A perspective transform does not foreshorten every point by
+			// the same amount. Compensate the horizontal derivative at the
+			// badge's actual position, relative to the card's outer-edge
+			// transform origin, rather than using only 1/cos(tilt).
+			angle := float64(tilt*sign) * math.Pi / 180
+			originX := float64((1 - sign) / 2)
+			dx := float64(b.X+b.W/2) - originX*float64(box.W)
+			cosine := math.Max(math.Cos(angle), 0.1)
+			perspectiveScale := 1 + dx*math.Sin(angle)/float64(max(perspective, 1))
+			horizontalCompensation := float32(perspectiveScale*perspectiveScale/cosine)
+			stageBadge(c, b, 0.5+0.5*ghost, horizontalCompensation)
 		})
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).RotateY(tilt * sign).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {

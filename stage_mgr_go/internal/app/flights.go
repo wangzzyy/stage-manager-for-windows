@@ -53,13 +53,12 @@ func flightEase(p float64) float64 {
 type pose struct {
 	x, y, w, h float64
 	tilt       float32
-	// originY and perspective carry the card's exact projection into the
-	// flight, so its final frame is geometrically identical to the card.
-	originY, perspective float32
+	// originY carries the card's rotation origin into the flight.
+	originY float32
 }
 
 func poseOf(r winapi.Rect) pose {
-	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H()), originY: 0.5, perspective: cardPerspective}
+	return pose{x: float64(r.Left), y: float64(r.Top), w: float64(r.W()), h: float64(r.H()), originY: 0.5}
 }
 
 // shade is the shadow under a flight: a tight ambient glow around the
@@ -241,7 +240,6 @@ func lerpPose(a, b pose, e float64) pose {
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
 		originY: a.originY + (b.originY-a.originY)*float32(e),
-		perspective: a.perspective + (b.perspective-a.perspective)*float32(e),
 	}
 }
 
@@ -452,7 +450,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 			tilt, lift = st.tilt, st.lift
 		}
 		card := l.cards[i]
-		originY, perspective := s.cardViewpoint(card, rest)
+		originY := s.cardViewpoint(card)
 		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
 		pivotY := card.Y - verticalCompensation + originY*card.H
 		for j, r := range f.a.stack(set, card, right) {
@@ -469,7 +467,7 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 				windowOriginY := float32((float64(pivotY)-float64(shown.Y))/float64(max(shown.H, 1)))
 				out[h] = pose{
 					x: x, y: y, w: w, h: ht,
-					tilt: tilt * turnSign(right), originY: windowOriginY, perspective: perspective,
+					tilt: tilt * turnSign(right), originY: windowOriginY,
 				}
 			}
 		}
@@ -977,7 +975,7 @@ func (l *layer) view(c *ui.Context) {
 			p := min(float64(c.Now().Sub(landing.started))/float64(dragIntoCardDuration), 1)
 			e := flightEase(p)
 			// Use the same projected slot geometry as the strip card itself.
-			// This includes its lift, tilt, perspective and exact window slot;
+			// This includes its lift, tilt and exact window slot;
 			// independently rebuilding a rectangle here makes the overlay
 			// finish at a subtly different size/position from the real card.
 			var to pose
@@ -992,7 +990,7 @@ func (l *layer) view(c *ui.Context) {
 			}
 			// windowStill contains the bitmap in its slot without cropping.
 			// Match that same contained rectangle, while preserving the
-			// transformed card's pivot and perspective.
+			// transformed card's pivot.
 			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
 				pivotY := to.y + float64(to.originY)*to.h
 				aspect := float64(iw) / float64(ih)
@@ -1198,11 +1196,5 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	if at.tilt < 0 {
 		originX = 1
 	}
-	originY, perspective := at.originY, at.perspective
-	// Poses that are not card landings (for example, a collapsing flight)
-	// keep the original centered projection.
-	if perspective <= 0 {
-		originY, perspective = 0.5, cardPerspective
-	}
-	img.TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
+	img.TransformOrigin(originX, at.originY).RotateY(at.tilt).Opacity(op)
 }

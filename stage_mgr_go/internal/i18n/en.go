@@ -7,6 +7,7 @@ var en = Strings{
 	TabStage:      "Stage",
 	TabOverview:   "All Windows",
 	TabCompanions: "Exceptions",
+	TabExcluded:   "Excluded",
 	TabAbout:      "About",
 
 	Language:           "Language",
@@ -104,6 +105,11 @@ var en = Strings{
 	FlightSpeedDesc:  "How fast windows fly from the sidebar to the stage and back.",
 
 	CompanionLabel: "Keep the current app when opened",
+	ExcludedLabel: "Windows Stage Manager leaves alone",
+	ExcludedEmpty: "No excluded apps yet.",
+	AddExcluded: "Exclude app",
+	ExcludeWindow: "Always exclude this app",
+	ExcludeWindowSession: "Exclude this window until Stage Manager quits",
 	CompanionTip:   "When an app in this list opens a window, it stays on the desktop with the app you're using instead of sending that app to the sidebar; once it's closed, the desktop is as it was. Good for tools used for a moment, like TortoiseSVN's commit dialog.",
 	Programs:       "Programs",
 

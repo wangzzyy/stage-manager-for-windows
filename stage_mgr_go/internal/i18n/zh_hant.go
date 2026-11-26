@@ -31,7 +31,7 @@ var zhHant = Strings{
 	StripShows: "顯示內容",
 
 	HideWhenCovered:     "視窗遮擋時自動隱藏側邊欄",
-	HideWhenCoveredDesc: "舞台視窗遮擋側邊欄卡片區域時自動收起；移動滑鼠到螢幕邊緣仍可叫出。關閉後側邊欄保持顯示並位於遮擋視窗下方。",
+	HideWhenCoveredDesc: "舞台視窗遮擋側邊欄卡片區域時自動收起；移動滑鼠到螢幕邊緣仍可叫出。關閉後，靜止且未懸停或互動的側邊欄位於遮擋視窗下方；懸停或互動時遵循原有層級規則。",
 
 	Mode:         "顯示方式",
 	ModeDesc:     "側邊欄如何與視窗共用螢幕。",

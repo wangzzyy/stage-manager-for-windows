@@ -60,19 +60,24 @@ func toNRGBA(img image.Image) *image.NRGBA {
 // the small downward offset.
 func iconShadow(img *image.NRGBA) *image.NRGBA {
 	const (
-		padding = 24
-		offsetY = 4
-		radius  = 12
-		passes  = 3
+		padding      = 24
+		offsetY      = 5
+		radius       = 8
+		passes       = 3
+		blurStrength = 90
+		coreStrength = 35
 	)
 	bounds := img.Bounds()
 	w, h := bounds.Dx()+padding*2, bounds.Dy()+padding*2
 	alpha := make([]uint8, w*h)
+	core := make([]uint8, w*h)
 	for y := 0; y < bounds.Dy(); y++ {
 		for x := 0; x < bounds.Dx(); x++ {
 			src := img.PixOffset(bounds.Min.X+x, bounds.Min.Y+y)
 			dst := (y+padding+offsetY)*w + x + padding
-			alpha[dst] = img.Pix[src+3]
+			a := img.Pix[src+3]
+			alpha[dst] = a
+			core[dst] = a
 		}
 	}
 	for i := 0; i < passes; i++ {
@@ -80,7 +85,11 @@ func iconShadow(img *image.NRGBA) *image.NRGBA {
 	}
 	out := image.NewNRGBA(image.Rect(0, 0, w, h))
 	for i, a := range alpha {
-		out.Pix[i*4+3] = uint8(uint16(a) * 62 / 100)
+		// Combine a broad, soft halo with a denser silhouette close to
+		// the icon. This keeps the shadow visible without losing its
+		// natural falloff around irregular and transparent edges.
+		strength := int(a)*blurStrength/100 + int(core[i])*coreStrength/100
+		out.Pix[i*4+3] = uint8(min(strength, 255))
 	}
 	return out
 }

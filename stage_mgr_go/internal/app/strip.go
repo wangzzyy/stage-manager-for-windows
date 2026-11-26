@@ -368,10 +368,9 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 				s.lastInside = time.Time{}
 			}
 		}
-		// With auto-hide disabled, an edge gesture may raise the sidebar
-		// only when the stage window also covers the pointer at the edge.
-		// This avoids changing z-order for an ordinary partially exposed strip.
-		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered && s.coveredAt(cur) {
+		// With auto-hide disabled, reaching the screen edge can reveal a
+		// fully covered sidebar using the original slide-in animation.
+		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
 			s.edgeRaise = true
 		}
 		if !s.d.covered || !s.rect.Contains(cur) {

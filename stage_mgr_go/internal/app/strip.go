@@ -416,11 +416,10 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
 	s.setPointerOnStrip(band)
-	// WindowFromPoint sees the window that actually occupies this screen pixel.
-	// The sidebar itself is layered/click-through, so desktop pixels indicate
-	// an exposed part of the strip while another top-level window means covered.
-	underPointer := winapi.WindowFromPoint(cur)
-	exposedStrip := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && (underPointer == s.hwnd || underPointer != 0 && catalog.IsDesktop(underPointer))
+	// Determine exposure from the geometry of visible top-level windows,
+	// rather than WindowFromPoint: the strip is layered and click-through,
+	// which makes hit-test results dependent on its current z-order/styles.
+	exposedStrip := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur) && !s.coveredAt(cur)
 	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.
@@ -428,6 +427,27 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	s.setClickThrough(!(band || inside || onList || s.dragging || s.holding))
 	s.setJoined(s.a.joinable(s.d, now))
 	s.approach(cur)
+}
+
+// coveredAt reports whether another visible top-level window occupies p.
+// Desktop wallpaper and shell surfaces are not treated as covering windows.
+func (s *strip) coveredAt(p winapi.Point) bool {
+	covered := false
+	winapi.EnumWindows(func(h winapi.HWND) bool {
+		if h == s.hwnd || !winapi.IsWindowVisible(h) || winapi.IsIconic(h) || winapi.IsCloaked(h) {
+			return true
+		}
+		class := winapi.ClassName(h)
+		if catalog.IsDesktop(h) || class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
+			return true
+		}
+		if winapi.FrameBounds(h).Contains(p) {
+			covered = true
+			return false
+		}
+		return true
+	})
+	return covered
 }
 
 // approach brings the overview's panel in as the pointer nears it, from

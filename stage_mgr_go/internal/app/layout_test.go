@@ -429,8 +429,6 @@ func TestBadgeRect(t *testing.T) {
 	}
 }
 
-// A point of a card shows where the card turned has it: those at its outer
-// edge stay, and the card's far edge goes where turnedCard puts it.
 func TestTiltTargetOrigin(t *testing.T) {
 	const cardY, cardH, targetY float32 = 100, 200, 500
 	if got := tiltTargetOrigin(cardY, cardH, targetY, 0); got != 0.5 {
@@ -450,6 +448,8 @@ func TestTiltTargetOrigin(t *testing.T) {
 	}
 }
 
+// A point of a card shows where the card turned has it: those at its outer
+// edge stay, and the card's far edge goes where turnedCard puts it.
 func TestTurnedPoint(t *testing.T) {
 	const w, h, dist float32 = 160, 105, 640
 	for _, right := range []bool{false, true} {
@@ -476,6 +476,13 @@ func TestTurnedPoint(t *testing.T) {
 	if _, y := turnedPoint(100, h/2, w, h, 24, dist, false, 0.5); y != h/2 {
 		t.Fatalf("the middle of the card moved to %v", y)
 	}
+	if _, y := turnedPoint(100, h*0.75, w, h, 24, dist, false, 0.75); y != h*0.75 {
+		t.Fatalf("the adjusted vertical pivot moved to %v", y)
+	}
+	if _, y := turnedPoint(60, h*0.75, w, h, -24, dist, true, 0.75); y != h*0.75 {
+		t.Fatalf("the mirrored adjusted vertical pivot moved to %v", y)
+	}
+}
 }
 
 func TestStageWindowLayoutRightIsMirrorOfLeft(t *testing.T) {

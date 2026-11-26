@@ -895,10 +895,25 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
-				if icon := a.media.icons[g.apps[i].front().App]; icon != nil {
-					r := row[i]
-					ui.Image(c.Key(g.apps[i].app), icon).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H)
+				app := g.apps[i].front().App
+				icon := a.media.icons[app]
+				if icon == nil {
+					continue
 				}
+				r := row[i]
+				// Draw the pre-blurred alpha mask first. Its transparent
+				// pixels preserve the icon's silhouette, including cutouts.
+				if shadow := a.media.iconShadows[app]; shadow != nil {
+					iw, ih := icon.Size()
+					sw, sh := shadow.Size()
+					if iw > 0 && ih > 0 {
+						padX := float32(sw-iw) / float32(iw) * r.W / 2
+						padY := float32(sh-ih) / float32(ih) * r.H / 2
+						ui.Image(c.Key("icon-shadow:"+g.apps[i].app), shadow).Absolute().
+							Left(r.X-padX).Top(r.Y-padY).Size(r.W+2*padX, r.H+2*padY)
+					}
+				}
+				ui.Image(c.Key(g.apps[i].app), icon).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H)
 			}
 			// The name follows the icons toward the stage.
 			label := ui.Text(c, g.title()).FontSize(12).Bold().TextColor(white).MaxLines(1).

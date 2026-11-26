@@ -358,16 +358,13 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 			a.setCardDrag(nil)
 			d.dropPoses = st.poses
 			cur := winapi.Cursor()
+			front := a.home(g.front())
+			dx := cur.X - (front.Left + front.W()/2)
+			dy := cur.Y - (front.Top + front.H()/2)
 			d.dropTargets = make(map[winapi.HWND]winapi.Rect, len(g.windows))
 			for _, w := range g.windows {
-				frame := w.Frame
-				if frame.Empty() {
-					frame = w.Rect
-				}
-				drop := winapi.Rect{
-					Left: cur.X - frame.W()/2, Top: cur.Y - frame.H()/2,
-					Right: cur.X + (frame.W()+1)/2, Bottom: cur.Y + (frame.H()+1)/2,
-				}
+				home := a.home(w)
+				drop := home.Offset(dx, dy)
 				d.dropTargets[w.HWND] = drop
 			}
 			a.request(actJoin, d, g)

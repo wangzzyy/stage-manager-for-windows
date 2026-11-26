@@ -311,6 +311,10 @@ func (s *strip) message(msg uint32, wParam, lParam uintptr) (uintptr, bool) {
 // wherever no card is. While the overview shows the display's windows, the
 // strip under it takes nothing.
 func (s *strip) poll(cur winapi.Point, now time.Time) {
+	// Remember whether the sidebar was already topmost before this poll.
+	// A card switch can put a newly activated stage window under the pointer;
+	// geometric coverage must not undo a topmost state that was already earned.
+	wasTopmost := s.zOrderKnown && s.zOrderTopmost
 	inside := s.visible && !s.d.inOverview && s.rect.Contains(cur) && s.over(cur)
 	// The list of the stage's windows takes the pointer as the cards do,
 	// but brings no switch: its windows are on the stage already, and are
@@ -454,7 +458,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// latch that state for the whole time it remains inside the strip.
 	// Rechecking window coverage after raising would see the window behind
 	// the strip and lower it again, causing a z-order oscillation.
-	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || s.edgeRaise || !s.coveredAt(cur))
+	exposedStrip := eligibleExposedStrip && (s.pointerOnExposedStrip || s.edgeRaise || wasTopmost || !s.coveredAt(cur))
 	s.setPointerOnExposedStrip(exposedStrip)
 	// The renderer marks away only after the last slide-out frame. Recheck
 	// here so a full-screen window is raised only after that frame completes.

@@ -429,10 +429,6 @@ func emptyHint(c *ui.Context, tr *i18n.Strings, w, h float32) {
 }
 
 
-// cardViewpoint puts the perspective's vanishing point at the middle of the
-// opposite vertical edge of the display. The outer edge remains the card's
-// fixed base; its top and bottom edges run toward that distant point, while
-// the inner edge is foreshortened without being turned around its own axis.
 // cardViewpoint puts the rotation's vertical origin between the card's
 // center and the display's centerline, according to the existing Tilt setting.
 // The card is rotated without perspective projection, so its edges stay parallel.
@@ -796,9 +792,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := a.stack(g, local, right)
 	originX := (1 - sign) / 2
-	// Keep the perspective fixed at the resting angle while the card
-	// turns toward the user. Recomputing it from the animated angle would
-	// drive it toward zero, then abruptly fall back to cardPerspective.
+	// The rotation origin follows the existing tilt slider.
 	originY := s.cardViewpoint(box)
 	// Scaling about the screen's vertical midpoint moves cards above and
 	// below it in opposite directions. Counter that scale-only displacement

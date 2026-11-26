@@ -365,17 +365,21 @@ func (a *App) excluded(w catalog.Window) bool {
 // exclude leaves the selected card's windows on the desktop and removes
 // them from the model. Permanent exclusions are keyed by executable;
 // session exclusions are keyed by HWND and disappear when this process exits.
-func (a *App) exclude(g *group, permanent bool) {
-	if g == nil || len(g.windows) == 0 {
+func (a *App) exclude(card *set, permanent bool) {
+	if card == nil || len(card.windows) == 0 {
 		return
 	}
 	if permanent {
-		a.applySettings(a.settings.WithExcluded(g.front().Exe, true))
+		s := a.settings.Clone()
+		for _, g := range card.apps {
+			s = s.WithExcluded(g.front().Exe, true)
+		}
+		a.applySettings(s)
 	} else {
 		if a.excludedWindows == nil {
 			a.excludedWindows = make(map[winapi.HWND]bool)
 		}
-		for _, w := range g.windows {
+		for _, w := range card.windows {
 			a.excludedWindows[w.HWND] = true
 		}
 	}

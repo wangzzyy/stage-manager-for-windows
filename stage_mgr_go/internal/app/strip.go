@@ -334,6 +334,15 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		if c := s.a.cardDrag; c != nil && c.aim == aimMove && c.to == s.d {
 			s.lastInside = now
 		}
+		// Once the edge-triggered strip is visible, keep it open while the
+		// pointer remains in its bounds; leaving those bounds ends the hold.
+		if s.pointerOnStrip {
+			if !s.d.inOverview && s.rect.Contains(cur) {
+				s.lastInside = now
+			} else {
+				s.lastInside = time.Time{}
+			}
+		}
 		want := now.Sub(s.lastInside) < autoHide || now.Before(s.holdUntil) || s.dragging ||
 			(!s.d.covered && s.d.waiting() > 0 && s.a.ready)
 		s.setShown(want)

@@ -673,6 +673,13 @@ func (o *overview) abort() {
 		if winapi.Foreground() == o.hwnd && o.prev != 0 && winapi.IsWindow(o.prev) {
 			winapi.Activate(o.prev)
 		}
+		// Even when the overview closes before its windows take off, leave
+		// the sidebar below the stage instead of restoring its old topmost
+		// position over a maximized window.
+		if d != nil && d.strip != nil {
+			d.strip.setOverviewClosing(true)
+			d.strip.setOverviewClosing(false)
+		}
 		o.win.Hide()
 		a.overviewDone(d)
 		return

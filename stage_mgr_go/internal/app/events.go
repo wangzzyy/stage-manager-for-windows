@@ -157,7 +157,17 @@ func (a *App) onForeground(h winapi.HWND) {
 	// queued foreground/refresh event can otherwise act on the intermediate
 	// foreground and disturb the stage.
 	if a.excludedHandle(h) {
-		debugf("foreground %x ignored: excluded", h)
+		// An excluded foreground window must also invalidate any older
+		// foreground event still waiting in the debounce timer. Otherwise
+		// settleForeground may follow that stale event after the user has
+		// already focused an excluded window.
+		if a.fg.timer != nil {
+			a.fg.timer.Stop()
+			a.fg.timer = nil
+		}
+		a.fg.h, a.fg.tries = 0, 0
+		a.fg.prev = catalog.RootOwner(h)
+		debugf("foreground %x ignored: excluded; pending switch cancelled", h)
 		return
 	}
 	// The window the user left gets a fresh still, for when its app goes.
@@ -248,6 +258,14 @@ func (a *App) settleForeground() {
 	}
 	root := catalog.RootOwner(h)
 	a.windows = a.cat.Windows()
+	// The system foreground may have changed while the debounce timer was
+	// pending. Re-check against the fresh catalog, not just the event HWND
+	// that originally scheduled this callback.
+	if a.excludedHandle(root) {
+		debugf("foreground %x ignored at settle: excluded", root)
+		a.fg.h, a.fg.tries = 0, 0
+		return
+	}
 	i := slices.IndexFunc(a.windows, func(w catalog.Window) bool { return w.HWND == root })
 	if i < 0 {
 		// New windows often get their title, or show, a moment after

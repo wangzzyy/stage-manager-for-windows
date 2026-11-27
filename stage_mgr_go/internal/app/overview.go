@@ -569,6 +569,18 @@ func (o *overview) close(pick *ovTile) {
 		t.to, t.toSh = p, cardShade(float32(p.h/o.scale))
 	}
 	o.badges = a.flights.landingIcons(d)
+	// Resolve badge occlusion once, after every destination pose is known.
+	// The overview stays topmost during the flight, so it must not draw an
+	// icon over a window returning to the stage.
+	for i := range o.badges {
+		for j := range o.tiles {
+			t := &o.tiles[j]
+			if t.home && !t.closing && overlaps(o.badges[i].at, t.to) {
+				o.badges[i].covered = true
+				break
+			}
+		}
+	}
 	o.phase, o.start = ovClosing, time.Time{}
 	if d.strip != nil {
 		d.strip.setOverviewClosing(true)
@@ -775,24 +787,11 @@ func (o *overview) view(c *ui.Context) {
 	if picked >= 0 {
 		o.drawTile(c, &o.tiles[picked], e, spread, live)
 	}
-	// The overview is topmost, so its landing icons would otherwise cover
-	// windows returning to the stage. Keep each icon only when no destination
-	// window will occupy that part of the strip.
+	// Occlusion was resolved when closing began; frames only read the result.
 	if o.phase >= ovClosing {
 		op := float32(min(max(e*2-1, 0), 1))
 		for _, b := range o.badges {
-			covered := false
-			for i := range o.tiles {
-				t := &o.tiles[i]
-				if !t.home || t.closing {
-					continue
-				}
-				if overlaps(b.at, t.to) {
-					covered = true
-					break
-				}
-			}
-			if covered {
+			if b.covered {
 				continue
 			}
 			x, y, bw, bh := o.local(b.at)

@@ -48,6 +48,7 @@ type strip struct {
 	edgeReveal bool // the strip was explicitly revealed from the screen edge while covered
 	edgeRevealZOrder bool // keep the strip above the covering window until its slide-out finishes
 	overviewClosing bool // keep the strip below stage windows throughout overview's closing animation
+	overviewLowered bool // keep it below the stage after overview closes, until the user reveals it
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -178,7 +179,7 @@ func (s *strip) applyBounds() {
 func (s *strip) zOrder() winapi.HWND {
 	// During overview closing, the strip must stay below the stage windows
 	// and their shrink animation, regardless of pointer or coverage changes.
-	if s.overviewClosing {
+	if s.overviewClosing || s.overviewLowered {
 		return winapi.HwndBottom
 	}
 	// Keep the strip above the flight layer throughout a stage transition,
@@ -250,6 +251,11 @@ func (s *strip) setOverviewClosing(v bool) {
 		return
 	}
 	s.overviewClosing = v
+	if !v {
+		// Do not let the floating-strip policy immediately raise the sidebar
+		// over maximized stage windows as the overview disappears.
+		s.overviewLowered = true
+	}
 	// Force the native z-order update: the current non-topmost band may
 	// have been raised by another window since the last policy sync.
 	s.zOrderKnown = false
@@ -403,6 +409,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		// covering window. A fully covered one uses the original edge-reveal
 		// animation, without conflating its resting visibility with z-order.
 		fullyCovered := s.d.covered && !s.a.settings.HideWhenCovered && s.fullyCovered()
+		if edgeWake {
+			// Reaching the screen edge is an explicit request to reveal the
+			// sidebar again after an overview has lowered it.
+			s.overviewLowered = false
+		}
 		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
 			if fullyCovered {
 				s.edgeRevealZOrder = true
@@ -480,6 +491,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// While the overview shows, it takes nothing, as the cards it shows do
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	if s.overviewLowered && band && !s.coveredAt(cur) {
+		// An uncovered part of the sidebar is an intentional reveal. Keep
+		// covered portions below the stage, even while the pointer passes by.
+		s.overviewLowered = false
+	}
 	s.setPointerOnStrip(band)
 	// Determine exposure from the geometry of visible top-level windows,
 	// rather than WindowFromPoint: the strip is layered and click-through,

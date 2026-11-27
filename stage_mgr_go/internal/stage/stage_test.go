@@ -118,8 +118,8 @@ func TestExcludeDoesNotRefillTheStage(t *testing.T) {
 	d.Strip([]string{"current", "excluded", "previous"})
 	d.Switch([]string{"previous"}, t0)
 	d.Switch([]string{"current"}, t0)
-	// Excluding the current app removes it without recording a close or
-	// making the previous stage eligible for automatic refill.
+	// Excluding the current app removes it without treating it as a close,
+	// which would otherwise trigger the automatic refill path.
 	d.Exclude("current", t0.Add(2*time.Second))
 	if !d.Empty() {
 		t.Fatalf("stage after exclusion %v", d.Stage())

@@ -16,6 +16,8 @@ import (
 const (
 	// The overview opens and closes about as briskly as Mission Control.
 	overviewTime = 420 * time.Millisecond
+	// A million DIPs is effectively orthographic, allowing the projection to interpolate smoothly.
+	overviewFlatPerspective = 1_000_000
 	// How dark the desktop goes behind the windows spread out.
 	overviewDim = 0.45
 	// The close button in the top right corner of the window under the

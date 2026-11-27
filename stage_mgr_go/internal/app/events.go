@@ -239,6 +239,11 @@ func (a *App) settleForeground() {
 	}
 	a.fg.h = 0
 	w := a.windows[i]
+	// Excluded windows are outside Stage Manager's focus model too.
+	// Let them take the foreground without replacing the current stage.
+	if a.excluded(w) {
+		return
+	}
 	d := a.displayOf(w)
 	debugf("foreground settled on %q (%s) busy=%v", w.Title, func() string {
 		if d == nil {

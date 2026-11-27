@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/e1roy/stage_manager_for_windows/internal/catalog"
 	"github.com/e1roy/stage_manager_for_windows/internal/settings"
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo"
@@ -492,22 +493,20 @@ func (s *strip) fullyCovered() bool {
 	type interval struct{ top, bottom int32 }
 	var windows []winapi.Rect
 	xs := []int32{band.Left, band.Right}
-	for _, g := range s.d.onStage {
-		for _, w := range g.windows {
-			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
-				continue
-			}
-			r := winapi.FrameBounds(w.HWND)
-			if !r.Intersects(band) {
-				continue
-			}
-			r.Left = max(r.Left, band.Left)
-			r.Right = min(r.Right, band.Right)
-			r.Top = max(r.Top, band.Top)
-			r.Bottom = min(r.Bottom, band.Bottom)
-			windows = append(windows, r)
-			xs = append(xs, r.Left, r.Right)
+	for _, w := range s.a.coverageWindows(s.d) {
+		if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+			continue
 		}
+		r := winapi.FrameBounds(w.HWND)
+		if !r.Intersects(band) {
+			continue
+		}
+		r.Left = max(r.Left, band.Left)
+		r.Right = min(r.Right, band.Right)
+		r.Top = max(r.Top, band.Top)
+		r.Bottom = min(r.Bottom, band.Bottom)
+		windows = append(windows, r)
+		xs = append(xs, r.Left, r.Right)
 	}
 	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })
 	for i := 0; i+1 < len(xs); i++ {
@@ -548,14 +547,12 @@ func (s *strip) coveredAt(p winapi.Point) bool {
 	// Check the stage windows that make this display "covered". Enumerating
 	// every top-level HWND can pick the layered sidebar or unrelated shell
 	// surfaces first, causing an exposed point to be misclassified.
-	for _, g := range s.d.onStage {
-		for _, w := range g.windows {
-			if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
-				continue
-			}
-			if winapi.FrameBounds(w.HWND).Contains(p) {
-				return true
-			}
+	for _, w := range s.a.coverageWindows(s.d) {
+		if s.a.hidden(w) || !winapi.IsWindow(w.HWND) || winapi.IsIconic(w.HWND) {
+			continue
+		}
+		if winapi.FrameBounds(w.HWND).Contains(p) {
+			return true
 		}
 	}
 	return false

@@ -221,6 +221,13 @@ func (a *App) followMoved() bool {
 		return false
 	}
 	w := a.windows[i]
+	// Excluded windows are deliberately outside the stage model. In
+	// particular, do not let a refresh triggered by another window's move
+	// follow an excluded foreground window: groupsOf omits it, so switching
+	// to its key would make every current stage window depart.
+	if a.excluded(w) {
+		return false
+	}
 	d := a.displayOf(w)
 	if d == nil || !a.managed(d) || d.model.OnStage(a.groupKey(w)) || d.model.Settling(time.Now()) {
 		return false

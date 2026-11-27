@@ -888,7 +888,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				// windows, every one of a set of several, as its menu's last
 				// item does: out there, it hides little of the window. It is
 				// drawn with the windows, so it turns and lifts as they do.
-				closing := el.AnimateTo("close", b2f(live && !st.dragging) * uiOpacity, fadeQuick)
+				closing := el.AnimateTo("close", b2f(live && !st.dragging), fadeQuick)
 				if closing > 0 {
 					f := stack[0]
 					label := a.tr().CloseWindow

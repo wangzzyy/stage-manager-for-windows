@@ -66,7 +66,7 @@ type strip struct {
 	previous string
 	// line is the list of the windows on the stage (lineup.go).
 	line lineup
-	// cardThumbs composes flat card windows live, behind the strip's own UI.
+	// cardThumbs composes flat card windows live, above the strip's card UI.
 	cardThumbs *cardThumbs
 	// near is how far the overview's panel shows as the pointer comes
 	// near it, 0 to 1. The poll measures it everywhere on the display,

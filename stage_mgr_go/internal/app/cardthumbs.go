@@ -11,8 +11,8 @@ import (
 )
 
 // cardThumbs keeps DWM's live window pictures in a transparent window just
-// behind the strip. The strip can therefore draw its icons and controls over
-// the pictures, unlike thumbnails registered against the strip itself.
+// above the strip. The live picture intentionally covers the card's decorative
+// UI while that card is being operated.
 type cardThumbs struct {
 	s *strip
 	win *mygo.Window
@@ -146,8 +146,14 @@ func (c *cardThumbs) place() {
 		return
 	}
 	r := c.s.rect
-	winapi.SetWindowPos(c.hwnd, c.s.hwnd, r.Left, r.Top, r.W(), r.H(),
+	// Keep the host in the same z-order band as the strip, then put the strip
+	// immediately behind it. This makes DWM content cover the whole card UI
+	// without leaving the host topmost when the strip itself is lowered.
+	z := c.s.zOrder()
+	winapi.SetWindowPos(c.hwnd, z, r.Left, r.Top, r.W(), r.H(),
 		winapi.SwpNoActivate|winapi.SwpNoOwnerZOrder)
+	winapi.SetWindowPos(c.s.hwnd, c.hwnd, 0, 0, 0, 0,
+		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate|winapi.SwpNoOwnerZOrder)
 	c.rect, c.placed = r, true
 }
 

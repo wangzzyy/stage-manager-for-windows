@@ -815,8 +815,15 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
-	// DWM thumbnails are composited below this strip window, so the strip's
-	// icons, labels and close button remain ordinary UI above live content.
+	// DWM thumbnails cover the strip UI while a card is operated. Fade the
+	// card's icons, title, badge and close control out together, then restore
+	// them when the pointer/drag interaction ends.
+	uiVisible := !hovered && !st.dragging
+	uiOpacity := float32(1)
+	if !uiVisible {
+		uiOpacity = 0
+	}
+	uiOpacity = el.AnimateTo("card-ui", uiOpacity, fadeQuick)
 	flat := math.Abs(float64(tilt)) < 0.01 && gray <= 0.005 && !st.external && !st.externalLayer && !st.externalAnimating && !landing && op > 0
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
@@ -864,7 +871,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				// windows, every one of a set of several, as its menu's last
 				// item does: out there, it hides little of the window. It is
 				// drawn with the windows, so it turns and lifts as they do.
-				closing := el.AnimateTo("close", b2f(live && !st.dragging), fadeQuick)
+				closing := el.AnimateTo("close", b2f(live && !st.dragging) * uiOpacity, fadeQuick)
 				if closing > 0 {
 					f := stack[0]
 					label := a.tr().CloseWindow
@@ -901,7 +908,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
-			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost * uiOpacity).PassThrough()
 		badge.Children(func() {
 			// Anchor the stage mark to the card itself, not to the most
 			// recently active window in the group. The mark stays at the
@@ -911,7 +918,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, perspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp * uiOpacity).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				app := g.apps[i].front().App
@@ -944,7 +951,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				label.Left(end + 4).MaxWidth(max(box.W-end, 60))
 			}
 			op := float32(0)
-			if hovered && !st.dragging {
+			if hovered && !st.dragging && uiVisible {
 				op = 1
 			}
 			label.Opacity(label.AnimateTo("label", op, fadeQuick))

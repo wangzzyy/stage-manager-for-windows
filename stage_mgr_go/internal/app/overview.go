@@ -626,8 +626,6 @@ func (o *overview) land() {
 		ok := winapi.Activate(focus)
 		debugf("overview: activate %x ok=%v", focus, ok)
 	}
-	d.inOverview = false
-	a.redraw()
 	after(700*time.Millisecond, func() {
 		for _, h := range back {
 			if winapi.IsWindow(h) {
@@ -641,6 +639,11 @@ func (o *overview) land() {
 			return
 		}
 		o.phase, o.d, o.tiles, o.badges = ovHidden, nil, nil, nil
+		// Keep the strip in its overview-only rendering mode until the
+		// landing animation and handoff are complete. Restoring normal cards
+		// in land() makes them flash before the strip can slide away.
+		d.inOverview = false
+		a.redraw()
 		if d.strip != nil {
 			d.strip.setOverviewClosing(false)
 		}

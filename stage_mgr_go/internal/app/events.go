@@ -152,6 +152,14 @@ func (a *App) onForeground(h winapi.HWND) {
 	if !a.ready {
 		return
 	}
+	// Ignore excluded windows before changing foreground history or starting
+	// the debounce timer. Waiting until settleForeground is too late: another
+	// queued foreground/refresh event can otherwise act on the intermediate
+	// foreground and disturb the stage.
+	if a.excludedHandle(h) {
+		debugf("foreground %x ignored: excluded", h)
+		return
+	}
 	// The window the user left gets a fresh still, for when its app goes.
 	// Not when the focus only moves to a popup or dialog of the same app:
 	// the app stays, and some apps flash when asked to draw themselves, as
@@ -183,6 +191,20 @@ func (a *App) onForeground(h winapi.HWND) {
 		a.fg.timer.Stop()
 	}
 	a.fg.timer = after(70*time.Millisecond, a.settleForeground)
+}
+
+// excludedHandle resolves a foreground event to its catalog window and
+// checks both permanent executable exclusions and session HWND exclusions.
+// The catalog is refreshed by the normal refresh path; settleForeground
+// still performs the authoritative fresh lookup as a race-safe fallback.
+func (a *App) excludedHandle(h winapi.HWND) bool {
+	root := catalog.RootOwner(h)
+	if a.excludedWindows[root] {
+		return true
+	}
+	return slices.ContainsFunc(a.windows, func(w catalog.Window) bool {
+		return w.HWND == root && a.excluded(w)
+	})
 }
 
 func sameProcess(a, b winapi.HWND) bool {

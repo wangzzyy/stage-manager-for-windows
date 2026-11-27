@@ -673,7 +673,14 @@ func (o *overview) local(p pose) (x, y, w, h float32) {
 // screen converts a rectangle in DIPs of the window to a pose on the screen.
 func (o *overview) screen(r ui.Rect) pose {
 	k := o.scale
-	return pose{x: float64(o.rect.Left) + float64(r.X)*k, y: float64(o.rect.Top) + float64(r.Y)*k, w: float64(r.W) * k, h: float64(r.H) * k}
+	// Overview slots are flat: transition from a card's projection to
+	// effectively no perspective as its windows spread out.
+	return pose{
+		x: float64(o.rect.Left) + float64(r.X)*k,
+		y: float64(o.rect.Top) + float64(r.Y)*k,
+		w: float64(r.W) * k, h: float64(r.H) * k,
+		originY: 0.5, perspective: 1_000_000,
+	}
 }
 
 func (o *overview) view(c *ui.Context) {
@@ -795,6 +802,13 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 	if at.tilt < 0 {
 		originX = 1
 	}
+	// Keep the overview tile on the same projection as the card it flies
+	// into. Ordinary window poses have no card projection, so retain the
+	// centered default for those.
+	originY, perspective := at.originY, at.perspective
+	if perspective <= 0 {
+		originY, perspective = 0.5, cardPerspective
+	}
 	radius := max(min(h*0.03, 10), 3)
 	iconSize := min(max(h*0.2, 26), 48)
 	el.Children(func() {
@@ -812,7 +826,7 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+		sh.cast(pane).TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

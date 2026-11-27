@@ -247,17 +247,22 @@ func (s *strip) raiseAboveFlight(flight winapi.HWND) {
 
 // setOverviewClosing holds the strip below the overview's closing animation.
 func (s *strip) setOverviewClosing(v bool) {
-	if s.overviewClosing == v {
-		return
-	}
-	s.overviewClosing = v
-	if !v {
-		// Do not let the floating-strip policy immediately raise the sidebar
-		// over maximized stage windows as the overview disappears.
+	if v {
+		if s.overviewClosing {
+			return
+		}
+		s.overviewClosing = true
+	} else {
+		if !s.overviewClosing && s.overviewLowered {
+			return
+		}
+		s.overviewClosing = false
+		// Once the closing/landing animation has finished, keep the sidebar
+		// below stage windows until the user explicitly reveals it again.
 		s.overviewLowered = true
 	}
-	// Force the native z-order update: the current non-topmost band may
-	// have been raised by another window since the last policy sync.
+	// Force the native z-order update: a non-topmost sidebar may still be
+	// above the stage in the ordinary window band.
 	s.zOrderKnown = false
 	s.syncZOrder()
 }

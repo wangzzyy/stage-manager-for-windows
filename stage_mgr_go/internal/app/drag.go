@@ -30,6 +30,12 @@ type drag struct {
 
 // startDrag follows window h, which the user began to move.
 func (a *App) startDrag(h winapi.HWND) {
+	// Excluded windows are outside Stage Manager's drag model too. Do not
+	// let their move/size events make another display's stage yield.
+	if a.excludedHandle(h) {
+		debugf("drag %x ignored: excluded", h)
+		return
+	}
 	if a.drag != nil && a.drag.dwell != nil {
 		a.drag.dwell.Stop()
 	}
@@ -42,7 +48,7 @@ func (a *App) startDrag(h winapi.HWND) {
 // and back out should the window leave again before it is let go.
 func (a *App) dragOver() {
 	g := a.drag
-	if !a.ready || g == nil || g.converted {
+	if !a.ready || g == nil || g.converted || a.excludedHandle(g.h) {
 		return
 	}
 	// By its visible frame, as displayOf goes: a switch must not take the
@@ -161,6 +167,12 @@ func (a *App) windowMoved(h winapi.HWND) {
 		return
 	}
 	w := a.windows[i]
+	// A move/size-end can arrive even when its start was not tracked (or
+	// after the window became excluded). Never stage an excluded window.
+	if a.excluded(w) {
+		debugf("move-size-end %x ignored: excluded", h)
+		return
+	}
 	if d := a.stripUnder(winapi.Cursor()); moved && d != nil {
 		switch {
 		case d != g.home && a.settings.HideInactive:

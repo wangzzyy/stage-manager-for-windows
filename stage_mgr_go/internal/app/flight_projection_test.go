@@ -29,7 +29,7 @@ func TestOverviewProjectionAnimatesToFlatAndBack(t *testing.T) {
 
 func TestPerspectiveInterpolationChangesStrengthSmoothly(t *testing.T) {
 	flat := float32(overviewFlatPerspective)
-	card := cardPerspective
+	card := float32(cardPerspective)
 	quarter := lerpPerspective(flat, card, 0.25)
 	half := lerpPerspective(flat, card, 0.5)
 	threeQuarter := lerpPerspective(flat, card, 0.75)

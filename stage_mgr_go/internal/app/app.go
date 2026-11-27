@@ -714,8 +714,8 @@ func (a *App) refresh() {
 		// app whose windows closed. Remove it from the stage model without
 		// recording a recent stage or triggering the close/refill path.
 		for _, w := range a.windows {
-			if a.displayOf(w) == d && a.excluded(w) {
-				d.model.Exclude(a.groupKey(w), now)
+			if a.displayOf(w) == d && a.excluded(w) && d.model.Exclude(a.groupKey(w), now) {
+				d.refill = false
 			}
 		}
 		groups := a.groupsOf(d)

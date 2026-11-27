@@ -47,6 +47,7 @@ type strip struct {
 	edgeRaise bool // the screen edge explicitly revealed a partly covered sidebar
 	edgeReveal bool // the strip was explicitly revealed from the screen edge while covered
 	edgeRevealZOrder bool // keep the strip above the covering window until its slide-out finishes
+	overviewClosing bool // keep the strip below stage windows throughout overview's closing animation
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -175,6 +176,11 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
+	// During overview closing, the strip must stay below the stage windows
+	// and their shrink animation, regardless of pointer or coverage changes.
+	if s.overviewClosing {
+		return winapi.HwndBottom
+	}
 	// Keep the strip above the flight layer throughout a stage transition,
 	// including in fixed mode. The normal mode-specific policy resumes when
 	// the transition ends.
@@ -236,6 +242,15 @@ func (s *strip) raiseAboveFlight(flight winapi.HWND) {
 	// behind the strip in the TOPMOST band.
 	winapi.SetWindowPos(flight, s.hwnd, 0, 0, 0, 0,
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+}
+
+// setOverviewClosing holds the strip below the overview's closing animation.
+func (s *strip) setOverviewClosing(v bool) {
+	if s.overviewClosing == v {
+		return
+	}
+	s.overviewClosing = v
+	s.syncZOrder()
 }
 
 func (s *strip) setSwitching(v bool) {

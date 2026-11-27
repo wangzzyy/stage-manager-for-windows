@@ -788,10 +788,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			label = tr.CloseWindows
 		}
 		if m.Item(tr.ExcludeWindow).Chosen() {
-			a.exclude(g, true)
+			// Defer model and window mutations until the context-menu
+			// callback has returned; refreshing here can invalidate the
+			// strip while it is still being painted.
+			post(func() { a.exclude(g, true) })
 		}
 		if m.Item(tr.ExcludeWindowSession).Chosen() {
-			a.exclude(g, false)
+			post(func() { a.exclude(g, false) })
 		}
 		if m.Item(label).Chosen() {
 			a.request(actClose, d, g)

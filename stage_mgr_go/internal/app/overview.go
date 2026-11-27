@@ -677,7 +677,6 @@ func (o *overview) abort() {
 		// the sidebar below the stage instead of restoring its old topmost
 		// position over a maximized window.
 		if d != nil && d.strip != nil {
-			d.strip.setOverviewClosing(true)
 			d.strip.setOverviewClosing(false)
 		}
 		o.win.Hide()

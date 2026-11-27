@@ -403,6 +403,10 @@ func (o *overview) begin(ws []catalog.Window) {
 	for i := range o.tiles {
 		t := &o.tiles[i]
 		t.slot = o.screen(slots[i])
+		// Overview tiles finish flat. Carry that projection in the pose so
+		// the opening animation reaches the same perspective as the resting
+		// overview instead of snapping at its last frame.
+		t.slot.tilt, t.slot.originY, t.slot.perspective = 0, 0.5, overviewFlatPerspective
 		t.from, t.fromOp, t.fromSh = t.origin, t.originOp, t.originSh
 		t.to, t.toOp, t.toSh = t.slot, 1, overviewShade
 	}
@@ -545,6 +549,9 @@ func (o *overview) close(pick *ovTile) {
 		t.toOp = 1
 		if t.home {
 			t.to, t.toSh = poseOf(a.home(t.w)), ownShade(castsShadow(t.w.HWND), t.w.HWND == o.focus)
+			// The desktop is flat; don't leave the overview using the card's
+			// perspective when it hands the window back to the real window.
+			t.to.tilt, t.to.originY, t.to.perspective = 0, 0.5, overviewFlatPerspective
 			continue
 		}
 		p, ok := cards[t.w.HWND]
@@ -812,7 +819,7 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+		sh.cast(pane).TransformOrigin(originX, at.originY).RotateY(at.tilt).Perspective(at.perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

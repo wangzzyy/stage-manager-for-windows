@@ -250,6 +250,9 @@ func (s *strip) setOverviewClosing(v bool) {
 		return
 	}
 	s.overviewClosing = v
+	// Force the native z-order update: the current non-topmost band may
+	// have been raised by another window since the last policy sync.
+	s.zOrderKnown = false
 	s.syncZOrder()
 }
 

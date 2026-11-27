@@ -250,6 +250,14 @@ func lerpPose(a, b pose, e float64) pose {
 }
 
 func lerpPerspective(a, b float32, e float64) float32 {
+	// Preserve exact endpoint values: reciprocal interpolation can round
+	// when converted back to float32 (for example, 1/(1/120) = 119.99999).
+	if e <= 0 {
+		return a
+	}
+	if e >= 1 {
+		return b
+	}
 	if a <= 0 || b <= 0 {
 		return a + (b-a)*float32(e)
 	}

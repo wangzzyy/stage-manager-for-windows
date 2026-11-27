@@ -109,7 +109,7 @@ var zhHans = Strings{
 	ExcludedEmpty: "还没有排除的应用。",
 	AddExcluded: "排除应用",
 	ExcludeWindow: "始终排除此应用",
-	ExcludeWindowSession: "本次排除此窗口（直到 Stage Manager 退出）",
+	ExcludeWindowSession: "本次排除此窗口",
 	CompanionTip:   "列表里的应用打开窗口时，会和你正在用的应用一起留在桌面上，不会把它收进侧边栏；关掉后桌面回到原样。适合 TortoiseSVN 提交框这类用一下就关的工具。",
 	Programs:       "程序",
 

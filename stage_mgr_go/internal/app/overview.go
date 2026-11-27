@@ -570,6 +570,9 @@ func (o *overview) close(pick *ovTile) {
 	}
 	o.badges = a.flights.landingIcons(d)
 	o.phase, o.start = ovClosing, time.Time{}
+	if d.strip != nil {
+		d.strip.setOverviewClosing(true)
+	}
 	o.gen++
 	o.win.Invalidate()
 	gen := o.gen
@@ -638,6 +641,9 @@ func (o *overview) land() {
 			return
 		}
 		o.phase, o.d, o.tiles, o.badges = ovHidden, nil, nil, nil
+		if d.strip != nil {
+			d.strip.setOverviewClosing(false)
+		}
 		// One last, empty frame, so that it never shows these again.
 		o.win.Invalidate()
 		after(50*time.Millisecond, func() {

@@ -369,6 +369,13 @@ func (a *App) exclude(card *set, permanent bool) {
 	if card == nil || len(card.windows) == 0 {
 		return
 	}
+	// Only the selected card is leaving Stage Manager. Restoring every
+	// parked window here also exposes unrelated cards and destroys their
+	// parking records, which can make the rest of the stage rearrange.
+	hs := make([]winapi.HWND, 0, len(card.windows))
+	for _, w := range card.windows {
+		hs = append(hs, w.HWND)
+	}
 	if permanent {
 		s := a.settings.Clone()
 		for _, g := range card.apps {
@@ -379,11 +386,13 @@ func (a *App) exclude(card *set, permanent bool) {
 		if a.excludedWindows == nil {
 			a.excludedWindows = make(map[winapi.HWND]bool)
 		}
-		for _, w := range card.windows {
-			a.excludedWindows[w.HWND] = true
+		for _, h := range hs {
+			a.excludedWindows[h] = true
 		}
 	}
-	a.park.RestoreAll()
+	// Unpark brings the selected windows and their parked owned dialogs
+	// home, while leaving every unrelated parked window untouched.
+	a.park.Unpark(hs...)
 	a.refresh()
 }
 

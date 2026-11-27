@@ -864,7 +864,24 @@ func (a *App) reparkEscaped() {
 	}
 }
 
-// covered reports whether a window on the stage overlaps a floating strip's cards.
+// coverageWindows returns the visible windows that should make a floating
+// sidebar yield: the stage, plus excluded windows that Stage Manager leaves
+// alone but must not cover with its own UI.
+func (a *App) coverageWindows(d *display) []catalog.Window {
+	var out []catalog.Window
+	for _, g := range d.onStage {
+		out = append(out, g.windows...)
+	}
+	for _, w := range a.windows {
+		if a.excluded(w) && a.displayOf(w) == d {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// covered reports whether a stage or excluded window overlaps a floating
+// strip's cards.
 func (a *App) covered(d *display) bool {
 	if d.strip == nil || a.settings.Mode != settings.Floating {
 		return false
@@ -873,11 +890,9 @@ func (a *App) covered(d *display) bool {
 	if band.Empty() {
 		return false
 	}
-	for _, g := range d.onStage {
-		for _, w := range g.windows {
-			if !a.hidden(w) && winapi.IsWindow(w.HWND) && !winapi.IsIconic(w.HWND) && winapi.FrameBounds(w.HWND).Intersects(band) {
-				return true
-			}
+	for _, w := range a.coverageWindows(d) {
+		if !a.hidden(w) && winapi.IsWindow(w.HWND) && !winapi.IsIconic(w.HWND) && winapi.FrameBounds(w.HWND).Intersects(band) {
+			return true
 		}
 	}
 	return false

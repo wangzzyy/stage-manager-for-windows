@@ -361,7 +361,7 @@ func (d *Display) Split(app string) {
 // Exclude removes an app Stage Manager must leave alone from the stage and strip.
 // Unlike Leave, exclusion is not a window closing: it must not become a
 // candidate for Previous or cause the app to be restored later.
-func (d *Display) Exclude(app string, now time.Time) {
+func (d *Display) Exclude(app string, now time.Time) bool {
 	wasOnStage := d.OnStage(app)
 	d.stage = slices.DeleteFunc(d.stage, func(a string) bool { return a == app })
 	d.drop(func(a string) bool { return a == app })
@@ -372,6 +372,7 @@ func (d *Display) Exclude(app string, now time.Time) {
 	if wasOnStage {
 		d.changedAt = now
 	}
+	return wasOnStage
 }
 
 // Prune takes the apps that no longer show a window off the stage, once

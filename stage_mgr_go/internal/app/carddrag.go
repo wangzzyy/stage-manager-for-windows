@@ -341,9 +341,12 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
-			// A merge ends the drag here, unlike a move that remains in
-			// flight until cardLanded. Leaving cardDrag set would make
-			// every card's hover test fail (el.Hovered() && cardDrag == nil).
+			// Mark the target before releasing the global drag gate. The merge
+			// request is posted asynchronously, so setting this in mergeSet is
+			// too late: the first hover frame would already start ui.Snappy.
+			if c.target != "" {
+				d.card(c.target).mergeLiftSettling = true
+			}
 			a.setCardDrag(nil)
 			a.requestMerge(d, g, c.target)
 			a.flights.endDrag(d, 0)
@@ -496,10 +499,6 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	if !d.model.Merge(source.key, target) {
 		return
 	}
-	// The target is coming down from the enlarged merge-confirmation pose.
-	// Avoid the spring overshoot on this release only; normal hover lifts
-	// continue to use ui.Snappy.
-	d.card(target).mergeLiftSettling = true
 	// The model has merged, but d.sets and d.layout still describe the
 	// previous frame. Capture those old rectangles before arrange rebuilds
 	// the card list; only uninvolved cards join this reflow.

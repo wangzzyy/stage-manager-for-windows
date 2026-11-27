@@ -296,6 +296,9 @@ func TestMergeReleaseClearsCardDrag(t *testing.T) {
 	if st.dragging {
 		t.Fatal("merge left the source card dragging")
 	}
+	if !s.d.card(target.key).mergeLiftSettling {
+		t.Fatal("merge did not mark the target for a bounded lift transition before releasing the drag")
+	}
 	if len(*got) != 1 || (*got)[0] != (request{actMerge, source.key}) {
 		t.Fatalf("requests %v", *got)
 	}

@@ -673,7 +673,14 @@ func (o *overview) local(p pose) (x, y, w, h float32) {
 // screen converts a rectangle in DIPs of the window to a pose on the screen.
 func (o *overview) screen(r ui.Rect) pose {
 	k := o.scale
-	return pose{x: float64(o.rect.Left) + float64(r.X)*k, y: float64(o.rect.Top) + float64(r.Y)*k, w: float64(r.W) * k, h: float64(r.H) * k}
+	// Overview slots are flat: transition from a card's projection to
+	// effectively no perspective as its windows spread out.
+	return pose{
+		x: float64(o.rect.Left) + float64(r.X)*k,
+		y: float64(o.rect.Top) + float64(r.Y)*k,
+		w: float64(r.W) * k, h: float64(r.H) * k,
+		originY: 0.5, perspective: 1_000_000,
+	}
 }
 
 func (o *overview) view(c *ui.Context) {

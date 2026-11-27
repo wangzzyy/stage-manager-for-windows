@@ -31,6 +31,8 @@ const (
 	overviewBottom = 72
 	overviewGapX   = 36
 	overviewGapY   = 60
+	// The flat overview has effectively no perspective, matching the strip's zero-tilt card viewpoint.
+	overviewFlatPerspective = 1_000_000
 	// How long the overview waits for frames it does not get before it
 	// carries on: the windows it parked must not stay away.
 	overviewTimeout = 1500 * time.Millisecond

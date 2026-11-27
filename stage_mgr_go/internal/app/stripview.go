@@ -51,6 +51,9 @@ type cardState struct {
 	mergeFrom, mergeTo ui.Rect
 	mergeStarted      time.Time
 	mergeAnimating    bool
+	// mergeLiftSettling uses a non-spring transition when the merge target
+	// returns from its enlarged drop-confirmation pose to its hover/rest pose.
+	mergeLiftSettling bool
 }
 
 type follow int8
@@ -638,7 +641,17 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if drag := a.cardDrag; drag != nil && drag.from == d && drag.aim == aimMerge && drag.target == g.key {
 		lift = 1.12
 	}
-	lift = el.AnimateTo("lift", lift, ui.Snappy)
+	liftMotion := ui.Snappy
+	if st.mergeLiftSettling {
+		// Snappy is spring-based and overshoots when the target card drops
+		// from the merge confirmation scale (1.12). Use a bounded transition
+		// for this one handoff; ordinary hover and drag lifts stay unchanged.
+		liftMotion = fadeQuick
+	}
+	lift = el.AnimateTo("lift", lift, liftMotion)
+	if st.mergeLiftSettling && el.Settled("lift") {
+		st.mergeLiftSettling = false
+	}
 	st.tilt, st.lift = tilt, lift
 	var ox, oy float32
 	// Moved up or down the strip, the card stays in it, whatever way the

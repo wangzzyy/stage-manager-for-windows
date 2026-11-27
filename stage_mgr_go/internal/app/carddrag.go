@@ -496,6 +496,10 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	if !d.model.Merge(source.key, target) {
 		return
 	}
+	// The target is coming down from the enlarged merge-confirmation pose.
+	// Avoid the spring overshoot on this release only; normal hover lifts
+	// continue to use ui.Snappy.
+	d.card(target).mergeLiftSettling = true
 	// The model has merged, but d.sets and d.layout still describe the
 	// previous frame. Capture those old rectangles before arrange rebuilds
 	// the card list; only uninvolved cards join this reflow.

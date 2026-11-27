@@ -861,11 +861,16 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 							// still's own shadow would be covered along with the still.
 							// Leave just the shadow in the strip window: it extends
 							// beyond the DWM destination and remains visible around it.
-							radius := max(r.H*0.045, 3)
+							// This box is a child of the transformed windows layer,
+							// so keep its geometry in card-local coordinates. The
+							// DWM destination above is already translated to strip
+							// coordinates; reusing it here would offset the shadow twice.
+							shadowRect := stack[i]
+							radius := max(shadowRect.H*0.045, 3)
 							ui.Box(c.Key(dwmShadow{h: hwnd})).Absolute().
-								Left(r.X).Top(r.Y).Size(r.W, r.H).Radius(radius).
+								Left(shadowRect.X).Top(shadowRect.Y).Size(shadowRect.W, shadowRect.H).Radius(radius).
 								Background(ui.RGBA(0, 0, 0, 0.001)).
-								Shadow(0, r.H*0.05, r.H*0.16, 0, shadowSoft)
+								Shadow(0, shadowRect.H*0.05, shadowRect.H*0.16, 0, shadowSoft)
 							dwmUsed = true
 							continue
 						}

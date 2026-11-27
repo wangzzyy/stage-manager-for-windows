@@ -162,9 +162,10 @@ type flight struct {
 
 // badge is an app's icon on a card that flights land in, in screen pixels.
 type badge struct {
-	app  string
-	icon *ui.Bitmap
-	at   pose
+	app     string
+	icon    *ui.Bitmap
+	at      pose
+	covered bool // a returning stage window will occupy this icon's area
 }
 
 // toward is the shadow f casts where it lands, as things stand now, with

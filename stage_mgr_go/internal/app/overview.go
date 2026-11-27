@@ -775,10 +775,35 @@ func (o *overview) view(c *ui.Context) {
 	if picked >= 0 {
 		o.drawTile(c, &o.tiles[picked], e, spread, live)
 	}
-	// Do not paint landing badges in the topmost overview window. The strip
-	// is deliberately below the stage during this animation, so these
-	// separate overlays would otherwise remain above the returning windows.
-	// The strip's own card icons become visible when the overview hands off.
+	// The overview is topmost, so its landing icons would otherwise cover
+	// windows returning to the stage. Keep each icon only when no destination
+	// window will occupy that part of the strip.
+	if o.phase >= ovClosing {
+		op := float32(min(max(e*2-1, 0), 1))
+		for _, b := range o.badges {
+			covered := false
+			for i := range o.tiles {
+				t := &o.tiles[i]
+				if !t.home || t.closing {
+					continue
+				}
+				if overlaps(b.at, t.to) {
+					covered = true
+					break
+				}
+			}
+			if covered {
+				continue
+			}
+			x, y, bw, bh := o.local(b.at)
+			ui.Image(c.Key("badge:"+b.app), b.icon).Absolute().Left(x).Top(y).Size(bw, bh).Opacity(op)
+		}
+	}
+}
+
+// overlaps reports whether two screen-space poses share any area.
+func overlaps(a, b pose) bool {
+	return a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h
 }
 
 // drawTile draws a window of the overview e of the way through its move,

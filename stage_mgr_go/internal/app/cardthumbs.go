@@ -4,6 +4,7 @@ package app
 
 import (
 	"math"
+	"slices"
 
 	"github.com/e1roy/stage_manager_for_windows/internal/winapi"
 	"github.com/egoist/mygo"
@@ -23,6 +24,9 @@ type cardThumbs struct {
 	failed map[winapi.HWND]bool
 	keepSet map[winapi.HWND]bool
 	want map[winapi.HWND]cardThumbRequest
+	frameOrder []winapi.HWND
+	frameSeen map[winapi.HWND]bool
+	order []winapi.HWND
 }
 
 type cardThumb struct {
@@ -45,6 +49,7 @@ func newCardThumbs(s *strip) *cardThumbs {
 		failed: make(map[winapi.HWND]bool),
 		keepSet: make(map[winapi.HWND]bool),
 		want: make(map[winapi.HWND]cardThumbRequest),
+		frameSeen: make(map[winapi.HWND]bool),
 	}
 	c.win = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray: s.a.tray, Hidden: true, Width: int(s.a.settings.Width), Height: 400,
@@ -61,11 +66,17 @@ func (c *cardThumbs) beginFrame() {
 	if c == nil { return }
 	clear(c.keepSet)
 	clear(c.want)
+	clear(c.frameSeen)
+	c.frameOrder = c.frameOrder[:0]
 }
 
 func (c *cardThumbs) keep(h winapi.HWND) {
 	if c != nil && h != 0 {
 		c.keepSet[h] = true
+		if !c.frameSeen[h] {
+			c.frameSeen[h] = true
+			c.frameOrder = append(c.frameOrder, h)
+		}
 	}
 }
 
@@ -90,6 +101,7 @@ func (c *cardThumbs) add(h winapi.HWND, dest winapi.Rect, opacity float64) bool 
 		}
 		th = &cardThumb{t: t}
 		c.thumbs[h] = th
+		c.order = append(c.order, h)
 	}
 	c.want[h] = cardThumbRequest{dest: dest, opacity: math.Max(0, math.Min(opacity, 1))}
 	return true
@@ -97,6 +109,7 @@ func (c *cardThumbs) add(h winapi.HWND, dest winapi.Rect, opacity float64) bool 
 
 func (c *cardThumbs) endFrame() {
 	if c == nil { return }
+	c.syncOrder()
 	visible := false
 	for h, th := range c.thumbs {
 		if !c.keepSet[h] {
@@ -138,6 +151,44 @@ func (c *cardThumbs) endFrame() {
 		}
 	} else {
 		c.hide()
+	}
+}
+
+// syncOrder re-registers thumbnails in the same back-to-front order used
+// to draw the card windows. DWM establishes thumbnail overlap order when
+// relationships are registered; changing destination rectangles alone does
+// not reorder them. This matters after two cards are merged.
+func (c *cardThumbs) syncOrder() {
+	want := make([]winapi.HWND, 0, len(c.frameOrder))
+	for _, h := range c.frameOrder {
+		if c.thumbs[h] != nil {
+			want = append(want, h)
+		}
+	}
+	if slices.Equal(want, c.order) {
+		return
+	}
+
+	old := c.thumbs
+	for _, th := range old {
+		th.t.Unregister()
+	}
+	c.thumbs = make(map[winapi.HWND]*cardThumb, len(want))
+	c.order = c.order[:0]
+	for _, h := range want {
+		th := old[h]
+		if th == nil {
+			continue
+		}
+		t, ok := winapi.RegisterThumbnail(c.hwnd, h)
+		if !ok {
+			c.failed[h] = true
+			continue
+		}
+		th.t = t
+		th.visible = false
+		c.thumbs[h] = th
+		c.order = append(c.order, h)
 	}
 }
 

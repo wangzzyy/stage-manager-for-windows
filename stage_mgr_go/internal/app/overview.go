@@ -795,6 +795,13 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 	if at.tilt < 0 {
 		originX = 1
 	}
+	// Keep the overview tile on the same projection as the card it flies
+	// into. Ordinary window poses have no card projection, so retain the
+	// centered default for those.
+	originY, perspective := at.originY, at.perspective
+	if perspective <= 0 {
+		originY, perspective = 0.5, cardPerspective
+	}
 	radius := max(min(h*0.03, 10), 3)
 	iconSize := min(max(h*0.2, 26), 48)
 	el.Children(func() {
@@ -812,7 +819,7 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+		sh.cast(pane).TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

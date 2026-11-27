@@ -9,6 +9,7 @@ var ja = Strings{
 	TabStage:      "ステージ",
 	TabOverview:   "すべてのウインドウ",
 	TabCompanions: "例外",
+	TabExcluded:   "除外",
 	TabAbout:      "情報",
 
 	Language:           "言語",
@@ -106,6 +107,11 @@ var ja = Strings{
 	FlightSpeedDesc:  "ウインドウがサイドバーからステージへ、ステージからサイドバーへ飛ぶ速さです。",
 
 	CompanionLabel: "開いても現在のアプリをしまわない",
+	ExcludedLabel: "Stage Manager が管理しないアプリ",
+	ExcludedEmpty: "除外したアプリはありません。",
+	AddExcluded: "アプリを除外",
+	ExcludeWindow: "このアプリを常に除外",
+	ExcludeWindowSession: "今回だけこのウインドウを除外（終了まで）",
 	CompanionTip:   "この一覧のアプリがウインドウを開くと、使用中のアプリと一緒にデスクトップに残り、使用中のアプリをサイドバーにしまいません。閉じるとデスクトップは元に戻ります。TortoiseSVN のコミット画面のように、少しだけ使うツールに向いています。",
 	Programs:       "プログラム",
 

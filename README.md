@@ -41,7 +41,7 @@ Only the app you're using stays on the desktop. Everything else shrinks into car
 - Drag a window to another monitor and it joins the stage there.
 - Drag a card up or down to reorder the strip, or into another monitor's strip to move the app there without opening it. Overlap the center of another card for half a second, then let go to combine the two app groups.
 - Fixed or floating strip, per monitor, with adjustable width, icons, spacing, card position and tilt; the cards can sit lower than the middle, nearer to hand.
-- Right-click a card to switch to it, join the stage, split a group (the stage's own card too), or close its windows.
+- Right-click a card to switch to it, join the stage, split a group (the stage's own card too), close its windows, always exclude its app, or exclude its windows for the current run only.
 - Companions: tools you open beside an app (say, a commit dialog) join the stage instead of taking it. Pick them in Settings.
 - Nothing gets lost: quitting, crashing or signing out puts every window back, and a taskbar thumbnail peek brings one home for a moment.
 - Interface in Simplified Chinese, Traditional Chinese, English and Japanese.
@@ -62,7 +62,7 @@ Works on Windows 10 and 11 (64-bit).
 - **See the stage's windows**: the numbered thumbnails at the top of the strip list every window on the stage. Click one to bring it forward, hover to close it, right-click to send its app to the strip.
 - **Close an app from the strip**: hover a card and click the round × at its top right; a card of several apps closes all of their windows.
 - **Two apps at once**: drag a card onto the desktop, or Shift-click it.
-- **Settings**: left-click the tray icon. Choose whether the strip is Fixed (always takes its edge) or Floating (hides when covered, comes back when you push the mouse to that edge, except within 80 DIPs of the top or bottom), put it on the left or the right of each display, turn a display's strip off, and adjust width, icon size, spacing, how far down the cards sit, tilt, flight speed and quality, language and launch at login. The pages are listed down the left of the window (General, Sidebar, Stage, All Windows, Exceptions, About); everything about the overview (Win+Tab, the panel at the bottom of the strip, the corner button, the highlight color) is under All Windows.
+- **Settings**: left-click the tray icon. Choose whether the strip is Fixed (always takes its edge) or Floating (hides when covered, comes back when you push the mouse to that edge, except within 80 DIPs of the top or bottom), put it on the left or the right of each display, turn a display's strip off, and adjust width, icon size, spacing, how far down the cards sit, tilt, flight speed and quality, language and launch at login. The pages are listed down the left of the window (General, Sidebar, Stage, All Windows, Exceptions, Excluded, About); everything about the overview (Win+Tab, the panel at the bottom of the strip, the corner button, the highlight color) is under All Windows. Manage permanently excluded apps under Excluded.
 - **Combine groups**: overlap the center of another card for half a second, then release to add its apps to the target group. The dragged card disappears.
 - **Split a group**: right-click its card.
 - **Restart / Quit**: right-click the tray icon → Restart or Quit. Both put every window back first; Restart then starts Stage Manager again.

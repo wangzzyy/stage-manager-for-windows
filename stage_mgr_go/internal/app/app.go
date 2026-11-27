@@ -213,6 +213,8 @@ type App struct {
 	sysLang    i18n.Lang // the language of Windows, for settings that follow it
 	settingsUI *settingsWindow
 	flights    *flights
+	// excludedWindows lasts only as long as this Stage Manager process.
+	excludedWindows map[winapi.HWND]bool
 	// latest is a release newer than the one running, found by
 	// checkUpdate (update.go), and published the newest release it has
 	// found at all, newer or not, for the about pane to show; checking is
@@ -356,6 +358,44 @@ func (a *App) displayOf(w catalog.Window) *display {
 // windows are not listed at all, so they never reach here.
 func (a *App) hidden(w catalog.Window) bool { return a.park.IsParked(w.HWND) }
 
+func (a *App) excluded(w catalog.Window) bool {
+	return a.settings.ExcludedExe(w.Exe) || a.excludedWindows[w.HWND]
+}
+
+// exclude leaves the selected card's windows on the desktop and removes
+// them from the model. Permanent exclusions are keyed by executable;
+// session exclusions are keyed by HWND and disappear when this process exits.
+func (a *App) exclude(card *set, permanent bool) {
+	if card == nil || len(card.windows) == 0 {
+		return
+	}
+	// Only the selected card is leaving Stage Manager. Restoring every
+	// parked window here also exposes unrelated cards and destroys their
+	// parking records, which can make the rest of the stage rearrange.
+	hs := make([]winapi.HWND, 0, len(card.windows))
+	for _, w := range card.windows {
+		hs = append(hs, w.HWND)
+	}
+	if permanent {
+		s := a.settings.Clone()
+		for _, g := range card.apps {
+			s = s.WithExcluded(g.front().Exe, true)
+		}
+		a.applySettings(s)
+	} else {
+		if a.excludedWindows == nil {
+			a.excludedWindows = make(map[winapi.HWND]bool)
+		}
+		for _, h := range hs {
+			a.excludedWindows[h] = true
+		}
+	}
+	// Unpark brings the selected windows and their parked owned dialogs
+	// home, while leaving every unrelated parked window untouched.
+	a.park.Unpark(hs...)
+	a.refresh()
+}
+
 // groupKey is the stage identity of a window. App remains the executable
 // identity for icons and companion matching; only the model's opaque key
 // changes when independent-window mode is enabled.
@@ -373,7 +413,7 @@ func (a *App) groupsOf(d *display) []*group {
 	var out []*group
 	by := map[string]*group{}
 	for _, w := range a.windows {
-		if a.displayOf(w) != d {
+		if a.displayOf(w) != d || a.excluded(w) {
 			continue
 		}
 		key := a.groupKey(w)
@@ -661,6 +701,11 @@ func (a *App) refresh() {
 			delete(a.seen, h)
 		}
 	}
+	for h := range a.excludedWindows {
+		if !alive[h] {
+			delete(a.excludedWindows, h)
+		}
+	}
 	a.media.forget(alive)
 	a.rescueLost(now)
 	var want []winapi.HWND
@@ -673,6 +718,14 @@ func (a *App) refresh() {
 		if !a.managed(d) {
 			d.sets, d.onStage = nil, nil
 			continue
+		}
+		// An excluded app is deliberately outside Stage Manager, not an
+		// app whose windows closed. Remove it from the stage model without
+		// recording a recent stage or triggering the close/refill path.
+		for _, w := range a.windows {
+			if a.displayOf(w) == d && a.excluded(w) && d.model.Exclude(a.groupKey(w), now) {
+				d.refill = false
+			}
 		}
 		groups := a.groupsOf(d)
 		visible := map[string]bool{}
@@ -811,7 +864,24 @@ func (a *App) reparkEscaped() {
 	}
 }
 
-// covered reports whether a window on the stage overlaps a floating strip's cards.
+// coverageWindows returns the visible windows that should make a floating
+// sidebar yield: the stage, plus excluded windows that Stage Manager leaves
+// alone but must not cover with its own UI.
+func (a *App) coverageWindows(d *display) []catalog.Window {
+	var out []catalog.Window
+	for _, g := range d.onStage {
+		out = append(out, g.windows...)
+	}
+	for _, w := range a.windows {
+		if a.excluded(w) && a.displayOf(w) == d {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// covered reports whether a stage or excluded window overlaps a floating
+// strip's cards.
 func (a *App) covered(d *display) bool {
 	if d.strip == nil || a.settings.Mode != settings.Floating {
 		return false
@@ -820,11 +890,9 @@ func (a *App) covered(d *display) bool {
 	if band.Empty() {
 		return false
 	}
-	for _, g := range d.onStage {
-		for _, w := range g.windows {
-			if !a.hidden(w) && winapi.IsWindow(w.HWND) && !winapi.IsIconic(w.HWND) && winapi.FrameBounds(w.HWND).Intersects(band) {
-				return true
-			}
+	for _, w := range a.coverageWindows(d) {
+		if !a.hidden(w) && winapi.IsWindow(w.HWND) && !winapi.IsIconic(w.HWND) && winapi.FrameBounds(w.HWND).Intersects(band) {
+			return true
 		}
 	}
 	return false

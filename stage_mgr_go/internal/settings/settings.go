@@ -167,6 +167,8 @@ type Settings struct {
 	// from. An entry is an executable's name without ".exe", for every
 	// copy of it, or its full path, for that one.
 	Companions []string `json:"companions"`
+	// Excluded lists executables Stage Manager must leave alone.
+	Excluded []string `json:"excluded,omitempty"`
 	// Displays turns the strip off on some displays, by device name
 	// (\\.\DISPLAY2). Displays not listed have one.
 	Displays map[string]bool `json:"displays,omitempty"`
@@ -341,6 +343,11 @@ func (s Settings) Normalize() Settings {
 		}
 	}
 	s.Companions = companions
+	var excluded []string
+	for _, e := range s.Excluded {
+		if e = companion(e); e != "" && !slices.Contains(excluded, e) { excluded = append(excluded, e) }
+	}
+	s.Excluded = excluded
 	// Only the right is kept, as the left is where an unlisted display's
 	// strip is anyway: a strip moved there and back is as it was.
 	var sides map[string]Side
@@ -382,6 +389,19 @@ func (s Settings) WithCompanion(exe string, on bool) Settings {
 	return s.Normalize()
 }
 
+// ExcludedExe reports whether an executable is permanently excluded.
+func (s Settings) ExcludedExe(exe string) bool {
+	return exe != "" && slices.ContainsFunc(s.Excluded, func(e string) bool { return CompanionMatches(e, exe) })
+}
+
+// WithExcluded adds or removes an executable from the permanent exclusions.
+func (s Settings) WithExcluded(exe string, on bool) Settings {
+	path, name := companion(exe), exeName(exe)
+	s.Excluded = slices.DeleteFunc(slices.Clone(s.Excluded), func(e string) bool { return e == path || e == name })
+	if on && name != "" { s.Excluded = append(s.Excluded, name) }
+	return s.Normalize()
+}
+
 // companion returns an entry of the companions as it is kept: a path, told
 // by its folder, in lower case with backslashes; else a name, as exeName
 // returns it.
@@ -414,6 +434,7 @@ func (s Settings) Clone() Settings {
 	s.Displays = maps.Clone(s.Displays)
 	s.Sides = maps.Clone(s.Sides)
 	s.Companions = slices.Clone(s.Companions)
+	s.Excluded = slices.Clone(s.Excluded)
 	return s
 }
 

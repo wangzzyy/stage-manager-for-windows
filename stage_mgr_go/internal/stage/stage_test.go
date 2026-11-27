@@ -112,6 +112,23 @@ func TestNewcomersEnterAtTopAndGoneLeave(t *testing.T) {
 	}
 }
 
+func TestExcludeDoesNotRefillTheStage(t *testing.T) {
+	var d Display
+	d.Init("current", t0)
+	d.Strip([]string{"current", "excluded", "previous"})
+	d.Switch([]string{"previous"}, t0)
+	d.Switch([]string{"current"}, t0)
+	// Excluding the current app removes it without treating it as a close,
+	// which would otherwise trigger the automatic refill path.
+	d.Exclude("current", t0.Add(2*time.Second))
+	if !d.Empty() {
+		t.Fatalf("stage after exclusion %v", d.Stage())
+	}
+	if got := d.Strip([]string{"excluded", "previous"}); !equalSets(got, [][]string{{"excluded"}, {"previous"}}) {
+		t.Fatalf("strip after exclusion %v", got)
+	}
+}
+
 func TestPrune(t *testing.T) {
 	var d Display
 	d.Init("code", t0)

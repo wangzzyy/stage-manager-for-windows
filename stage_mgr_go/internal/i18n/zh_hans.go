@@ -7,6 +7,7 @@ var zhHans = Strings{
 	TabStage:      "舞台",
 	TabOverview:   "所有窗口",
 	TabCompanions: "例外",
+	TabExcluded:   "排除",
 	TabAbout:      "关于",
 
 	Language:           "语言",
@@ -104,6 +105,11 @@ var zhHans = Strings{
 	FlightSpeedDesc:  "窗口从侧边栏飞到舞台、以及从舞台收回侧边栏的快慢。",
 
 	CompanionLabel: "打开时不收起当前应用",
+	ExcludedLabel: "Stage Manager 不管理的应用",
+	ExcludedEmpty: "还没有排除的应用。",
+	AddExcluded: "排除应用",
+	ExcludeWindow: "始终排除此应用",
+	ExcludeWindowSession: "本次排除此窗口",
 	CompanionTip:   "列表里的应用打开窗口时，会和你正在用的应用一起留在桌面上，不会把它收进侧边栏；关掉后桌面回到原样。适合 TortoiseSVN 提交框这类用一下就关的工具。",
 	Programs:       "程序",
 

@@ -83,7 +83,7 @@ type Strings struct {
 	// The settings window.
 	SettingsTitle                               string
 	TabGeneral, TabStrip, TabStage, TabOverview string
-	TabCompanions, TabAbout                     string
+	TabCompanions, TabExcluded, TabAbout        string
 	// Cards and StripShows head the strip pane's groups: how its cards
 	// look, and what it lists besides them.
 	Cards, StripShows string
@@ -162,6 +162,8 @@ type Strings struct {
 	// opens. CompanionTip says what they do.
 	CompanionLabel, CompanionTip string
 	CompanionsEmpty              string
+	ExcludedLabel, ExcludedEmpty, AddExcluded string
+	ExcludeWindow, ExcludeWindowSession string
 	AddCompanion, Browse, Remove string
 	// Programs names executables in the file dialog that adds one.
 	Programs        string

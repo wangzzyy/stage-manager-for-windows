@@ -8,6 +8,7 @@ var zhHant = Strings{
 	TabStage:      "舞台",
 	TabOverview:   "所有視窗",
 	TabCompanions: "例外",
+	TabExcluded:   "排除",
 	TabAbout:      "關於",
 
 	Language:           "語言",
@@ -105,6 +106,11 @@ var zhHant = Strings{
 	FlightSpeedDesc:  "視窗從側邊欄飛到舞台、以及從舞台收回側邊欄的快慢。",
 
 	CompanionLabel: "開啟時不收起目前的應用程式",
+	ExcludedLabel: "Stage Manager 不管理的應用程式",
+	ExcludedEmpty: "尚未排除任何應用程式。",
+	AddExcluded: "排除應用程式",
+	ExcludeWindow: "永遠排除此應用程式",
+	ExcludeWindowSession: "這次排除此視窗（直到 Stage Manager 結束）",
 	CompanionTip:   "清單中的應用程式開啟視窗時，會和你正在使用的應用程式一起留在桌面上，不會把它收進側邊欄；關閉後桌面恢復原樣。適合 TortoiseSVN 提交視窗這類用一下就關的工具。",
 	Programs:       "程式",
 

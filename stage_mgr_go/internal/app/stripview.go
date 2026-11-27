@@ -815,15 +815,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
-	// DWM thumbnails cover the strip UI while a card is operated. Fade the
-	// card's icons, title, badge and close control out together, then restore
-	// them when the pointer/drag interaction ends.
-	uiVisible := !hovered && !st.dragging
+	// Flat cards can use live DWM content; only hide the strip UI when
+	// DWM actually accepted at least one thumbnail for this card. If DWM is
+	// unavailable (including in tests), keep the normal controls usable.
 	uiOpacity := float32(1)
-	if !uiVisible {
-		uiOpacity = 0
-	}
-	uiOpacity = el.AnimateTo("card-ui", uiOpacity, fadeQuick)
 	flat := math.Abs(float64(tilt)) < 0.01 && gray <= 0.005 && !st.external && !st.externalLayer && !st.externalAnimating && !landing && op > 0
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
@@ -840,6 +835,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
 				cardRect := ui.Rect{X: box.X + translateX, Y: box.Y + translateY - verticalCompensation, W: box.W, H: box.H}
+				dwmUsed := false
 				for i := len(stack) - 1; i >= 0; i-- {
 					hwnd := g.windows[i].HWND
 					s.cardThumbs.keep(hwnd)
@@ -861,11 +857,18 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),
 						}
 						if s.cardThumbs.add(hwnd, dest, float64(shown*fade*op)) {
+							dwmUsed = true
 							continue
 						}
 					}
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
+				// The DWM host covers the strip controls, so fade them only
+				// after at least one live thumbnail was successfully registered.
+				if dwmUsed && (hovered || st.dragging) {
+					uiOpacity = 0
+				}
+				uiOpacity = el.AnimateTo("card-ui", uiOpacity, fadeQuick)
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's
 				// windows, every one of a set of several, as its menu's last
@@ -951,7 +954,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				label.Left(end + 4).MaxWidth(max(box.W-end, 60))
 			}
 			op := float32(0)
-			if hovered && !st.dragging && uiVisible {
+			if hovered && !st.dragging && uiOpacity > 0 {
 				op = 1
 			}
 			label.Opacity(label.AnimateTo("label", op, fadeQuick))

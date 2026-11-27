@@ -124,7 +124,7 @@ func TestExcludeDoesNotRefillTheStage(t *testing.T) {
 	if !d.Empty() {
 		t.Fatalf("stage after exclusion %v", d.Stage())
 	}
-	if got := d.Strip([]string{"current", "excluded", "previous"}); !equalSets(got, [][]string{{"excluded"}, {"previous"}}) {
+	if got := d.Strip([]string{"excluded", "previous"}); !equalSets(got, [][]string{{"excluded"}, {"previous"}}) {
 		t.Fatalf("strip after exclusion %v", got)
 	}
 }

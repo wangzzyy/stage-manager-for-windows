@@ -821,7 +821,13 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, at.originY).RotateY(at.tilt).Perspective(at.perspective).Opacity(op)
+		originY, perspective := at.originY, at.perspective
+		// Collapsed poses have no card projection. Keep the default card
+		// perspective rather than passing zero to the renderer.
+		if perspective <= 0 {
+			originY, perspective = 0.5, cardPerspective
+		}
+		sh.cast(pane).TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

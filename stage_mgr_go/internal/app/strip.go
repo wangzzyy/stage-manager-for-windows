@@ -47,6 +47,8 @@ type strip struct {
 	edgeRaise bool // the screen edge explicitly revealed a partly covered sidebar
 	edgeReveal bool // the strip was explicitly revealed from the screen edge while covered
 	edgeRevealZOrder bool // keep the strip above the covering window until its slide-out finishes
+	overviewClosing bool // keep the strip below stage windows throughout overview's closing animation
+	overviewLowered bool // keep it below the stage after overview closes, until the user reveals it
 	switching      bool // a stage transition is in progress
 	zOrderKnown    bool
 	zOrderTopmost  bool
@@ -175,6 +177,11 @@ func (s *strip) applyBounds() {
 // above them only while the pointer is over its band; full-screen apps
 // always stay above it.
 func (s *strip) zOrder() winapi.HWND {
+	// During overview closing, the strip must stay below the stage windows
+	// and their shrink animation, regardless of pointer or coverage changes.
+	if s.overviewClosing || s.overviewLowered {
+		return winapi.HwndBottom
+	}
 	// Keep the strip above the flight layer throughout a stage transition,
 	// including in fixed mode. The normal mode-specific policy resumes when
 	// the transition ends.
@@ -236,6 +243,28 @@ func (s *strip) raiseAboveFlight(flight winapi.HWND) {
 	// behind the strip in the TOPMOST band.
 	winapi.SetWindowPos(flight, s.hwnd, 0, 0, 0, 0,
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+}
+
+// setOverviewClosing holds the strip below the overview's closing animation.
+func (s *strip) setOverviewClosing(v bool) {
+	if v {
+		if s.overviewClosing {
+			return
+		}
+		s.overviewClosing = true
+	} else {
+		if !s.overviewClosing && s.overviewLowered {
+			return
+		}
+		s.overviewClosing = false
+		// Once the closing/landing animation has finished, keep the sidebar
+		// below stage windows until the user explicitly reveals it again.
+		s.overviewLowered = true
+	}
+	// Force the native z-order update: a non-topmost sidebar may still be
+	// above the stage in the ordinary window band.
+	s.zOrderKnown = false
+	s.syncZOrder()
 }
 
 func (s *strip) setSwitching(v bool) {
@@ -385,6 +414,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		// covering window. A fully covered one uses the original edge-reveal
 		// animation, without conflating its resting visibility with z-order.
 		fullyCovered := s.d.covered && !s.a.settings.HideWhenCovered && s.fullyCovered()
+		if edgeWake {
+			// Reaching the screen edge is an explicit request to reveal the
+			// sidebar again after an overview has lowered it.
+			s.overviewLowered = false
+		}
 		if edgeWake && s.d.covered && !s.a.settings.HideWhenCovered {
 			if fullyCovered {
 				s.edgeRevealZOrder = true
@@ -462,6 +496,11 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 	// While the overview shows, it takes nothing, as the cards it shows do
 	// not: the overview's window is what the pointer is on.
 	band := s.visible && s.shown && !s.d.inOverview && s.rect.Contains(cur)
+	if s.overviewLowered && band && !s.coveredAt(cur) {
+		// An uncovered part of the sidebar is an intentional reveal. Keep
+		// covered portions below the stage, even while the pointer passes by.
+		s.overviewLowered = false
+	}
 	s.setPointerOnStrip(band)
 	// Determine exposure from the geometry of visible top-level windows,
 	// rather than WindowFromPoint: the strip is layered and click-through,

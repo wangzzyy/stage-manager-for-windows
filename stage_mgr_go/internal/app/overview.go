@@ -16,6 +16,8 @@ import (
 const (
 	// The overview opens and closes about as briskly as Mission Control.
 	overviewTime = 420 * time.Millisecond
+	// A million DIPs is effectively orthographic, allowing the projection to interpolate smoothly.
+	overviewFlatPerspective = 1_000_000
 	// How dark the desktop goes behind the windows spread out.
 	overviewDim = 0.45
 	// The close button in the top right corner of the window under the
@@ -403,6 +405,10 @@ func (o *overview) begin(ws []catalog.Window) {
 	for i := range o.tiles {
 		t := &o.tiles[i]
 		t.slot = o.screen(slots[i])
+		// Overview tiles finish flat. Carry that projection in the pose so
+		// the opening animation reaches the same perspective as the resting
+		// overview instead of snapping at its last frame.
+		t.slot.tilt, t.slot.originY, t.slot.perspective = 0, 0.5, overviewFlatPerspective
 		t.from, t.fromOp, t.fromSh = t.origin, t.originOp, t.originSh
 		t.to, t.toOp, t.toSh = t.slot, 1, overviewShade
 	}
@@ -545,6 +551,9 @@ func (o *overview) close(pick *ovTile) {
 		t.toOp = 1
 		if t.home {
 			t.to, t.toSh = poseOf(a.home(t.w)), ownShade(castsShadow(t.w.HWND), t.w.HWND == o.focus)
+			// The desktop is flat; don't leave the overview using the card's
+			// perspective when it hands the window back to the real window.
+			t.to.tilt, t.to.originY, t.to.perspective = 0, 0.5, overviewFlatPerspective
 			continue
 		}
 		p, ok := cards[t.w.HWND]
@@ -560,7 +569,22 @@ func (o *overview) close(pick *ovTile) {
 		t.to, t.toSh = p, cardShade(float32(p.h/o.scale))
 	}
 	o.badges = a.flights.landingIcons(d)
+	// Resolve badge occlusion once, after every destination pose is known.
+	// The overview stays topmost during the flight, so it must not draw an
+	// icon over a window returning to the stage.
+	for i := range o.badges {
+		for j := range o.tiles {
+			t := &o.tiles[j]
+			if t.home && !t.closing && overlaps(o.badges[i].at, t.to) {
+				o.badges[i].covered = true
+				break
+			}
+		}
+	}
 	o.phase, o.start = ovClosing, time.Time{}
+	if d.strip != nil {
+		d.strip.setOverviewClosing(true)
+	}
 	o.gen++
 	o.win.Invalidate()
 	gen := o.gen
@@ -614,8 +638,6 @@ func (o *overview) land() {
 		ok := winapi.Activate(focus)
 		debugf("overview: activate %x ok=%v", focus, ok)
 	}
-	d.inOverview = false
-	a.redraw()
 	after(700*time.Millisecond, func() {
 		for _, h := range back {
 			if winapi.IsWindow(h) {
@@ -629,6 +651,14 @@ func (o *overview) land() {
 			return
 		}
 		o.phase, o.d, o.tiles, o.badges = ovHidden, nil, nil, nil
+		// Keep the strip in its overview-only rendering mode until the
+		// landing animation and handoff are complete. Restoring normal cards
+		// in land() makes them flash before the strip can slide away.
+		d.inOverview = false
+		a.redraw()
+		if d.strip != nil {
+			d.strip.setOverviewClosing(false)
+		}
 		// One last, empty frame, so that it never shows these again.
 		o.win.Invalidate()
 		after(50*time.Millisecond, func() {
@@ -654,6 +684,12 @@ func (o *overview) abort() {
 		o.phase, o.d, o.tiles = ovHidden, nil, nil
 		if winapi.Foreground() == o.hwnd && o.prev != 0 && winapi.IsWindow(o.prev) {
 			winapi.Activate(o.prev)
+		}
+		// Even when the overview closes before its windows take off, leave
+		// the sidebar below the stage instead of restoring its old topmost
+		// position over a maximized window.
+		if d != nil && d.strip != nil {
+			d.strip.setOverviewClosing(false)
 		}
 		o.win.Hide()
 		a.overviewDone(d)
@@ -751,15 +787,22 @@ func (o *overview) view(c *ui.Context) {
 	if picked >= 0 {
 		o.drawTile(c, &o.tiles[picked], e, spread, live)
 	}
+	// Occlusion was resolved when closing began; frames only read the result.
 	if o.phase >= ovClosing {
-		// The cards' icons come in over the second half, to be in place as
-		// the cards show.
 		op := float32(min(max(e*2-1, 0), 1))
 		for _, b := range o.badges {
+			if b.covered {
+				continue
+			}
 			x, y, bw, bh := o.local(b.at)
 			ui.Image(c.Key("badge:"+b.app), b.icon).Absolute().Left(x).Top(y).Size(bw, bh).Opacity(op)
 		}
 	}
+}
+
+// overlaps reports whether two screen-space poses share any area.
+func overlaps(a, b pose) bool {
+	return a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h
 }
 
 // drawTile draws a window of the overview e of the way through its move,
@@ -812,7 +855,13 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+		originY, perspective := at.originY, at.perspective
+		// Collapsed poses have no card projection. Keep the default card
+		// perspective rather than passing zero to the renderer.
+		if perspective <= 0 {
+			originY, perspective = 0.5, cardPerspective
+		}
+		sh.cast(pane).TransformOrigin(originX, originY).RotateY(at.tilt).Perspective(perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

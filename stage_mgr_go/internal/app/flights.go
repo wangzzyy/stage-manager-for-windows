@@ -162,9 +162,10 @@ type flight struct {
 
 // badge is an app's icon on a card that flights land in, in screen pixels.
 type badge struct {
-	app  string
-	icon *ui.Bitmap
-	at   pose
+	app     string
+	icon    *ui.Bitmap
+	at      pose
+	covered bool // a returning stage window will occupy this icon's area
 }
 
 // toward is the shadow f casts where it lands, as things stand now, with
@@ -241,8 +242,31 @@ func lerpPose(a, b pose, e float64) pose {
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
 		originY: a.originY + (b.originY-a.originY)*float32(e),
-		perspective: a.perspective + (b.perspective-a.perspective)*float32(e),
+		// Perspective is a camera distance: its visible strength is the
+		// reciprocal. Interpolate that strength, not the distance itself,
+		// so the projection changes smoothly throughout the flight instead
+		// of staying nearly flat and then rushing into perspective at the end.
+		perspective: lerpPerspective(a.perspective, b.perspective, e),
 	}
+}
+
+func lerpPerspective(a, b float32, e float64) float32 {
+	// Preserve exact endpoint values: reciprocal interpolation can round
+	// when converted back to float32 (for example, 1/(1/120) = 119.99999).
+	if e <= 0 {
+		return a
+	}
+	if e >= 1 {
+		return b
+	}
+	if a <= 0 || b <= 0 {
+		return a + (b-a)*float32(e)
+	}
+	strength := float64(1/a) + (float64(1/b)-float64(1/a))*e
+	if strength <= 0 {
+		return a + (b-a)*float32(e)
+	}
+	return float32(1 / strength)
 }
 
 // layer is a transparent window over a whole display, the strip included,

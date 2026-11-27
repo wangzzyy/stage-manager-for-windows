@@ -775,15 +775,10 @@ func (o *overview) view(c *ui.Context) {
 	if picked >= 0 {
 		o.drawTile(c, &o.tiles[picked], e, spread, live)
 	}
-	if o.phase >= ovClosing {
-		// The cards' icons come in over the second half, to be in place as
-		// the cards show.
-		op := float32(min(max(e*2-1, 0), 1))
-		for _, b := range o.badges {
-			x, y, bw, bh := o.local(b.at)
-			ui.Image(c.Key("badge:"+b.app), b.icon).Absolute().Left(x).Top(y).Size(bw, bh).Opacity(op)
-		}
-	}
+	// Do not paint landing badges in the topmost overview window. The strip
+	// is deliberately below the stage during this animation, so these
+	// separate overlays would otherwise remain above the returning windows.
+	// The strip's own card icons become visible when the overview hands off.
 }
 
 // drawTile draws a window of the overview e of the way through its move,

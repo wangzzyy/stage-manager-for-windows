@@ -208,12 +208,27 @@ func (a *App) onForeground(h winapi.HWND) {
 // The catalog is refreshed by the normal refresh path; settleForeground
 // still performs the authoritative fresh lookup as a race-safe fallback.
 func (a *App) excludedHandle(h winapi.HWND) bool {
-	root := catalog.RootOwner(h)
-	if a.excludedWindows[root] {
+	if h == 0 {
+		return false
+	}
+	// Foreground notifications may identify an owned popup rather than the
+	// top-level window listed by Catalog. Check the event HWND, its root,
+	// and its visible owner separately: RootOwner alone can resolve a popup
+	// to a different executable and hide the excluded process identity.
+	root := winapi.Root(h)
+	owner := catalog.RootOwner(h)
+	for _, candidate := range []winapi.HWND{h, root, owner} {
+		if candidate != 0 && a.excludedWindows[candidate] {
+			return true
+		}
+	}
+	// The catalog can lag a foreground event (and does not list owned
+	// dialogs). Resolve the event window's own process as a fallback.
+	if pid, _ := winapi.ProcessID(h); pid != 0 && a.settings.ExcludedExe(winapi.ProcessPath(pid)) {
 		return true
 	}
 	return slices.ContainsFunc(a.windows, func(w catalog.Window) bool {
-		return w.HWND == root && a.excluded(w)
+		return (w.HWND == h || w.HWND == root || w.HWND == owner) && a.excluded(w)
 	})
 }
 
@@ -261,8 +276,8 @@ func (a *App) settleForeground() {
 	// The system foreground may have changed while the debounce timer was
 	// pending. Re-check against the fresh catalog, not just the event HWND
 	// that originally scheduled this callback.
-	if a.excludedHandle(root) {
-		debugf("foreground %x ignored at settle: excluded", root)
+	if a.excludedHandle(h) {
+		debugf("foreground %x (root %x) ignored at settle: excluded", h, root)
 		a.fg.h, a.fg.tries = 0, 0
 		return
 	}

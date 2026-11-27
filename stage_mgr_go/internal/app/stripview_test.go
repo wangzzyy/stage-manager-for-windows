@@ -304,6 +304,31 @@ func TestMergeReleaseClearsCardDrag(t *testing.T) {
 	}
 }
 
+// The merge target changes its layout slot when the source disappears.
+// Even though it is hovered and lifted at the drop point, its position must
+// use the bounded merge reflow rather than the card's spring transition.
+func TestMergeReflowIncludesHoveredTarget(t *testing.T) {
+	s, _, _ := testStrip(t)
+	source, target := s.d.sets[0], s.d.sets[1]
+	st := s.d.card(target.key)
+	st.box = s.d.layout.cards[1]
+	st.over = true
+	st.lift = 1.12
+	before := st.box
+
+	s.a.startMergeReflow(s.d, source.key, target.key, time.Now())
+
+	if !st.mergeAnimating {
+		t.Fatal("hovered merge target was excluded from the bounded reflow")
+	}
+	if st.mergeFrom != before {
+		t.Fatalf("merge starts at %v, want its last rendered bounds %v", st.mergeFrom, before)
+	}
+	if s.d.card(source.key).mergeAnimating {
+		t.Fatal("source card should not take part in the merge reflow")
+	}
+}
+
 func TestDragDownReorders(t *testing.T) {
 	s, got, tt := testStrip(t)
 	x, y := center(s.d.layout.cards[0])

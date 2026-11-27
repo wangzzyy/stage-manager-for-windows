@@ -530,13 +530,26 @@ func (a *App) startMergeReflow(d *display, source, target string, now time.Time)
 		d.cards = make(map[string]*cardState)
 	}
 	for _, card := range d.sets {
-		if card == nil || card.key == source || card.key == target {
+		if card == nil || card.key == source {
 			continue
 		}
 		st := d.cards[card.key]
 		if st == nil {
 			st = &cardState{}
 			d.cards[card.key] = st
+		}
+		// The merge target changes slots when the source disappears. It
+		// must use this bounded rectangle interpolation even while hovered:
+		// the ordinary cardMotion spring can otherwise throw it far past
+		// its new slot before bringing it back.
+		if card.key == target {
+			if st.box.W > 0 && st.box.H > 0 {
+				st.mergeFrom = st.box
+				st.mergeTo = ui.Rect{}
+				st.mergeStarted = now
+				st.mergeAnimating = true
+			}
+			continue
 		}
 		// Hover, drag, external handoff, return, landing, or another
 		// animation means this card already has motion of its own.

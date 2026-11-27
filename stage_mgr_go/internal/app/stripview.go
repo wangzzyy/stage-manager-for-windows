@@ -51,6 +51,9 @@ type cardState struct {
 	mergeFrom, mergeTo ui.Rect
 	mergeStarted      time.Time
 	mergeAnimating    bool
+	// mergeSource hides a card released into a merge until the asynchronous
+	// model update removes it, preventing a visible spring back to its old slot.
+	mergeSource bool
 	// mergeLiftSettling uses a non-spring transition when the merge target
 	// returns from its enlarged drop-confirmation pose to its hover/rest pose.
 	mergeLiftSettling bool
@@ -765,7 +768,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			st.externalStarted = time.Time{}
 		}
 	}
-	if st.externalLayer {
+	if st.externalLayer || st.mergeSource {
 		op = 0
 	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)

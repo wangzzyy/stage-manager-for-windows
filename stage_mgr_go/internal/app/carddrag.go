@@ -341,6 +341,11 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
+			// The source is removed by the posted merge request. Until that
+			// runs, do not let its drag offsets animate back toward the old
+			// slot: that one-frame return is the large vertical flight seen
+			// on release.
+			st.mergeSource = true
 			// Mark the target before releasing the global drag gate. The merge
 			// request is posted asynchronously, so setting this in mergeSet is
 			// too late: the first hover frame would already start ui.Snappy.
@@ -481,7 +486,17 @@ func (a *App) requestMerge(d *display, source *set, target string) {
 // mergeSet joins the dragged card into the card it rested on. The target
 // keeps its place and identity; the dragged card disappears from the strip.
 func (a *App) mergeSet(d *display, source *set, target string) {
-	defer a.cardLanded()
+	defer func() {
+		// A rejected merge leaves the source in the strip. Restore it; a
+		// successful arrange removes it, so no state cleanup is needed.
+		if d != nil && source != nil && findSet(d.sets, source.key) != nil {
+			st := d.card(source.key)
+			st.mergeSource = false
+			st.returning = true
+			a.redraw()
+		}
+		a.cardLanded()
+	}()
 	if !a.ready || a.quitting || d == nil || source == nil || source.key == target {
 		return
 	}

@@ -760,7 +760,10 @@ func (f *flights) collapse(d *display, p pose) pose {
 	if f.a.right(d) {
 		x = float64(work.Right) - w
 	}
-	return pose{x: x, y: float64(work.Top) + (float64(work.H())-h)/2, w: w, h: h}
+	return pose{
+		x: x, y: float64(work.Top) + (float64(work.H())-h)/2, w: w, h: h,
+		originY: 0.5, perspective: cardPerspective,
+	}
 }
 
 // show puts a display's layer over the whole display: the flights go into

@@ -31,6 +31,8 @@ const (
 	overviewBottom = 72
 	overviewGapX   = 36
 	overviewGapY   = 60
+	// The flat overview has effectively no perspective, matching the strip's zero-tilt card viewpoint.
+	overviewFlatPerspective = 1_000_000
 	// How long the overview waits for frames it does not get before it
 	// carries on: the windows it parked must not stay away.
 	overviewTimeout = 1500 * time.Millisecond
@@ -403,6 +405,7 @@ func (o *overview) begin(ws []catalog.Window) {
 	for i := range o.tiles {
 		t := &o.tiles[i]
 		t.slot = o.screen(slots[i])
+		t.slot.perspective = overviewFlatPerspective
 		t.from, t.fromOp, t.fromSh = t.origin, t.originOp, t.originSh
 		t.to, t.toOp, t.toSh = t.slot, 1, overviewShade
 	}
@@ -812,7 +815,11 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 				}
 			})
 		}
-		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(cardPerspective).Opacity(op)
+		// Use the projection carried by the interpolated pose. The opening
+		// ends flat; closing starts flat and lands on the card's exact current
+		// projection, including the zero-strength (effectively infinite)
+		// perspective setting.
+		sh.cast(pane).TransformOrigin(originX, 0.5).RotateY(at.tilt).Perspective(at.perspective).Opacity(op)
 		if ring > 0.01 {
 			ui.Box(c.Key("ring")).Absolute().Left(-3).Top(-3).Size(w+6, h+6).Radius(radius+3).
 				Border(3, ringColor).Opacity(ring * op)

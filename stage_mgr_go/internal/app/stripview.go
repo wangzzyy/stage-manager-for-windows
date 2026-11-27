@@ -857,6 +857,15 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),
 						}
 						if s.cardThumbs.add(hwnd, dest, float64(shown*fade*op)) {
+							// DWM paints in a separate window above the strip, so the
+							// still's own shadow would be covered along with the still.
+							// Leave just the shadow in the strip window: it extends
+							// beyond the DWM destination and remains visible around it.
+							radius := max(r.H*0.045, 3)
+							ui.Box(c.Key(dwmShadow{h: hwnd})).Absolute().
+								Left(r.X).Top(r.Y).Size(r.W, r.H).Radius(radius).
+								Background(ui.RGBA(0, 0, 0, 0.001)).
+								Shadow(0, r.H*0.05, r.H*0.16, 0, shadowSoft)
 							dwmUsed = true
 							continue
 						}
@@ -1067,6 +1076,11 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 	}
 	return poses
 }
+
+// dwmShadow gives the live DWM picture a shadow in the strip window below
+// the thumbnail host. The host covers the picture rectangle, but not the
+// blurred shadow that falls outside it.
+type dwmShadow struct{ h winapi.HWND }
 
 // grayOver keys the gray copy of a window's still, drawn over it.
 type grayOver struct{ h winapi.HWND }

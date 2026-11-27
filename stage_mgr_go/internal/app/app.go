@@ -710,6 +710,14 @@ func (a *App) refresh() {
 			d.sets, d.onStage = nil, nil
 			continue
 		}
+		// An excluded app is deliberately outside Stage Manager, not an
+		// app whose windows closed. Remove it from the stage model without
+		// recording a recent stage or triggering the close/refill path.
+		for _, w := range a.windows {
+			if a.displayOf(w) == d && a.excluded(w) {
+				d.model.Exclude(a.groupKey(w), now)
+			}
+		}
 		groups := a.groupsOf(d)
 		visible := map[string]bool{}
 		for _, g := range groups {

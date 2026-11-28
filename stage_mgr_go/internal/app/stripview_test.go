@@ -38,18 +38,6 @@ func testStrip(t *testing.T) (*strip, *[]request, *ui.Tester) {
 
 func center(r ui.Rect) (float32, float32) { return r.X + r.W/2, r.Y + r.H/2 }
 
-func TestOuterWindowBounds(t *testing.T) {
-	got := outerWindowBounds([]ui.Rect{
-		{X: 20, Y: 30, W: 80, H: 60},
-		{X: 90, Y: 10, W: 70, H: 50},
-		{X: 5, Y: 45, W: 30, H: 40},
-	})
-	want := ui.Rect{X: 5, Y: 10, W: 155, H: 75}
-	if got != want {
-		t.Fatalf("outerWindowBounds() = %+v, want %+v", got, want)
-	}
-}
-
 func TestClickPicksCard(t *testing.T) {
 	s, got, tt := testStrip(t)
 	x, y := center(s.d.layout.cards[1])

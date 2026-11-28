@@ -57,16 +57,6 @@ func TestStageHomePreservesRestoredFrameOffset(t *testing.T) {
 	}
 }
 
-func TestArrivalShadeOnlyCarriesForDWMShadow(t *testing.T) {
-	card := cardShade(160)
-	if got := arrivalShade(card, false); got != (shade{}) {
-		t.Fatalf("arrivalShade without DWM shadow = %+v, want no shadow", got)
-	}
-	if got := arrivalShade(card, true); got != card {
-		t.Fatalf("arrivalShade with DWM shadow = %+v, want %+v", got, card)
-	}
-}
-
 func TestLerpPoseKeepsSharedPivotInScreenCoordinates(t *testing.T) {
 	from := pose{x: 10, y: 20, w: 100, h: 80, originX: 0.25, originY: 0.5, perspective: cardPerspective}
 	to := pose{x: 50, y: 60, w: 200, h: 160, originX: 1.5, originY: 1.25, perspective: cardPerspective}

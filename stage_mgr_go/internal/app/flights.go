@@ -98,16 +98,6 @@ func castsShadow(h winapi.HWND) bool {
 	return !maximized && winapi.CastsFrameShadow(h)
 }
 
-// arrivalShade carries a card's shadow into the flight only when the
-// real window will cast a DWM frame shadow on the stage. Windows without
-// one either have their own shadow drawn separately or have no shadow.
-func arrivalShade(card shade, casts bool) shade {
-	if !casts {
-		return shade{}
-	}
-	return card
-}
-
 // ownShade is the shadow a window casts on the stage, if it casts one.
 func ownShade(casts, active bool) shade {
 	if !casts {

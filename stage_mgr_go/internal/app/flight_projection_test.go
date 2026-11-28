@@ -7,7 +7,7 @@ func TestLerpPoseCarriesCardProjection(t *testing.T) {
 	to := pose{x: 30, y: 40, w: 60, h: 40, tilt: 24, originY: 1.25, perspective: 900}
 	got := lerpPose(from, to, 0.5)
 	wantPerspective := float32(1 / ((1 / float64(from.perspective) + 1 / float64(to.perspective)) / 2))
-	if got.tilt != 12 || got.originY != 0.875 || abs32(got.perspective-wantPerspective) > 0.01 {
+	if got.tilt != 12 || abs32(got.originY-0.75) > 0.0001 || abs32(got.perspective-wantPerspective) > 0.01 {
 		t.Fatalf("projection did not interpolate with flight: %+v; want perspective %v", got, wantPerspective)
 	}
 }

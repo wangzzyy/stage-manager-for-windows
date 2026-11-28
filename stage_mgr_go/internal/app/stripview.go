@@ -945,7 +945,9 @@ func outermostWindow(windows []ui.Rect, right bool) ui.Rect {
 	}
 	outer := windows[0]
 	for _, r := range windows[1:] {
-		if (!right && r.X < outer.X) || (right && r.X+r.W > outer.X+outer.W) {
+		// The card's outer edge is away from the stage: right edge on
+		// a left strip, left edge on a right strip.
+		if (!right && r.X+r.W > outer.X+outer.W) || (right && r.X < outer.X) {
 			outer = r
 		}
 	}

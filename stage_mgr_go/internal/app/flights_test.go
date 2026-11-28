@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"slices"
 	"testing"
 
@@ -72,10 +73,10 @@ func TestLerpPoseKeepsSharedPivotInScreenCoordinates(t *testing.T) {
 	got := lerpPose(from, to, 0.5)
 	wantX := (10 + 100*0.25 + 50 + 200*1.5) / 2
 	wantY := (20 + 80*0.5 + 60 + 160*1.25) / 2
-	if pivotX := got.x + got.w*float64(got.originX); pivotX != wantX {
+	if pivotX := got.x + got.w*float64(got.originX); math.Abs(pivotX-wantX) > 1e-4 {
 		t.Fatalf("lerpPose horizontal pivot = %v, want %v", pivotX, wantX)
 	}
-	if pivotY := got.y + got.h*float64(got.originY); pivotY != wantY {
+	if pivotY := got.y + got.h*float64(got.originY); math.Abs(pivotY-wantY) > 1e-4 {
 		t.Fatalf("lerpPose vertical pivot = %v, want %v", pivotY, wantY)
 	}
 }

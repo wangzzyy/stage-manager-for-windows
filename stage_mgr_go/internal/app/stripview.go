@@ -839,11 +839,23 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// card as soon as the merge operation completes.
 	mergingCards := s.a.cardDrag != nil && s.a.cardDrag.aim == aimMerge
 	if tilt == 0 && op > 0 && shown > 0 && !landing && !st.externalLayer && !mergingCards && s.scale > 0 {
+		// The native-drag handoff scales the entire card from its center.
+		// DWM thumbnails live outside the UI element tree, so apply that
+		// same per-frame scale to each window rectangle before placing it.
+		// Keep the center after translation fixed: this matches the card's
+		// TransformOrigin(0.5, 0.5), Translate, Scale transform.
+		cardCenterX := box.X + translateX + box.W/2
+		cardCenterY := box.Y + translateY + box.H/2
 		for i, r := range stack {
 			w := g.windows[i]
 			left := box.X + translateX + originX*box.W + (r.X-originX*box.W)*lift
 			top := box.Y + translateY - verticalCompensation + originY*box.H + (r.Y-originY*box.H)*lift
-			area := ui.Rect{X: left, Y: top, W: r.W * lift, H: r.H * lift}
+			area := ui.Rect{
+				X: cardCenterX + (left-cardCenterX)*scale,
+				Y: cardCenterY + (top-cardCenterY)*scale,
+				W: r.W * lift * scale,
+				H: r.H * lift * scale,
+			}
 			s.cardWant[w.HWND] = thumbAt{area: area, op: shown * op * fade}
 		}
 	}

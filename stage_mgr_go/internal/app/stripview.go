@@ -228,6 +228,7 @@ func (s *strip) view(c *ui.Context) {
 		return true
 	})
 	hits := s.hits[:0]
+	s.cardThumbWant = make(map[winapi.HWND]cardThumbAt)
 	footer, list := ui.Rect{}, ui.Rect{}
 	s.previous = s.previousStage()
 	root.Children(func() {
@@ -251,6 +252,7 @@ func (s *strip) view(c *ui.Context) {
 		// pictures over the window, so they slide with it by hand.
 		list = s.lineupView(c, line, staged, x)
 	})
+	s.placeCardThumbs()
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
 }
 
@@ -752,6 +754,21 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	}
 	if st.externalLayer {
 		op = 0
+	}
+	// DWM can only draw into an axis-aligned rectangle. When the animated
+	// card tilt is exactly zero, let it cover the still-rendered window
+	// pictures while retaining the existing card UI and transforms beneath.
+	// Keep both sides of a native card merge on the original still path so
+	// the merge gesture's established stacking and animation remain intact.
+	mergeDWM := a.cardDrag != nil && a.cardDrag.aim == aimMerge &&
+		a.cardDrag.from == d && (a.cardDrag.key == g.key || a.cardDrag.target == g.key)
+	if s.shown && tilt == 0 && gray <= 0.005 && op > 0 && shown > 0 &&
+		!landing && !st.externalLayer && !mergeDWM && s.scale > 0 {
+		for i, r := range stack {
+			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation,
+				translateX, translateY, scale)
+			s.cardThumbWant[g.windows[i].HWND] = cardThumbAt{area: area, opacity: op * shown * fade}
+		}
 	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 	// Once the flight layer has exposed the real card, acknowledge only

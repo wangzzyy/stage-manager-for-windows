@@ -486,10 +486,14 @@ func (a *App) requestMerge(d *display, source *set, target string) {
 // mergeSet joins the dragged card into the card it rested on. The target
 // keeps its place and identity; the dragged card disappears from the strip.
 func (a *App) mergeSet(d *display, source *set, target string) {
+	restoreSource := true
 	defer func() {
 		// A rejected merge leaves the source in the strip. Restore it; a
 		// successful arrange removes it, so no state cleanup is needed.
-		if d != nil && source != nil && findSet(d.sets, source.key) != nil {
+		// A merge into the staged card is different: switchStage removes
+		// the source only when its asynchronous switch commits the model.
+		// Keep it hidden until that arrange, rather than spring it back now.
+		if restoreSource && d != nil && source != nil && findSet(d.sets, source.key) != nil {
 			st := d.card(source.key)
 			st.mergeSource = false
 			st.returning = true
@@ -507,6 +511,10 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	if targetSet.staged {
 		// The ghost card is the live stage: bring the dragged apps onto
 		// it through the ordinary window handover, without changing focus.
+		// Unlike a strip-to-strip merge, the source remains in d.sets until
+		// switchStage commits and arranges the new stage, so do not unhide it
+		// in the deferred rejected-merge cleanup above.
+		restoreSource = false
 		next := append(d.model.Stage(), source.names()...)
 		a.switchStage(d, next, targetSet.front().HWND, false, false)
 		return

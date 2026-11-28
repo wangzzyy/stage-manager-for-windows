@@ -1229,10 +1229,10 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
 	// Cards turn about their outer edge: a negative tilt is a card of a
 	// strip on the right, turned about its right edge.
-	originX := float32(0)
-	if at.tilt < 0 {
-		originX = 1
-	}
+	// A flight uses the card's shared pivot, expressed in this
+	// window's local coordinates. Using the outer edge of each window
+	// independently would open gaps between side-by-side windows.
+	originX := at.originX
 	originY, perspective := at.originY, at.perspective
 	// Poses that are not card landings (for example, a collapsing flight)
 	// keep the original centered projection.

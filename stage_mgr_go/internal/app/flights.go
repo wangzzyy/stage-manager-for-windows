@@ -55,7 +55,7 @@ type pose struct {
 	tilt       float32
 	// originY and perspective carry the card's exact projection into the
 	// flight, so its final frame is geometrically identical to the card.
-	originY, perspective float32
+	originX, originY, perspective float32
 }
 
 func poseOf(r winapi.Rect) pose {
@@ -241,6 +241,7 @@ func lerpPose(a, b pose, e float64) pose {
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
+		originX: a.originX + (b.originX-a.originX)*float32(e),
 		originY: a.originY + (b.originY-a.originY)*float32(e),
 		// Perspective is a camera distance: its visible strength is the
 		// reciprocal. Interpolate that strength, not the distance itself,
@@ -479,6 +480,13 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 		originY, perspective := s.cardViewpoint(card, rest, f.a.settings.Tilt)
 		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
 		pivotY := card.Y - verticalCompensation + originY*card.H
+		pivotX := card.X
+		if right {
+			pivotX += card.W
+		}
+		if live && st != nil {
+			pivotX += st.ox
+		}
 		for j, r := range f.a.stack(set, card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				shown := lifted(card, r, lift, right)
@@ -490,10 +498,11 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 					shown.Y += st.oy
 				}
 				x, y, w, ht := s.toScreen(shown)
+				windowOriginX := float32((pivotX-shown.X)/max(shown.W, 1))
 				windowOriginY := float32((float64(pivotY)-float64(shown.Y))/float64(max(shown.H, 1)))
 				out[h] = pose{
 					x: x, y: y, w: w, h: ht,
-					tilt: tilt * turnSign(right), originY: windowOriginY, perspective: perspective,
+					tilt: tilt * turnSign(right), originX: windowOriginX, originY: windowOriginY, perspective: perspective,
 				}
 			}
 		}
@@ -1018,6 +1027,7 @@ func (l *layer) view(c *ui.Context) {
 			// Match that same contained rectangle, while preserving the
 			// transformed card's pivot and perspective.
 			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
+				pivotX := to.x + float64(to.originX)*to.w
 				pivotY := to.y + float64(to.originY)*to.h
 				aspect := float64(iw) / float64(ih)
 				if to.w/to.h > aspect {
@@ -1029,6 +1039,7 @@ func (l *layer) view(c *ui.Context) {
 					to.y += (to.h - fitH) / 2
 					to.h = fitH
 				}
+				to.originX = float32((pivotX - to.x) / to.w)
 				to.originY = float32((pivotY - to.y) / to.h)
 			}
 			at := lerpPose(landing.from, to, e)

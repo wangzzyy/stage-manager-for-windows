@@ -1135,7 +1135,10 @@ func (l *layer) view(c *ui.Context) {
 		at := f.at(e)
 		op := f.opacity(p, e)
 		var sh shade
-		casting := !t.landed && (t.flying || !f.holdsShadow)
+		// The real window and the strip already provide the shadow during
+		// the handoff. Do not add a second DWM-style shadow to its flying still.
+		// App-drawn shadows, when present, are handled separately by ownShadow.
+		casting := false
 		if casting {
 			sh = lerpShade(f.shade, f.toward(fg), float32(e))
 		}

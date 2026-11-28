@@ -570,8 +570,6 @@ func (f *flights) landingIcons(d *display) []badge {
 // flights show nowhere over that window, as if they flew under it. With
 // nothing to fly, or with reduced motion, it all runs at once.
 func (f *flights) run(d *display, departing, arriving []catalog.Window, from map[winapi.HWND]pose, fade bool, below, hole winapi.HWND, takeOff, land, stop, done func()) {
-	scale := d.mon.Scale()
-	cardShadeAt := func(p pose) shade { return cardShade(float32(p.h / scale)) }
 	air := f.airborne(d)
 	// A window with no slot of its own in its card, as the fourth of an
 	// app, shrinks into the card's front window and fades on the way.
@@ -607,7 +605,10 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		} else {
 			fl.to, fl.toOp = f.collapse(d, fl.from), 0
 		}
-		fl.toShade = cardShadeAt(fl.to)
+		// The strip still draws the destination card and its shadow above
+		// this layer. Let the flight give up its shadow as it reaches that
+		// card, rather than drawing a second shadow underneath it.
+		fl.toShade = shade{}
 		if a, ok := air[w.HWND]; ok {
 			// Turned back on its way home: its real window is long gone.
 			fl.from, fl.shade, fl.fromOp, fl.holdsShadow = a.at, a.shade, a.op, false
@@ -630,7 +631,10 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		home := poseOf(f.a.home(w))
 		start, ok := from[w.HWND]
 		casts := castsShadow(w.HWND)
-		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: arrivalShade(cardShadeAt(start), casts), lands: true, casts: casts, fromOp: 1, toOp: 1}
+		// The source card remains visible above the flight layer and keeps
+		// its own shadow. The flight starts shadowless, then gains the
+		// real window's shadow as it leaves the card.
+		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: shade{}, lands: true, casts: casts, fromOp: 1, toOp: 1}
 		if a, aloft := air[w.HWND]; aloft {
 			// Turned back on its way into its card.
 			fl.from, fl.shade, fl.fromOp = a.at, a.shade, a.op

@@ -341,6 +341,10 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
+			// A merge is completed asynchronously, but the drag itself has
+			// ended. Clear the global drag state now so the surviving target
+			// card can receive hover input on the very next frame.
+			a.setCardDrag(nil)
 			a.requestMerge(d, g, c.target)
 			a.flights.endDrag(d, 0)
 		case aimMove:

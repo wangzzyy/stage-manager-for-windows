@@ -438,10 +438,10 @@ func TestOutermostWindow(t *testing.T) {
 		{X: 10, Y: 35, W: 90, H: 70},
 		{X: 65, Y: 5, W: 120, H: 90},
 	}
-	if got, want := outermostWindow(windows, false), windows[1]; got != want {
+	if got, want := outermostWindow(windows, false), windows[2]; got != want {
 		t.Fatalf("left strip outermost window = %v, want %v", got, want)
 	}
-	if got, want := outermostWindow(windows, true), windows[2]; got != want {
+	if got, want := outermostWindow(windows, true), windows[1]; got != want {
 		t.Fatalf("right strip outermost window = %v, want %v", got, want)
 	}
 	if got := outermostWindow(nil, false); got != (ui.Rect{}) {

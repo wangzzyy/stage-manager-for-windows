@@ -229,6 +229,7 @@ func (s *strip) view(c *ui.Context) {
 	})
 	hits := s.hits[:0]
 	s.cardWant = make(map[winapi.HWND]thumbAt)
+	s.cardKnown = make(map[winapi.HWND]bool)
 	footer, list := ui.Rect{}, ui.Rect{}
 	s.previous = s.previousStage()
 	root.Children(func() {
@@ -253,7 +254,7 @@ func (s *strip) view(c *ui.Context) {
 		list = s.lineupView(c, line, staged, x)
 	})
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
-	s.placeCardThumbs(s.cardWant)
+	s.placeCardThumbs(s.cardWant, s.cardKnown)
 }
 
 // footer draws the panel at the bottom of the strip that opens the
@@ -807,6 +808,9 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := a.stack(g, local, right)
+	for _, w := range g.windows {
+		s.cardKnown[w.HWND] = true
+	}
 
 	originX := (1 - sign) / 2
 	// Keep the perspective fixed at the resting angle while the card
@@ -966,7 +970,7 @@ var cardCloseRest = ui.RGBA(60, 60, 66, 0.6)
  // placeCardThumbs updates the DWM layer after the card UI has been drawn.
  // Entries absent from this frame are hidden; thumbnails for closed windows
  // are unregistered. The source rectangle excludes the non-client frame.
-func (s *strip) placeCardThumbs(want map[winapi.HWND]thumbAt) {
+func (s *strip) placeCardThumbs(want map[winapi.HWND]thumbAt, known map[winapi.HWND]bool) {
 	if s.hwnd == 0 {
 		return
 	}
@@ -978,7 +982,7 @@ func (s *strip) placeCardThumbs(want map[winapi.HWND]thumbAt) {
 		if _, ok := want[h]; ok {
 			continue
 		}
-		if !winapi.IsWindow(h) {
+		if !known[h] || !winapi.IsWindow(h) {
 			th.t.Unregister()
 			delete(s.cardThumbs, h)
 			delete(s.cardFailed, h)

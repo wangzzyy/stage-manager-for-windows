@@ -428,3 +428,23 @@ func TestCardDrawOrderCachesStablePartition(t *testing.T) {
 		t.Fatalf("layout order change was not preserved: %v", got)
 	}
 }
+
+
+// The close button belongs to the window nearest the strip's outside edge,
+// not to the bounding box of the merged windows or the front window.
+func TestOutermostWindow(t *testing.T) {
+	windows := []ui.Rect{
+		{X: 40, Y: 20, W: 100, H: 80},
+		{X: 10, Y: 35, W: 90, H: 70},
+		{X: 65, Y: 5, W: 120, H: 90},
+	}
+	if got, want := outermostWindow(windows, false), windows[1]; got != want {
+		t.Fatalf("left strip outermost window = %v, want %v", got, want)
+	}
+	if got, want := outermostWindow(windows, true), windows[2]; got != want {
+		t.Fatalf("right strip outermost window = %v, want %v", got, want)
+	}
+	if got := outermostWindow(nil, false); got != (ui.Rect{}) {
+		t.Fatalf("empty windows returned %v", got)
+	}
+}

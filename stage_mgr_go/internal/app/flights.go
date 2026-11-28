@@ -1123,7 +1123,6 @@ func (l *layer) view(c *ui.Context) {
 		}
 	}
 	e := flightEase(p)
-	fg := winapi.Foreground()
 	hole, cut := l.holeRect()
 	type still struct {
 		at pose
@@ -1134,14 +1133,9 @@ func (l *layer) view(c *ui.Context) {
 	for i, f := range l.list {
 		at := f.at(e)
 		op := f.opacity(p, e)
+		// Keep the flight still shadowless: the real window/card owns the
+		// visible shadow during the handoff. App-drawn shadows are separate.
 		var sh shade
-		// The real window and the strip already provide the shadow during
-		// the handoff. Do not add a second DWM-style shadow to its flying still.
-		// App-drawn shadows, when present, are handled separately by ownShadow.
-		casting := false
-		if casting {
-			sh = lerpShade(f.shade, f.toward(fg), float32(e))
-		}
 		if f.own != nil {
 			// The app's own shadow shows the more, the nearer the flight
 			// is to the window's size and place. Its window is under the

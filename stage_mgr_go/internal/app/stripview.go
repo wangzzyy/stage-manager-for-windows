@@ -228,6 +228,8 @@ func (s *strip) view(c *ui.Context) {
 		return true
 	})
 	hits := s.hits[:0]
+	s.cardWant = make(map[winapi.HWND]thumbAt)
+	s.cardKnown = make(map[winapi.HWND]bool)
 	footer, list := ui.Rect{}, ui.Rect{}
 	s.previous = s.previousStage()
 	root.Children(func() {
@@ -252,6 +254,7 @@ func (s *strip) view(c *ui.Context) {
 		list = s.lineupView(c, line, staged, x)
 	})
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
+	s.placeCardThumbs(s.cardWant, s.cardKnown)
 }
 
 // footer draws the panel at the bottom of the strip that opens the
@@ -805,6 +808,10 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// display's edge.
 	local := ui.Rect{W: box.W, H: box.H}
 	stack := a.stack(g, local, right)
+	for _, w := range g.windows {
+		s.cardKnown[w.HWND] = true
+	}
+
 	originX := (1 - sign) / 2
 	// Keep the perspective fixed at the resting angle while the card
 	// turns toward the user. Recomputing it from the animated angle would
@@ -815,12 +822,43 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// so hovering enlarges a card in place instead of pulling it toward the
 	// midpoint.
 	verticalCompensation := (0.5 - originY) * box.H * (lift - 1)
+
 	// The stage's own card fades to a ghost as its apps come on the stage,
 	// and back as they leave it; the icons, which tell the app, stay more
 	// plainly there than its windows.
 	ghost := el.AnimateTo("ghost", b2f(g.staged), ghostFade)
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
+	// DWM cannot reproduce a perspective transform. When the animated
+	// card angle is flat, collect the live window rectangles and let DWM
+	// composite them over the stills after this frame has been built.
+	// Keep the native card-merge gesture on its original still-rendered
+	// path. DWM thumbnails are a separate composition layer, so showing
+	// them while the source card is being dragged onto its target could
+	// scramble the two cards' visual stacking. They return on the merged
+	// card as soon as the merge operation completes.
+	mergingCards := s.a.cardDrag != nil && s.a.cardDrag.aim == aimMerge
+	if tilt == 0 && op > 0 && shown > 0 && !landing && !st.externalLayer && !mergingCards && s.scale > 0 {
+		// The native-drag handoff scales the entire card from its center.
+		// DWM thumbnails live outside the UI element tree, so apply that
+		// same per-frame scale to each window rectangle before placing it.
+		// Keep the center after translation fixed: this matches the card's
+		// TransformOrigin(0.5, 0.5), Translate, Scale transform.
+		cardCenterX := box.X + translateX + box.W/2
+		cardCenterY := box.Y + translateY + box.H/2
+		for i, r := range stack {
+			w := g.windows[i]
+			left := box.X + translateX + originX*box.W + (r.X-originX*box.W)*lift
+			top := box.Y + translateY - verticalCompensation + originY*box.H + (r.Y-originY*box.H)*lift
+			area := ui.Rect{
+				X: cardCenterX + (left-cardCenterX)*scale,
+				Y: cardCenterY + (top-cardCenterY)*scale,
+				W: r.W * lift * scale,
+				H: r.H * lift * scale,
+			}
+			s.cardWant[w.HWND] = thumbAt{area: area, op: shown * op * fade}
+		}
+	}
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
@@ -942,6 +980,69 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 const cardCloseSize = 20
 
 var cardCloseRest = ui.RGBA(60, 60, 66, 0.6)
+
+
+ // placeCardThumbs updates the DWM layer after the card UI has been drawn.
+ // Entries absent from this frame are hidden; thumbnails for closed windows
+ // are unregistered. The source rectangle excludes the non-client frame.
+func (s *strip) placeCardThumbs(want map[winapi.HWND]thumbAt, known map[winapi.HWND]bool) {
+	if s.hwnd == 0 {
+		return
+	}
+	if s.cardThumbs == nil {
+		s.cardThumbs = make(map[winapi.HWND]*lineThumb)
+		s.cardFailed = make(map[winapi.HWND]bool)
+	}
+	for h, th := range s.cardThumbs {
+		if _, ok := want[h]; ok {
+			continue
+		}
+		if !known[h] || !winapi.IsWindow(h) {
+			th.t.Unregister()
+			delete(s.cardThumbs, h)
+			delete(s.cardFailed, h)
+			continue
+		}
+		if th.visible {
+			th.t.Hide()
+			th.visible = false
+		}
+	}
+	px := func(v float32) int32 { return int32(math.Round(float64(v) * s.scale)) }
+	for h, at := range want {
+		th := s.cardThumbs[h]
+		if th == nil {
+			if s.cardFailed[h] {
+				continue
+			}
+			t, ok := winapi.RegisterThumbnail(s.hwnd, h)
+			if !ok {
+				debugf("card: no DWM thumbnail of %x", h)
+				s.cardFailed[h] = true
+				continue
+			}
+			th = &lineThumb{t: t}
+			s.cardThumbs[h] = th
+		}
+		frame, win := winapi.FrameBounds(h), winapi.WindowRect(h)
+		if frame.Empty() {
+			frame = win
+		}
+		if frame.Empty() || win.Empty() {
+			th.t.Hide()
+			th.visible = false
+			continue
+		}
+		src := winapi.Rect{Left: frame.Left - win.Left, Top: frame.Top - win.Top, Right: frame.Right - win.Left, Bottom: frame.Bottom - win.Top}
+		dest := winapi.Rect{Left: px(at.area.X + s.viewOffsetX), Top: px(at.area.Y), Right: px(at.area.X + s.viewOffsetX + at.area.W), Bottom: px(at.area.Y + at.area.H)}
+		op := float64(at.op)
+		if th.visible && dest == th.dest && src == th.src && math.Abs(op-th.op) < 0.004 {
+			continue
+		}
+		th.t.Show(dest, src, op)
+		th.dest, th.src, th.op, th.visible = dest, src, op, op > 0
+	}
+}
 
 // previousStage returns the first app of the set the stage last left, as
 // its card is marked (settings.MarkPrevious), or "" for none. Any way off

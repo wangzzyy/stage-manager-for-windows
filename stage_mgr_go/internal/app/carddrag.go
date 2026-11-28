@@ -342,6 +342,9 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		switch c.aim {
 		case aimMerge:
 			a.requestMerge(d, g, c.target)
+			// The merge request owns the target now. Clear the global drag
+			// gate at release so every card can receive hover input again.
+			a.setCardDrag(nil)
 			a.flights.endDrag(d, 0)
 		case aimMove:
 			// Into the strip of another display: the card moves there,

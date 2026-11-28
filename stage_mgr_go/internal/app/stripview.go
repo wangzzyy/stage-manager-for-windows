@@ -755,18 +755,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if st.externalLayer {
 		op = 0
 	}
-	// DWM can draw a live window only into an axis-aligned rectangle. Use it
-	// only on the exact flat frames; tilted frames keep the existing 3D stills.
-	// Grayscale ghosts stay on the existing path because DWM has no grayscale
-	// property, and changing them would make the staged card look different.
-	if tilt == 0 && gray <= 0.005 && op > 0 && shown*fade > 0 && !st.externalLayer {
-		for i, w := range g.windows {
-			r := stack[i]
-			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation, translateX, translateY, scale)
-			preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == w.HWND
-			s.cardThumbWant[w.HWND] = cardThumbAt{area: area, opacity: op * shown * fade, preserveAspect: preserveAspect}
-		}
-	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 	// Once the flight layer has exposed the real card, acknowledge only
 	// after this strip frame has been built. The overlay waits for this
@@ -836,6 +824,20 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
+	// DWM can draw a live window only into an axis-aligned rectangle. Use it
+	// only on the exact flat frames; tilted frames keep the existing 3D stills.
+	// Grayscale ghosts stay on the existing path because DWM has no grayscale
+	// property, and changing them would make the staged card look different.
+	if tilt == 0 && gray <= 0.005 && op > 0 && shown*fade > 0 && !st.externalLayer {
+		for i, w := range g.windows {
+			r := stack[i]
+			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation, translateX, translateY, scale)
+			preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == w.HWND
+			s.cardThumbWant[w.HWND] = cardThumbAt{area: area, opacity: op * shown * fade, preserveAspect: preserveAspect}
+		}
+	}
+	// The DWM picture is a separate composition layer, so it is updated
+	// only after the card's full transform and opacity are known.
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
 		// each shape it draws, so the stacked windows of a ghost would show

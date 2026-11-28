@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -16,7 +17,9 @@ func TestCardThumbnailAreaTracksFlatCardTransforms(t *testing.T) {
 	}
 
 	got = cardThumbnailArea(box, window, 0, 0.5, 1.1, 6, 5, -3, 1.2)
-	if got.W != 52.8 || got.H != 79.2 || got.X >= want.X || got.Y >= want.Y {
+	if math.Abs(float64(got.W-52.8)) > 0.001 ||
+		math.Abs(float64(got.H-79.2)) > 0.001 ||
+		got.X >= want.X || got.Y >= want.Y {
 		t.Fatalf("lifted and scaled area = %+v", got)
 	}
 }

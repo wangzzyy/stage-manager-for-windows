@@ -70,6 +70,7 @@ type strip struct {
 	line lineup
 	// DWM thumbnails for card windows, drawn over the card stills when flat.
 	cardWant map[winapi.HWND]thumbAt
+	cardKnown map[winapi.HWND]bool
 	cardThumbs map[winapi.HWND]*lineThumb
 	cardFailed map[winapi.HWND]bool
 	// near is how far the overview's panel shows as the pointer comes

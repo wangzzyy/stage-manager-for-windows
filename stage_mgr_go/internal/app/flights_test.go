@@ -65,3 +65,12 @@ func TestArrivalShadeOnlyCarriesForDWMShadow(t *testing.T) {
 		t.Fatalf("arrivalShade with DWM shadow = %+v, want %+v", got, card)
 	}
 }
+
+func TestLerpPoseInterpolatesSharedHorizontalPivot(t *testing.T) {
+	from := pose{originX: 0.25, originY: 0.5, perspective: cardPerspective}
+	to := pose{originX: 1.5, originY: 0.5, perspective: cardPerspective}
+	got := lerpPose(from, to, 0.5)
+	if got.originX != 0.875 {
+		t.Fatalf("lerpPose originX = %v, want 0.875", got.originX)
+	}
+}

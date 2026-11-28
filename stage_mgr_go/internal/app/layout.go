@@ -240,6 +240,8 @@ func stackWindows(card ui.Rect, aspects []float64, right bool) []ui.Rect {
 // stageWindowLayout maps the windows' real stage rectangles into a card.
 // One scale and one translation are applied to the whole group, preserving
 // every window's size, position, overlap and spacing relative to the others.
+// A right-hand strip aligns the group to the card's right edge; it must not
+// mirror the windows, because their left-to-right order is part of the stage.
 func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Rect {
 	if len(bounds) == 0 || card.W <= 0 || card.H <= 0 {
 		return nil
@@ -269,8 +271,12 @@ func stageWindowLayout(card ui.Rect, bounds []winapi.Rect, onRight bool) []ui.Re
 		}
 	}
 	if onRight {
+		// Keep the desktop's horizontal arrangement intact while aligning
+		// the group to the strip's outer edge. Mirroring reverses the actual
+		// left-to-right relationship between windows.
+		shift := card.W - width*scale
 		for i := range out {
-			out[i] = mirror(out[i], card)
+			out[i].X += shift
 		}
 	}
 	return out

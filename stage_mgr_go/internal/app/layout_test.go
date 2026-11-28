@@ -472,7 +472,7 @@ func TestTurnedPoint(t *testing.T) {
 	}
 }
 
-func TestStageWindowLayoutRightIsMirrorOfLeft(t *testing.T) {
+func TestStageWindowLayoutRightPreservesRelativeGeometry(t *testing.T) {
 	card := ui.Rect{X: 30, Y: 40, W: 280, H: 180}
 	bounds := []winapi.Rect{
 		{Left: 100, Top: 100, Right: 500, Bottom: 400},
@@ -484,13 +484,21 @@ func TestStageWindowLayoutRightIsMirrorOfLeft(t *testing.T) {
 	if len(left) != len(right) {
 		t.Fatalf("left has %d windows, right has %d", len(left), len(right))
 	}
+	shift := right[0].X - left[0].X
 	for i := range left {
-		wantX := card.X + card.W - (left[i].X-card.X) - left[i].W
-		if math.Abs(float64(right[i].X-wantX)) > 0.01 ||
+		if math.Abs(float64((right[i].X-left[i].X)-shift)) > 0.01 ||
 			math.Abs(float64(right[i].Y-left[i].Y)) > 0.01 ||
 			math.Abs(float64(right[i].W-left[i].W)) > 0.01 ||
 			math.Abs(float64(right[i].H-left[i].H)) > 0.01 {
-			t.Fatalf("right window %d %+v is not mirrored left window %+v; expected x=%v", i, right[i], left[i], wantX)
+			t.Fatalf("right window %d %+v does not preserve left window geometry %+v with translation %v", i, right[i], left[i], shift)
 		}
+	}
+	if !(right[1].X > right[0].X) {
+		t.Fatalf("right strip reversed the real stage's horizontal order: %+v", right)
+	}
+	last := right[0].X + right[0].W
+	for _, r := range right[1:] { last = max(last, r.X+r.W) }
+	if math.Abs(float64(last-(card.X+card.W))) > 0.01 {
+		t.Fatalf("right strip group ends at %v, want card edge %v", last, card.X+card.W)
 	}
 }

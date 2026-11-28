@@ -341,7 +341,11 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
+			// The merge is now committed; do not leave cardDrag active while
+			// mergeSet is posted, or it will suppress hover on every card.
+			c.done = true
 			a.requestMerge(d, g, c.target)
+			a.cardLanded()
 			a.flights.endDrag(d, 0)
 		case aimMove:
 			// Into the strip of another display: the card moves there,

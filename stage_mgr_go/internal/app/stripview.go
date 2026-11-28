@@ -840,13 +840,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
-				// The close button belongs to the outside corner of the
-				// whole merged card, not to whichever window happens to be
-				// in front. Use the union of all window frames so it remains
-				// at the card's outer top-right even when windows are offset.
+				// Put the close button on the window furthest toward the
+				// display's outer edge, regardless of which window is in front.
 				closing := el.AnimateTo("close", b2f(live && !st.dragging), fadeQuick)
 				if closing > 0 {
-					f := outerWindowBounds(stack)
+					f := outermostWindow(stack, right)
 					label := a.tr().CloseWindow
 					if len(g.windows) > 1 {
 						label = a.tr().CloseWindows
@@ -937,22 +935,21 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 }
 
 
-// outerWindowBounds returns the bounding rectangle of every window in a
-// merged card. The close button uses its top-right corner so it stays on
-// the outside of the complete card rather than an interior/front window.
-func outerWindowBounds(windows []ui.Rect) ui.Rect {
+// outermostWindow returns the window nearest the display's outer edge.
+// A left strip's outer edge is the smallest X; a right strip's is the
+// largest right edge. Keep the close button attached to that actual window,
+// rather than to the union of the windows or whichever one is in front.
+func outermostWindow(windows []ui.Rect, right bool) ui.Rect {
 	if len(windows) == 0 {
 		return ui.Rect{}
 	}
-	bounds := windows[0]
+	outer := windows[0]
 	for _, r := range windows[1:] {
-		left := min(bounds.X, r.X)
-		top := min(bounds.Y, r.Y)
-		right := max(bounds.X+bounds.W, r.X+r.W)
-		bottom := max(bounds.Y+bounds.H, r.Y+r.H)
-		bounds = ui.Rect{X: left, Y: top, W: right - left, H: bottom - top}
+		if (!right && r.X < outer.X) || (right && r.X+r.W > outer.X+outer.W) {
+			outer = r
+		}
 	}
-	return bounds
+	return outer
 }
 
 // The button that closes a card's windows: grey and see-through, so that

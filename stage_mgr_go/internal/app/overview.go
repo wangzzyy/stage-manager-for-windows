@@ -832,12 +832,10 @@ func (o *overview) drawTile(c *ui.Context, t *ovTile, e float64, spread float32,
 	lift *= 1 - 0.08*gone
 	el.TransformOrigin(0.5, 0.5).Scale(lift, lift)
 	closer := el.AnimateTo("closer", b2f(hovered), fadeQuick)
-	// Cards turn about their outer edge: a negative tilt is a card of a
-	// strip on the right, turned about its right edge.
-	originX := float32(0)
-	if at.tilt < 0 {
-		originX = 1
-	}
+	// Use the pivot carried by the pose. Card windows share a screen-space
+	// pivot, so inferring each tile's outer edge independently would reopen
+	// gaps while Win+Tab spreads them out or sends them back.
+	originX := at.originX
 	radius := max(min(h*0.03, 10), 3)
 	iconSize := min(max(h*0.2, 26), 48)
 	el.Children(func() {

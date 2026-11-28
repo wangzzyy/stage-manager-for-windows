@@ -55,7 +55,7 @@ type pose struct {
 	tilt       float32
 	// originY and perspective carry the card's exact projection into the
 	// flight, so its final frame is geometrically identical to the card.
-	originY, perspective float32
+	originX, originY, perspective float32
 }
 
 func poseOf(r winapi.Rect) pose {
@@ -96,16 +96,6 @@ func castsShadow(h winapi.HWND) bool {
 		_, maximized, _ = winapi.RestoredRect(h)
 	}
 	return !maximized && winapi.CastsFrameShadow(h)
-}
-
-// arrivalShade carries a card's shadow into the flight only when the
-// real window will cast a DWM frame shadow on the stage. Windows without
-// one either have their own shadow drawn separately or have no shadow.
-func arrivalShade(card shade, casts bool) shade {
-	if !casts {
-		return shade{}
-	}
-	return card
 }
 
 // ownShade is the shadow a window casts on the stage, if it casts one.
@@ -237,17 +227,33 @@ func (f *flight) at(e float64) pose { return lerpPose(f.from, f.to, e) }
 
 // lerpPose is e of the way from a to b.
 func lerpPose(a, b pose, e float64) pose {
-	return pose{
+	// Preserve exact endpoints. Besides avoiding float32 rounding, this is
+	// important for zero-sized placeholder poses whose pivot cannot be
+	// reconstructed from a rectangle during interpolation.
+	if e <= 0 {
+		return a
+	}
+	if e >= 1 {
+		return b
+	}
+	p := pose{
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
-		originY: a.originY + (b.originY-a.originY)*float32(e),
-		// Perspective is a camera distance: its visible strength is the
-		// reciprocal. Interpolate that strength, not the distance itself,
-		// so the projection changes smoothly throughout the flight instead
-		// of staying nearly flat and then rushing into perspective at the end.
+		// Interpolate the pivot in screen coordinates, not as a fraction
+		// of each independently moving window. This keeps every window in a
+		// merged card on the same rotation axis throughout the flight.
 		perspective: lerpPerspective(a.perspective, b.perspective, e),
 	}
+	pivotX := lerp(a.x+a.w*float64(a.originX), b.x+b.w*float64(b.originX), e)
+	pivotY := lerp(a.y+a.h*float64(a.originY), b.y+b.h*float64(b.originY), e)
+	if p.w != 0 {
+		p.originX = float32((pivotX - p.x) / p.w)
+	}
+	if p.h != 0 {
+		p.originY = float32((pivotY - p.y) / p.h)
+	}
+	return p
 }
 
 func lerpPerspective(a, b float32, e float64) float32 {
@@ -479,6 +485,13 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 		originY, perspective := s.cardViewpoint(card, rest, f.a.settings.Tilt)
 		verticalCompensation := (0.5 - originY) * card.H * (lift - 1)
 		pivotY := card.Y - verticalCompensation + originY*card.H
+		pivotX := card.X
+		if right {
+			pivotX += card.W
+		}
+		if live && st != nil {
+			pivotX += st.ox
+		}
 		for j, r := range f.a.stack(set, card, right) {
 			if h := set.windows[j].HWND; want[h] {
 				shown := lifted(card, r, lift, right)
@@ -490,10 +503,11 @@ func (f *flights) cardPoses(d *display, ws []catalog.Window, live bool) map[wina
 					shown.Y += st.oy
 				}
 				x, y, w, ht := s.toScreen(shown)
+				windowOriginX := float32((pivotX-shown.X)/max(shown.W, 1))
 				windowOriginY := float32((float64(pivotY)-float64(shown.Y))/float64(max(shown.H, 1)))
 				out[h] = pose{
 					x: x, y: y, w: w, h: ht,
-					tilt: tilt * turnSign(right), originY: windowOriginY, perspective: perspective,
+					tilt: tilt * turnSign(right), originX: windowOriginX, originY: windowOriginY, perspective: perspective,
 				}
 			}
 		}
@@ -546,8 +560,6 @@ func (f *flights) landingIcons(d *display) []badge {
 // flights show nowhere over that window, as if they flew under it. With
 // nothing to fly, or with reduced motion, it all runs at once.
 func (f *flights) run(d *display, departing, arriving []catalog.Window, from map[winapi.HWND]pose, fade bool, below, hole winapi.HWND, takeOff, land, stop, done func()) {
-	scale := d.mon.Scale()
-	cardShadeAt := func(p pose) shade { return cardShade(float32(p.h / scale)) }
 	air := f.airborne(d)
 	// A window with no slot of its own in its card, as the fourth of an
 	// app, shrinks into the card's front window and fades on the way.
@@ -583,7 +595,10 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		} else {
 			fl.to, fl.toOp = f.collapse(d, fl.from), 0
 		}
-		fl.toShade = cardShadeAt(fl.to)
+		// The strip still draws the destination card and its shadow above
+		// this layer. Let the flight give up its shadow as it reaches that
+		// card, rather than drawing a second shadow underneath it.
+		fl.toShade = shade{}
 		if a, ok := air[w.HWND]; ok {
 			// Turned back on its way home: its real window is long gone.
 			fl.from, fl.shade, fl.fromOp, fl.holdsShadow = a.at, a.shade, a.op, false
@@ -606,7 +621,10 @@ func (f *flights) run(d *display, departing, arriving []catalog.Window, from map
 		home := poseOf(f.a.home(w))
 		start, ok := from[w.HWND]
 		casts := castsShadow(w.HWND)
-		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: arrivalShade(cardShadeAt(start), casts), lands: true, casts: casts, fromOp: 1, toOp: 1}
+		// The source card remains visible above the flight layer and keeps
+		// its own shadow. The flight starts shadowless, then gains the
+		// real window's shadow as it leaves the card.
+		fl := flight{still: st.fly, hwnd: w.HWND, from: start, to: home, shade: shade{}, lands: true, casts: casts, fromOp: 1, toOp: 1}
 		if a, aloft := air[w.HWND]; aloft {
 			// Turned back on its way into its card.
 			fl.from, fl.shade, fl.fromOp = a.at, a.shade, a.op
@@ -1018,6 +1036,7 @@ func (l *layer) view(c *ui.Context) {
 			// Match that same contained rectangle, while preserving the
 			// transformed card's pivot and perspective.
 			if iw, ih := landing.still.Size(); iw > 0 && ih > 0 {
+				pivotX := to.x + float64(to.originX)*to.w
 				pivotY := to.y + float64(to.originY)*to.h
 				aspect := float64(iw) / float64(ih)
 				if to.w/to.h > aspect {
@@ -1029,6 +1048,7 @@ func (l *layer) view(c *ui.Context) {
 					to.y += (to.h - fitH) / 2
 					to.h = fitH
 				}
+				to.originX = float32((pivotX - to.x) / to.w)
 				to.originY = float32((pivotY - to.y) / to.h)
 			}
 			at := lerpPose(landing.from, to, e)
@@ -1103,7 +1123,6 @@ func (l *layer) view(c *ui.Context) {
 		}
 	}
 	e := flightEase(p)
-	fg := winapi.Foreground()
 	hole, cut := l.holeRect()
 	type still struct {
 		at pose
@@ -1114,11 +1133,9 @@ func (l *layer) view(c *ui.Context) {
 	for i, f := range l.list {
 		at := f.at(e)
 		op := f.opacity(p, e)
+		// Keep the flight still shadowless: the real window/card owns the
+		// visible shadow during the handoff. App-drawn shadows are separate.
 		var sh shade
-		casting := !t.landed && (t.flying || !f.holdsShadow)
-		if casting {
-			sh = lerpShade(f.shade, f.toward(fg), float32(e))
-		}
 		if f.own != nil {
 			// The app's own shadow shows the more, the nearer the flight
 			// is to the window's size and place. Its window is under the
@@ -1218,10 +1235,10 @@ func (l *layer) draw(c *ui.Context, key int, still *ui.Bitmap, at pose, op float
 	img := sh.cast(ui.Image(c.Key(key), still).Absolute().Left(x).Top(y).Size(w, h).Fit(ui.FillBox).Radius(radius))
 	// Cards turn about their outer edge: a negative tilt is a card of a
 	// strip on the right, turned about its right edge.
-	originX := float32(0)
-	if at.tilt < 0 {
-		originX = 1
-	}
+	// A flight uses the card's shared pivot, expressed in this
+	// window's local coordinates. Using the outer edge of each window
+	// independently would open gaps between side-by-side windows.
+	originX := at.originX
 	originY, perspective := at.originY, at.perspective
 	// Poses that are not card landings (for example, a collapsing flight)
 	// keep the original centered projection.

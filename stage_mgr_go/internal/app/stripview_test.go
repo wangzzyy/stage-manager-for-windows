@@ -300,6 +300,28 @@ func TestDragDownReorders(t *testing.T) {
 	}
 }
 
+// Releasing a card onto a merge target must clear the global drag gate
+// immediately; otherwise no card can respond to hover until another drag.
+func TestMergeReleaseRestoresCardHover(t *testing.T) {
+	s, got, _ := testStrip(t)
+	source := s.d.sets[0]
+	st := s.d.card(source.key)
+	st.dragging = true
+	s.a.setCardDrag(&cardDrag{from: s.d, key: source.key, aim: aimMerge, target: s.d.sets[1].key})
+
+	s.letGo(source, st, s.d.layout.cards[0])
+
+	if s.a.cardDrag != nil {
+		t.Fatalf("card drag still blocks hover after merge release: %+v", s.a.cardDrag)
+	}
+	if st.dragging || s.dragging {
+		t.Fatal("source card or strip is still marked as dragging")
+	}
+	if len(*got) != 1 || (*got)[0] != (request{actMerge, source.key}) {
+		t.Fatalf("merge requests %v", *got)
+	}
+}
+
 // The strip makes room for a card coming in from another display's strip,
 // and around one of its own dragged up or down, which is drawn last.
 func TestRoomForDraggedCard(t *testing.T) {
@@ -404,5 +426,25 @@ func TestCardDrawOrderCachesStablePartition(t *testing.T) {
 	got = s.cardDrawOrder(changed)
 	if !slices.Equal(got, changed) {
 		t.Fatalf("layout order change was not preserved: %v", got)
+	}
+}
+
+
+// The close button belongs to the window nearest the strip's outside edge,
+// not to the bounding box of the merged windows or the front window.
+func TestOutermostWindow(t *testing.T) {
+	windows := []ui.Rect{
+		{X: 40, Y: 20, W: 100, H: 80},
+		{X: 10, Y: 35, W: 90, H: 70},
+		{X: 65, Y: 5, W: 120, H: 90},
+	}
+	if got, want := outermostWindow(windows, false), windows[2]; got != want {
+		t.Fatalf("left strip outermost window = %v, want %v", got, want)
+	}
+	if got, want := outermostWindow(windows, true), windows[1]; got != want {
+		t.Fatalf("right strip outermost window = %v, want %v", got, want)
+	}
+	if got := outermostWindow(nil, false); got != (ui.Rect{}) {
+		t.Fatalf("empty windows returned %v", got)
 	}
 }

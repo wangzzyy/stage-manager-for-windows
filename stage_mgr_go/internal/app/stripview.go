@@ -840,20 +840,23 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
-				// While the pointer is on the card, a button on the top right
-				// corner of its front window, half out of it, closes the card's
-				// windows, every one of a set of several, as its menu's last
-				// item does: out there, it hides little of the window. It is
-				// drawn with the windows, so it turns and lifts as they do.
+				// Put the close button on the window furthest toward the
+				// display's outer edge, regardless of which window is in front.
 				closing := el.AnimateTo("close", b2f(live && !st.dragging), fadeQuick)
 				if closing > 0 {
-					f := stack[0]
+					f := outermostWindow(stack, right)
 					label := a.tr().CloseWindow
 					if len(g.windows) > 1 {
 						label = a.tr().CloseWindows
 					}
 					b := closeButton(c, cardCloseSize, cardCloseRest, label, func() { a.request(actClose, d, g) })
-					b.Absolute().Left(f.X+f.W-cardCloseSize/2).Top(f.Y-cardCloseSize/2).
+					buttonX := f.X + f.W - cardCloseSize/2
+					if right {
+						// On a right-side card, put the close button at
+						// the top-left corner of its leftmost window.
+						buttonX = f.X - cardCloseSize/2
+					}
+					b.Absolute().Left(buttonX).Top(f.Y-cardCloseSize/2).
 						Shadow(0, 1, 4, 0, ui.RGBA(0, 0, 0, 0.3)).Opacity(closing)
 				}
 			})
@@ -935,6 +938,26 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		return ui.Rect{}
 	}
 	return el.Bounds()
+}
+
+
+// outermostWindow returns the window nearest the display's outer edge.
+// A left strip's outer edge is the smallest X; a right strip's is the
+// largest right edge. Keep the close button attached to that actual window,
+// rather than to the union of the windows or whichever one is in front.
+func outermostWindow(windows []ui.Rect, right bool) ui.Rect {
+	if len(windows) == 0 {
+		return ui.Rect{}
+	}
+	outer := windows[0]
+	for _, r := range windows[1:] {
+		// The card's outer edge is away from the stage: right edge on
+		// a left strip, left edge on a right strip.
+		if (!right && r.X+r.W > outer.X+outer.W) || (right && r.X < outer.X) {
+			outer = r
+		}
+	}
+	return outer
 }
 
 // The button that closes a card's windows: grey and see-through, so that

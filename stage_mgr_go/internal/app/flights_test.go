@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"slices"
 	"testing"
 
@@ -56,12 +57,16 @@ func TestStageHomePreservesRestoredFrameOffset(t *testing.T) {
 	}
 }
 
-func TestArrivalShadeOnlyCarriesForDWMShadow(t *testing.T) {
-	card := cardShade(160)
-	if got := arrivalShade(card, false); got != (shade{}) {
-		t.Fatalf("arrivalShade without DWM shadow = %+v, want no shadow", got)
+func TestLerpPoseKeepsSharedPivotInScreenCoordinates(t *testing.T) {
+	from := pose{x: 10, y: 20, w: 100, h: 80, originX: 0.25, originY: 0.5, perspective: cardPerspective}
+	to := pose{x: 50, y: 60, w: 200, h: 160, originX: 1.5, originY: 1.25, perspective: cardPerspective}
+	got := lerpPose(from, to, 0.5)
+	wantX := (10 + 100*0.25 + 50 + 200*1.5) / 2
+	wantY := (20 + 80*0.5 + 60 + 160*1.25) / 2
+	if pivotX := got.x + got.w*float64(got.originX); math.Abs(pivotX-wantX) > 1e-4 {
+		t.Fatalf("lerpPose horizontal pivot = %v, want %v", pivotX, wantX)
 	}
-	if got := arrivalShade(card, true); got != card {
-		t.Fatalf("arrivalShade with DWM shadow = %+v, want %+v", got, card)
+	if pivotY := got.y + got.h*float64(got.originY); math.Abs(pivotY-wantY) > 1e-4 {
+		t.Fatalf("lerpPose vertical pivot = %v, want %v", pivotY, wantY)
 	}
 }

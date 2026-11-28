@@ -68,6 +68,10 @@ type strip struct {
 	previous string
 	// line is the list of the windows on the stage (lineup.go).
 	line lineup
+	// DWM thumbnails for card windows, drawn over the card stills when flat.
+	cardWant map[winapi.HWND]thumbAt
+	cardThumbs map[winapi.HWND]*lineThumb
+	cardFailed map[winapi.HWND]bool
 	// near is how far the overview's panel shows as the pointer comes
 	// near it, 0 to 1. The poll measures it everywhere on the display,
 	// where the strip lets the pointer through and so hears nothing of it.
@@ -721,6 +725,10 @@ func (s *strip) toScreen(r ui.Rect) (x, y, w, h float64) {
 
 func (s *strip) close() {
 	s.dropThumbs()
+	for h, th := range s.cardThumbs {
+		th.t.Unregister()
+		delete(s.cardThumbs, h)
+	}
 	s.bar.Remove()
 	winapi.Unsubclass(s.hwnd)
 	s.win.Destroy()

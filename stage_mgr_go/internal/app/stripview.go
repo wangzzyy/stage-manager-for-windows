@@ -762,14 +762,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if tilt == 0 && gray <= 0.005 && op > 0 && shown*fade > 0 && !st.externalLayer {
 		for i, w := range g.windows {
 			r := stack[i]
-			x := originX*box.W + (r.X-originX*box.W)*lift
-			y := originY*box.H + (r.Y-verticalCompensation-originY*box.H)*lift
-			area := ui.Rect{
-				X: box.X + translateX + box.W/2 + (x-box.W/2)*scale,
-				Y: box.Y + translateY + box.H/2 + (y-box.H/2)*scale,
-				W: r.W * lift * scale,
-				H: r.H * lift * scale,
-			}
+			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation, translateX, translateY, scale)
 			preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == w.HWND
 			s.cardThumbWant[w.HWND] = cardThumbAt{area: area, opacity: op * shown * fade, preserveAspect: preserveAspect}
 		}
@@ -1060,6 +1053,20 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 	return poses
 }
 
+
+// cardThumbnailArea projects a window's card-local rectangle through the
+// card's scale and translation transforms. At zero tilt there is no
+// perspective term, so DWM can occupy this exact axis-aligned rectangle.
+func cardThumbnailArea(box, window ui.Rect, originX, originY, lift, verticalCompensation, translateX, translateY, outerScale float32) ui.Rect {
+	x := originX*box.W + (window.X-originX*box.W)*lift
+	y := originY*box.H + (window.Y-verticalCompensation-originY*box.H)*lift
+	return ui.Rect{
+		X: box.X + translateX + box.W/2 + (x-box.W/2)*outerScale,
+		Y: box.Y + translateY + box.H/2 + (y-box.H/2)*outerScale,
+		W: window.W * lift * outerScale,
+		H: window.H * lift * outerScale,
+	}
+}
 
 type cardThumbAt struct {
 	area           ui.Rect

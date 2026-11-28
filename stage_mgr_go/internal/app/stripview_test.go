@@ -300,6 +300,28 @@ func TestDragDownReorders(t *testing.T) {
 	}
 }
 
+// Releasing a card onto a merge target must clear the global drag gate
+// immediately; otherwise no card can respond to hover until another drag.
+func TestMergeReleaseRestoresCardHover(t *testing.T) {
+	s, got, _ := testStrip(t)
+	source := s.d.sets[0]
+	st := s.d.card(source.key)
+	st.dragging = true
+	s.a.setCardDrag(&cardDrag{from: s.d, key: source.key, aim: aimMerge, target: s.d.sets[1].key})
+
+	s.letGo(source, st, s.d.layout.cards[0])
+
+	if s.a.cardDrag != nil {
+		t.Fatalf("card drag still blocks hover after merge release: %+v", s.a.cardDrag)
+	}
+	if st.dragging || s.dragging {
+		t.Fatal("source card or strip is still marked as dragging")
+	}
+	if len(*got) != 1 || (*got)[0] != (request{actMerge, source.key}) {
+		t.Fatalf("merge requests %v", *got)
+	}
+}
+
 // The strip makes room for a card coming in from another display's strip,
 // and around one of its own dragged up or down, which is drawn last.
 func TestRoomForDraggedCard(t *testing.T) {

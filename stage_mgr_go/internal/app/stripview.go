@@ -840,14 +840,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
-				// While the pointer is on the card, a button on the top right
-				// corner of its front window, half out of it, closes the card's
-				// windows, every one of a set of several, as its menu's last
-				// item does: out there, it hides little of the window. It is
-				// drawn with the windows, so it turns and lifts as they do.
+				// The close button belongs to the outside corner of the
+				// whole merged card, not to whichever window happens to be
+				// in front. Use the union of all window frames so it remains
+				// at the card's outer top-right even when windows are offset.
 				closing := el.AnimateTo("close", b2f(live && !st.dragging), fadeQuick)
 				if closing > 0 {
-					f := stack[0]
+					f := outerWindowBounds(stack)
 					label := a.tr().CloseWindow
 					if len(g.windows) > 1 {
 						label = a.tr().CloseWindows
@@ -935,6 +934,25 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		return ui.Rect{}
 	}
 	return el.Bounds()
+}
+
+
+// outerWindowBounds returns the bounding rectangle of every window in a
+// merged card. The close button uses its top-right corner so it stays on
+// the outside of the complete card rather than an interior/front window.
+func outerWindowBounds(windows []ui.Rect) ui.Rect {
+	if len(windows) == 0 {
+		return ui.Rect{}
+	}
+	bounds := windows[0]
+	for _, r := range windows[1:] {
+		left := min(bounds.X, r.X)
+		top := min(bounds.Y, r.Y)
+		right := max(bounds.X+bounds.W, r.X+r.W)
+		bottom := max(bounds.Y+bounds.H, r.Y+r.H)
+		bounds = ui.Rect{X: left, Y: top, W: right - left, H: bottom - top}
+	}
+	return bounds
 }
 
 // The button that closes a card's windows: grey and see-through, so that

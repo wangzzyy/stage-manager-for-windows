@@ -755,21 +755,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if st.externalLayer {
 		op = 0
 	}
-	// DWM can only draw into an axis-aligned rectangle. When the animated
-	// card tilt is exactly zero, let it cover the still-rendered window
-	// pictures while retaining the existing card UI and transforms beneath.
-	// Keep both sides of a native card merge on the original still path so
-	// the merge gesture's established stacking and animation remain intact.
-	mergeDWM := a.cardDrag != nil && a.cardDrag.aim == aimMerge &&
-		a.cardDrag.from == d && (a.cardDrag.key == g.key || a.cardDrag.target == g.key)
-	if s.shown && tilt == 0 && gray <= 0.005 && op > 0 && shown > 0 &&
-		!landing && !st.externalLayer && !mergeDWM && s.scale > 0 {
-		for i, r := range stack {
-			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation,
-				translateX, translateY, scale)
-			s.cardThumbWant[g.windows[i].HWND] = cardThumbAt{area: area, opacity: op * shown * fade}
-		}
-	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 	// Once the flight layer has exposed the real card, acknowledge only
 	// after this strip frame has been built. The overlay waits for this
@@ -839,6 +824,21 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
+	// DWM can only draw into an axis-aligned rectangle. When the animated
+	// card tilt is exactly zero, let it cover the still-rendered window
+	// pictures while retaining the existing card UI and transforms beneath.
+	// Keep both sides of a native card merge on the original still path so
+	// the merge gesture's established stacking and animation remain intact.
+	mergeDWM := a.cardDrag != nil && a.cardDrag.aim == aimMerge &&
+		a.cardDrag.from == d && (a.cardDrag.key == g.key || a.cardDrag.target == g.key)
+	if s.shown && tilt == 0 && gray <= 0.005 && op > 0 && shown > 0 &&
+		!landing && !st.externalLayer && !mergeDWM && s.scale > 0 {
+		for i, r := range stack {
+			area := cardThumbnailArea(box, r, originX, originY, lift, verticalCompensation,
+				translateX, translateY, scale)
+			s.cardThumbWant[g.windows[i].HWND] = cardThumbAt{area: area, opacity: op * shown * fade}
+		}
+	}
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
 		// each shape it draws, so the stacked windows of a ghost would show

@@ -850,7 +850,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 						label = a.tr().CloseWindows
 					}
 					b := closeButton(c, cardCloseSize, cardCloseRest, label, func() { a.request(actClose, d, g) })
-					b.Absolute().Left(f.X+f.W-cardCloseSize/2).Top(f.Y-cardCloseSize/2).
+					buttonX := f.X + f.W - cardCloseSize/2
+					if right {
+						// On a right-side card, put the close button at
+						// the top-left corner of its leftmost window.
+						buttonX = f.X - cardCloseSize/2
+					}
+					b.Absolute().Left(buttonX).Top(f.Y-cardCloseSize/2).
 						Shadow(0, 1, 4, 0, ui.RGBA(0, 0, 0, 0.3)).Opacity(closing)
 				}
 			})

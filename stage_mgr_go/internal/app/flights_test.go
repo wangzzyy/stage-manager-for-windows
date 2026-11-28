@@ -66,11 +66,16 @@ func TestArrivalShadeOnlyCarriesForDWMShadow(t *testing.T) {
 	}
 }
 
-func TestLerpPoseInterpolatesSharedHorizontalPivot(t *testing.T) {
-	from := pose{originX: 0.25, originY: 0.5, perspective: cardPerspective}
-	to := pose{originX: 1.5, originY: 0.5, perspective: cardPerspective}
+func TestLerpPoseKeepsSharedPivotInScreenCoordinates(t *testing.T) {
+	from := pose{x: 10, y: 20, w: 100, h: 80, originX: 0.25, originY: 0.5, perspective: cardPerspective}
+	to := pose{x: 50, y: 60, w: 200, h: 160, originX: 1.5, originY: 1.25, perspective: cardPerspective}
 	got := lerpPose(from, to, 0.5)
-	if got.originX != 0.875 {
-		t.Fatalf("lerpPose originX = %v, want 0.875", got.originX)
+	wantX := (10 + 100*0.25 + 50 + 200*1.5) / 2
+	wantY := (20 + 80*0.5 + 60 + 160*1.25) / 2
+	if pivotX := got.x + got.w*float64(got.originX); pivotX != wantX {
+		t.Fatalf("lerpPose horizontal pivot = %v, want %v", pivotX, wantX)
+	}
+	if pivotY := got.y + got.h*float64(got.originY); pivotY != wantY {
+		t.Fatalf("lerpPose vertical pivot = %v, want %v", pivotY, wantY)
 	}
 }

@@ -237,6 +237,15 @@ func (f *flight) at(e float64) pose { return lerpPose(f.from, f.to, e) }
 
 // lerpPose is e of the way from a to b.
 func lerpPose(a, b pose, e float64) pose {
+	// Preserve exact endpoints. Besides avoiding float32 rounding, this is
+	// important for zero-sized placeholder poses whose pivot cannot be
+	// reconstructed from a rectangle during interpolation.
+	if e <= 0 {
+		return a
+	}
+	if e >= 1 {
+		return b
+	}
 	p := pose{
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),

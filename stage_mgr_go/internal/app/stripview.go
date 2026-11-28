@@ -832,16 +832,19 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// DWM cannot reproduce a perspective transform. When the animated
 	// card angle is flat, collect the live window rectangles and let DWM
 	// composite them over the stills after this frame has been built.
-	if tilt == 0 && op > 0 && shown > 0 && !landing && !st.externalLayer && s.scale > 0 {
+	// Keep the native card-merge gesture on its original still-rendered
+	// path. DWM thumbnails are a separate composition layer, so showing
+	// them while the source card is being dragged onto its target could
+	// scramble the two cards' visual stacking. They return on the merged
+	// card as soon as the merge operation completes.
+	mergingCards := s.a.cardDrag != nil && s.a.cardDrag.aim == aimMerge
+	if tilt == 0 && op > 0 && shown > 0 && !landing && !st.externalLayer && !mergingCards && s.scale > 0 {
 		for i, r := range stack {
 			w := g.windows[i]
-			if a.media.still(w.HWND) == nil {
-				continue
-			}
 			left := box.X + translateX + originX*box.W + (r.X-originX*box.W)*lift
 			top := box.Y + translateY - verticalCompensation + originY*box.H + (r.Y-originY*box.H)*lift
 			area := ui.Rect{X: left, Y: top, W: r.W * lift, H: r.H * lift}
-			s.cardWant[w.HWND] = thumbAt{area: area, op: shown * fade}
+			s.cardWant[w.HWND] = thumbAt{area: area, op: shown * op * fade}
 		}
 	}
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2

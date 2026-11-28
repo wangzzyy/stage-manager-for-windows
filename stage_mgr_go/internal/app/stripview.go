@@ -818,6 +818,13 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	// so hovering enlarges a card in place instead of pulling it toward the
 	// midpoint.
 	verticalCompensation := (0.5 - originY) * box.H * (lift - 1)
+
+	// The stage's own card fades to a ghost as its apps come on the stage,
+	// and back as they leave it; the icons, which tell the app, stay more
+	// plainly there than its windows.
+	ghost := el.AnimateTo("ghost", b2f(g.staged), ghostFade)
+	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
+	gray := ghost * float32(a.settings.StagedGray)
 	// DWM cannot reproduce a perspective transform. When the animated
 	// card angle is flat, collect the live window rectangles and let DWM
 	// composite them over the stills after this frame has been built.
@@ -833,12 +840,6 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			s.cardWant[w.HWND] = thumbAt{area: area, op: shown * fade}
 		}
 	}
-	// The stage's own card fades to a ghost as its apps come on the stage,
-	// and back as they leave it; the icons, which tell the app, stay more
-	// plainly there than its windows.
-	ghost := el.AnimateTo("ghost", b2f(g.staged), ghostFade)
-	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
-	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of

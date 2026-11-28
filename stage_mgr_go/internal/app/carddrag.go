@@ -341,6 +341,18 @@ func (s *strip) letGo(g *set, st *cardState, box ui.Rect) {
 		}
 		switch c.aim {
 		case aimMerge:
+			// The source is removed by the posted merge request. Until that
+			// runs, do not let its drag offsets animate back toward the old
+			// slot: that one-frame return is the large vertical flight seen
+			// on release.
+			st.mergeSource = true
+			// Mark the target before releasing the global drag gate. The merge
+			// request is posted asynchronously, so setting this in mergeSet is
+			// too late: the first hover frame would already start ui.Snappy.
+			if c.target != "" {
+				d.card(c.target).mergeLiftSettling = true
+			}
+			a.setCardDrag(nil)
 			a.requestMerge(d, g, c.target)
 			a.flights.endDrag(d, 0)
 		case aimMove:
@@ -474,7 +486,21 @@ func (a *App) requestMerge(d *display, source *set, target string) {
 // mergeSet joins the dragged card into the card it rested on. The target
 // keeps its place and identity; the dragged card disappears from the strip.
 func (a *App) mergeSet(d *display, source *set, target string) {
-	defer a.cardLanded()
+	restoreSource := true
+	defer func() {
+		// A rejected merge leaves the source in the strip. Restore it; a
+		// successful arrange removes it, so no state cleanup is needed.
+		// A merge into the staged card is different: switchStage removes
+		// the source only when its asynchronous switch commits the model.
+		// Keep it hidden until that arrange, rather than spring it back now.
+		if restoreSource && d != nil && source != nil && findSet(d.sets, source.key) != nil {
+			st := d.card(source.key)
+			st.mergeSource = false
+			st.returning = true
+			a.redraw()
+		}
+		a.cardLanded()
+	}()
 	if !a.ready || a.quitting || d == nil || source == nil || source.key == target {
 		return
 	}
@@ -485,6 +511,10 @@ func (a *App) mergeSet(d *display, source *set, target string) {
 	if targetSet.staged {
 		// The ghost card is the live stage: bring the dragged apps onto
 		// it through the ordinary window handover, without changing focus.
+		// Unlike a strip-to-strip merge, the source remains in d.sets until
+		// switchStage commits and arranges the new stage, so do not unhide it
+		// in the deferred rejected-merge cleanup above.
+		restoreSource = false
 		next := append(d.model.Stage(), source.names()...)
 		a.switchStage(d, next, targetSet.front().HWND, false, false)
 		return
@@ -523,13 +553,26 @@ func (a *App) startMergeReflow(d *display, source, target string, now time.Time)
 		d.cards = make(map[string]*cardState)
 	}
 	for _, card := range d.sets {
-		if card == nil || card.key == source || card.key == target {
+		if card == nil || card.key == source {
 			continue
 		}
 		st := d.cards[card.key]
 		if st == nil {
 			st = &cardState{}
 			d.cards[card.key] = st
+		}
+		// The merge target changes slots when the source disappears. It
+		// must use this bounded rectangle interpolation even while hovered:
+		// the ordinary cardMotion spring can otherwise throw it far past
+		// its new slot before bringing it back.
+		if card.key == target {
+			if st.box.W > 0 && st.box.H > 0 {
+				st.mergeFrom = st.box
+				st.mergeTo = ui.Rect{}
+				st.mergeStarted = now
+				st.mergeAnimating = true
+			}
+			continue
 		}
 		// Hover, drag, external handoff, return, landing, or another
 		// animation means this card already has motion of its own.

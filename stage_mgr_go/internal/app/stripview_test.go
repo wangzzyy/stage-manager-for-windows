@@ -278,6 +278,60 @@ func TestStagedCardSplits(t *testing.T) {
 }
 
 // Dragged down past the next card, a card takes its place.
+// Merging is the end of the source card's drag. Unlike a move between
+// displays, it must release the global drag gate immediately so the merged
+// card can respond to hover and return its perspective to zero.
+func TestMergeReleaseClearsCardDrag(t *testing.T) {
+	s, got, _ := testStrip(t)
+	source, target := s.d.sets[0], s.d.sets[1]
+	st := s.d.card(source.key)
+	st.dragging = true
+	s.a.cardDrag = &cardDrag{from: s.d, key: source.key, aim: aimMerge, target: target.key}
+
+	s.letGo(source, st, s.d.layout.cards[0])
+
+	if s.a.cardDrag != nil {
+		t.Fatalf("merge left the global card drag active: %+v", s.a.cardDrag)
+	}
+	if st.dragging {
+		t.Fatal("merge left the source card dragging")
+	}
+	if !s.d.card(target.key).mergeLiftSettling {
+		t.Fatal("merge did not mark the target for a bounded lift transition before releasing the drag")
+	}
+	if !st.mergeSource {
+		t.Fatal("merge source was not hidden while the asynchronous merge is pending")
+	}
+	if len(*got) != 1 || (*got)[0] != (request{actMerge, source.key}) {
+		t.Fatalf("requests %v", *got)
+	}
+}
+
+// The merge target changes its layout slot when the source disappears.
+// Even though it is hovered and lifted at the drop point, its position must
+// use the bounded merge reflow rather than the card's spring transition.
+func TestMergeReflowIncludesHoveredTarget(t *testing.T) {
+	s, _, _ := testStrip(t)
+	source, target := s.d.sets[0], s.d.sets[1]
+	st := s.d.card(target.key)
+	st.box = s.d.layout.cards[1]
+	st.over = true
+	st.lift = 1.12
+	before := st.box
+
+	s.a.startMergeReflow(s.d, source.key, target.key, time.Now())
+
+	if !st.mergeAnimating {
+		t.Fatal("hovered merge target was excluded from the bounded reflow")
+	}
+	if st.mergeFrom != before {
+		t.Fatalf("merge starts at %v, want its last rendered bounds %v", st.mergeFrom, before)
+	}
+	if s.d.card(source.key).mergeAnimating {
+		t.Fatal("source card should not take part in the merge reflow")
+	}
+}
+
 func TestDragDownReorders(t *testing.T) {
 	s, got, tt := testStrip(t)
 	x, y := center(s.d.layout.cards[0])

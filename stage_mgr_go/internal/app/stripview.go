@@ -51,6 +51,12 @@ type cardState struct {
 	mergeFrom, mergeTo ui.Rect
 	mergeStarted      time.Time
 	mergeAnimating    bool
+	// mergeSource hides a card released into a merge until the asynchronous
+	// model update removes it, preventing a visible spring back to its old slot.
+	mergeSource bool
+	// mergeLiftSettling uses a non-spring transition when the merge target
+	// returns from its enlarged drop-confirmation pose to its hover/rest pose.
+	mergeLiftSettling bool
 }
 
 type follow int8
@@ -176,6 +182,8 @@ func stageBadge(c *ui.Context, r ui.Rect, pop, turn float32) {
 // view draws a strip: the cards of the apps off the stage, over nothing.
 func (s *strip) view(c *ui.Context) {
 	a, d := s.a, s.d
+	s.cardThumbs.beginFrame()
+	defer s.cardThumbs.endFrame()
 	c.Root().Background(ui.Transparent)
 	w, h := c.Size()
 	d.viewW, d.viewH = w, h
@@ -636,7 +644,17 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if drag := a.cardDrag; drag != nil && drag.from == d && drag.aim == aimMerge && drag.target == g.key {
 		lift = 1.12
 	}
-	lift = el.AnimateTo("lift", lift, ui.Snappy)
+	liftMotion := ui.Snappy
+	if st.mergeLiftSettling {
+		// Snappy is spring-based and overshoots when the target card drops
+		// from the merge confirmation scale (1.12). Use a bounded transition
+		// for this one handoff; ordinary hover and drag lifts stay unchanged.
+		liftMotion = fadeQuick
+	}
+	lift = el.AnimateTo("lift", lift, liftMotion)
+	if st.mergeLiftSettling && el.Settled("lift") {
+		st.mergeLiftSettling = false
+	}
 	st.tilt, st.lift = tilt, lift
 	var ox, oy float32
 	// Moved up or down the strip, the card stays in it, whatever way the
@@ -750,7 +768,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			st.externalStarted = time.Time{}
 		}
 	}
-	if st.externalLayer {
+	if st.externalLayer || st.mergeSource {
 		op = 0
 	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
@@ -822,6 +840,11 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	fade := 1 - ghost*(1-float32(a.settings.StagedOpacity))
 	gray := ghost * float32(a.settings.StagedGray)
 	iconOp *= 1 - ghost*(1-float32(a.settings.StagedOpacity))/2
+	// Flat cards can use live DWM content; only hide the strip UI when
+	// DWM actually accepted at least one thumbnail for this card. If DWM is
+	// unavailable (including in tests), keep the normal controls usable.
+	uiOpacity := float32(1)
+	flat := math.Abs(float64(tilt)) < 0.01 && gray <= 0.005 && !st.external && !st.externalLayer && !st.externalAnimating && !landing && op > 0
 	el.Children(func() {
 		// The windows fade as one picture: an element's opacity is that of
 		// each shape it draws, so the stacked windows of a ghost would show
@@ -836,10 +859,55 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			}
 			windows.Children(func() {
 				s.previousMark(c, g, stack)
+				cardRect := ui.Rect{X: box.X + translateX, Y: box.Y + translateY - verticalCompensation, W: box.W, H: box.H}
+				dwmUsed := false
 				for i := len(stack) - 1; i >= 0; i-- {
-					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == g.windows[i].HWND
+					hwnd := g.windows[i].HWND
+					s.cardThumbs.keep(hwnd)
+					preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == hwnd
+					if flat && !preserveAspect {
+						r := stack[i]
+						r.X = cardRect.X + originX*box.W + (r.X-originX*box.W)*lift
+						r.Y = cardRect.Y + originY*box.H + (r.Y-originY*box.H)*lift
+						r.W *= lift
+						r.H *= lift
+						// DWM destination rectangles are in the host window's client
+						// pixels, not screen coordinates.
+						x := float64(r.X+s.viewOffsetX) * s.scale
+						y := float64(r.Y) * s.scale
+						w := float64(r.W) * s.scale
+						h := float64(r.H) * s.scale
+						dest := winapi.Rect{
+							Left: int32(math.Round(x)), Top: int32(math.Round(y)),
+							Right: int32(math.Round(x + w)), Bottom: int32(math.Round(y + h)),
+						}
+						if s.cardThumbs.add(hwnd, dest, float64(shown*fade*op)) {
+							// DWM paints in a separate window above the strip, so the
+							// still's own shadow would be covered along with the still.
+							// Leave just the shadow in the strip window: it extends
+							// beyond the DWM destination and remains visible around it.
+							// This box is a child of the transformed windows layer,
+							// so keep its geometry in card-local coordinates. The
+							// DWM destination above is already translated to strip
+							// coordinates; reusing it here would offset the shadow twice.
+							shadowRect := stack[i]
+							radius := max(shadowRect.H*0.045, 3)
+							ui.Box(c.Key(dwmShadow{h: hwnd})).Absolute().
+								Left(shadowRect.X).Top(shadowRect.Y).Size(shadowRect.W, shadowRect.H).Radius(radius).
+								Background(ui.RGBA(0, 0, 0, 0.001)).
+								Shadow(0, shadowRect.H*0.05, shadowRect.H*0.16, 0, shadowSoft)
+							dwmUsed = true
+							continue
+						}
+					}
 					s.windowStill(c, g, i, stack[i], gray, preserveAspect)
 				}
+				// The DWM host covers the strip controls, so fade them only
+				// after at least one live thumbnail was successfully registered.
+				if dwmUsed && (hovered || st.dragging) {
+					uiOpacity = 0
+				}
+				uiOpacity = el.AnimateTo("card-ui", uiOpacity, fadeQuick)
 				// While the pointer is on the card, a button on the top right
 				// corner of its front window, half out of it, closes the card's
 				// windows, every one of a set of several, as its menu's last
@@ -882,7 +950,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 		// ghost comes. Built for every card, so that the ones after it keep
 		// their place in the tree as the stage comes and goes.
 		badge := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).
-			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost).PassThrough()
+			TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(shown * ghost * uiOpacity).PassThrough()
 		badge.Children(func() {
 			// Anchor the stage mark to the card itself, not to the most
 			// recently active window in the group. The mark stays at the
@@ -892,7 +960,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 			x, y := turnedPoint(b.X+b.W/2, b.Y+b.H/2, box.W, box.H, tilt, perspective, right)
 			stageBadge(c, ui.Rect{X: x - b.W/2, Y: y - b.H/2, W: b.W, H: b.H}, 0.5+0.5*ghost, badgeTurn*tilt*sign)
 		})
-		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp).PassThrough()
+		overlay := ui.Box(c).Absolute().Left(0).Top(-verticalCompensation).Size(box.W, box.H).TransformOrigin(originX, originY).Scale(lift, lift).Perspective(perspective).Opacity(iconOp * uiOpacity).PassThrough()
 		overlay.Children(func() {
 			for i := len(row) - 1; i >= 0; i-- {
 				app := g.apps[i].front().App
@@ -925,7 +993,7 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 				label.Left(end + 4).MaxWidth(max(box.W-end, 60))
 			}
 			op := float32(0)
-			if hovered && !st.dragging {
+			if hovered && !st.dragging && uiOpacity > 0 {
 				op = 1
 			}
 			label.Opacity(label.AnimateTo("label", op, fadeQuick))
@@ -1038,6 +1106,11 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 	}
 	return poses
 }
+
+// dwmShadow gives the live DWM picture a shadow in the strip window below
+// the thumbnail host. The host covers the picture rectangle, but not the
+// blurred shadow that falls outside it.
+type dwmShadow struct{ h winapi.HWND }
 
 // grayOver keys the gray copy of a window's still, drawn over it.
 type grayOver struct{ h winapi.HWND }

@@ -68,6 +68,8 @@ type strip struct {
 	previous string
 	// line is the list of the windows on the stage (lineup.go).
 	line lineup
+	// cardThumbs composes flat card windows live, above the strip's card UI.
+	cardThumbs *cardThumbs
 	// near is how far the overview's panel shows as the pointer comes
 	// near it, 0 to 1. The poll measures it everywhere on the display,
 	// where the strip lets the pointer through and so hears nothing of it.
@@ -107,6 +109,7 @@ func newStrip(a *App, d *display) *strip {
 		Content: ui.View(s.view),
 	})
 	s.hwnd = winapi.HWND(s.win.NativeHandle())
+	s.cardThumbs = newCardThumbs(s)
 	s.win.OnClose(func(e *mygo.CloseEvent) {
 		// Escape closes flyouts; the strip stays.
 		if !a.quitting {
@@ -171,6 +174,7 @@ func (s *strip) applyBounds() {
 	r := s.rect
 	z := s.zOrder()
 	winapi.SetWindowPos(s.hwnd, z, r.Left, r.Top, r.W(), r.H(), winapi.SwpNoActivate)
+	s.cardThumbs.place()
 }
 
 // zOrder keeps ordinary app windows above the sidebar. The sidebar rises
@@ -230,6 +234,7 @@ func (s *strip) syncZOrder() {
 	}
 	winapi.SetWindowPos(s.hwnd, z, 0, 0, 0, 0,
 		winapi.SwpNoMove|winapi.SwpNoSize|winapi.SwpNoActivate)
+	s.cardThumbs.place()
 }
 
 // raiseAboveFlight keeps the sidebar above the transparent flight layer.
@@ -477,6 +482,7 @@ func (s *strip) poll(cur winapi.Point, now time.Time) {
 		// whatever its speed.
 		if !s.shown && s.visible && s.away {
 			s.win.Hide()
+			s.cardThumbs.hide()
 			s.visible = false
 		}
 	}
@@ -721,6 +727,7 @@ func (s *strip) toScreen(r ui.Rect) (x, y, w, h float64) {
 
 func (s *strip) close() {
 	s.dropThumbs()
+	s.cardThumbs.close()
 	s.bar.Remove()
 	winapi.Unsubclass(s.hwnd)
 	s.win.Destroy()

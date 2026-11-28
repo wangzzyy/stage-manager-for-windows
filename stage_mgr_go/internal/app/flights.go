@@ -237,18 +237,24 @@ func (f *flight) at(e float64) pose { return lerpPose(f.from, f.to, e) }
 
 // lerpPose is e of the way from a to b.
 func lerpPose(a, b pose, e float64) pose {
-	return pose{
+	p := pose{
 		x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e),
 		w: lerp(a.w, b.w, e), h: lerp(a.h, b.h, e),
 		tilt: a.tilt + (b.tilt-a.tilt)*float32(e),
-		originX: a.originX + (b.originX-a.originX)*float32(e),
-		originY: a.originY + (b.originY-a.originY)*float32(e),
-		// Perspective is a camera distance: its visible strength is the
-		// reciprocal. Interpolate that strength, not the distance itself,
-		// so the projection changes smoothly throughout the flight instead
-		// of staying nearly flat and then rushing into perspective at the end.
+		// Interpolate the pivot in screen coordinates, not as a fraction
+		// of each independently moving window. This keeps every window in a
+		// merged card on the same rotation axis throughout the flight.
 		perspective: lerpPerspective(a.perspective, b.perspective, e),
 	}
+	pivotX := lerp(a.x+a.w*float64(a.originX), b.x+b.w*float64(b.originX), e)
+	pivotY := lerp(a.y+a.h*float64(a.originY), b.y+b.h*float64(b.originY), e)
+	if p.w != 0 {
+		p.originX = float32((pivotX - p.x) / p.w)
+	}
+	if p.h != 0 {
+		p.originY = float32((pivotY - p.y) / p.h)
+	}
+	return p
 }
 
 func lerpPerspective(a, b float32, e float64) float32 {

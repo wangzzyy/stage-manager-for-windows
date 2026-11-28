@@ -227,6 +227,7 @@ func (s *strip) view(c *ui.Context) {
 		d.scroll = min(max(d.scroll+ev.DY, 0), d.layout.maxScroll(d.viewH))
 		return true
 	})
+	s.cardThumbWant = make(map[winapi.HWND]cardThumbAt)
 	hits := s.hits[:0]
 	footer, list := ui.Rect{}, ui.Rect{}
 	s.previous = s.previousStage()
@@ -251,6 +252,7 @@ func (s *strip) view(c *ui.Context) {
 		// pictures over the window, so they slide with it by hand.
 		list = s.lineupView(c, line, staged, x)
 	})
+	s.placeCardThumbs()
 	s.hits, s.footerHit, s.lineupHit = hits, footer, list
 }
 
@@ -753,6 +755,25 @@ func (s *strip) card(c *ui.Context, g *set, box ui.Rect) ui.Rect {
 	if st.externalLayer {
 		op = 0
 	}
+	// DWM can draw a live window only into an axis-aligned rectangle. Use it
+	// only on the exact flat frames; tilted frames keep the existing 3D stills.
+	// Grayscale ghosts stay on the existing path because DWM has no grayscale
+	// property, and changing them would make the staged card look different.
+	if tilt == 0 && gray <= 0.005 && op > 0 && shown*fade > 0 && !st.externalLayer {
+		for i, w := range g.windows {
+			r := stack[i]
+			x := originX*box.W + (r.X-originX*box.W)*lift
+			y := originY*box.H + (r.Y-verticalCompensation-originY*box.H)*lift
+			area := ui.Rect{
+				X: box.X + translateX + box.W/2 + (x-box.W/2)*scale,
+				Y: box.Y + translateY + box.H/2 + (y-box.H/2)*scale,
+				W: r.W * lift * scale,
+				H: r.H * lift * scale,
+			}
+			preserveAspect := landingLayer != nil && landingLayer.landing != nil && landingLayer.landing.hwnd == w.HWND
+			s.cardThumbWant[w.HWND] = cardThumbAt{area: area, opacity: op * shown * fade, preserveAspect: preserveAspect}
+		}
+	}
 	el.TransformOrigin(0.5, 0.5).Translate(translateX, translateY).Scale(scale, scale).Opacity(op)
 	// Once the flight layer has exposed the real card, acknowledge only
 	// after this strip frame has been built. The overlay waits for this
@@ -1037,6 +1058,101 @@ func (s *strip) dragPoses(g *set, box ui.Rect, ox, oy, lift, tilt float32) map[w
 		s.a.flights.dragged(s.d, list)
 	}
 	return poses
+}
+
+
+type cardThumbAt struct {
+	area           ui.Rect
+	opacity        float32
+	preserveAspect bool
+}
+
+// placeCardThumbs puts live DWM pictures over the window areas of flat cards.
+// Their rectangles are in client DIPs, just like lineup tiles; DWM converts
+// them to physical pixels and composes them above the strip's own drawing.
+func (s *strip) placeCardThumbs() {
+	if s.hwnd == 0 {
+		return
+	}
+	if s.cardThumbs == nil {
+		s.cardThumbs = map[winapi.HWND]*lineThumb{}
+		s.cardThumbFailed = map[winapi.HWND]bool{}
+	}
+	present := make(map[winapi.HWND]bool)
+	for _, g := range s.d.sets {
+		for _, w := range g.windows {
+			present[w.HWND] = true
+		}
+	}
+	for h, th := range s.cardThumbs {
+		if !present[h] {
+			th.t.Unregister()
+			delete(s.cardThumbs, h)
+			delete(s.cardThumbFailed, h)
+			continue
+		}
+		if _, ok := s.cardThumbWant[h]; !ok && th.visible {
+			th.t.Hide()
+			th.visible = false
+		}
+	}
+	px := func(v float32) int32 { return int32(math.Round(float64(v) * s.scale)) }
+	for h, at := range s.cardThumbWant {
+		if at.opacity <= 0 || at.area.W <= 0 || at.area.H <= 0 {
+			continue
+		}
+		th := s.cardThumbs[h]
+		if th == nil {
+			if s.cardThumbFailed[h] {
+				continue
+			}
+			t, ok := winapi.RegisterThumbnail(s.hwnd, h)
+			if !ok {
+				debugf("cards: no DWM thumbnail of %x", h)
+				s.cardThumbFailed[h] = true
+				continue
+			}
+			th = &lineThumb{t: t}
+			s.cardThumbs[h] = th
+		}
+		frame, win := winapi.FrameBounds(h), winapi.WindowRect(h)
+		if frame.Empty() {
+			frame = win
+		}
+		if frame.Empty() || win.Empty() {
+			th.t.Hide()
+			th.visible = false
+			continue
+		}
+		src := winapi.Rect{
+			Left: frame.Left - win.Left, Top: frame.Top - win.Top,
+			Right: frame.Right - win.Left, Bottom: frame.Bottom - win.Top,
+		}
+		area := at.area
+		if at.preserveAspect {
+			area = fitIn(area, float64(frame.W())/float64(max(frame.H(), 1)))
+		}
+		dest := winapi.Rect{
+			Left: px(area.X + s.viewOffsetX), Top: px(area.Y),
+			Right: px(area.X + s.viewOffsetX + area.W), Bottom: px(area.Y + area.H),
+		}
+		op := float64(at.opacity)
+		if th.visible && dest == th.dest && src == th.src && math.Abs(op-th.op) < 0.004 {
+			continue
+		}
+		th.t.Show(dest, src, op)
+		th.dest, th.src, th.op, th.visible = dest, src, op, op > 0
+	}
+}
+
+// dropCardThumbs releases the live pictures when the strip is destroyed.
+func (s *strip) dropCardThumbs() {
+	for h, th := range s.cardThumbs {
+		th.t.Unregister()
+		delete(s.cardThumbs, h)
+	}
+	s.cardThumbFailed = nil
+	s.cardThumbWant = nil
 }
 
 // grayOver keys the gray copy of a window's still, drawn over it.
